@@ -1,4 +1,20 @@
 // ==================== تهيئة الصفحة ====================
+const allPermissions = typeof allPermissions !== 'undefined' ? allPermissions : {
+    manageUsers: "إدارة المستخدمين",
+    viewOrders: "عرض الطلبات",
+    createOrders: "إضافة طلبات"
+};
+
+// تأكد من أن هذه الدوال تعمل
+function openModal(id) {
+    const modal = document.getElementById(id);
+    if(modal) modal.style.display = 'flex';
+}
+
+function closeModal(id) {
+    const modal = document.getElementById(id);
+    if(modal) modal.style.display = 'none';
+}
 document.addEventListener('DOMContentLoaded', async function() {
     showLoading(true);
     
