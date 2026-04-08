@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
@@ -10,29 +9,16 @@ app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
 
-// ==================== CORS (GitHub Pages -> Render) ====================
-// ضع في Render: FRONTEND_ORIGIN = https://habardicrusher.github.io
-// (بدون /requests)
-const allowedOrigins = (process.env.FRONTEND_ORIGIN || 'https://habardicrusher.github.io')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+// ==================== مسارات الواجهة ====================
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow requests with no origin (like curl/postman)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-
-    return callback(new Error(`CORS blocked for origin: ${origin}`), false);
-  },
-  credentials: true
-}));
-
-// ==================== Body Parsers ====================
+// ==================== Middleware ====================
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// ملفات ثابتة (CSS/JS) من public
+app.use('/css', express.static(path.join(PUBLIC_DIR, 'css')));
+app.use('/js', express.static(path.join(PUBLIC_DIR, 'js')));
 
 // ==================== Session ====================
 const isProd = process.env.NODE_ENV === 'production';
@@ -42,22 +28,21 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isProd,                 // true على Render (HTTPS)
+    secure: isProd,      // على Render (HTTPS) = true
     httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax', // مهم لأن الواجهة على دومين مختلف
+    sameSite: 'lax',     // الآن الواجهة والسيرفر نفس الدومين => ممتاز
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
 
-// ==================== المجلدات ====================
+// ==================== المجلدات (البيانات) ====================
 const DATA_DIR = path.join(__dirname, 'data');
 const DAYS_DIR = path.join(DATA_DIR, 'days');
 
-// إنشاء المجلدات إذا لم تكن موجودة
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(DAYS_DIR)) fs.mkdirSync(DAYS_DIR, { recursive: true });
 
-// ==================== البيانات الافتراضية الحقيقية ====================
+// ==================== البيانات الافتراضية ====================
 const defaultSettings = {
   factories: [
     'SCCCL',
@@ -152,12 +137,10 @@ const defaultSettings = {
   ]
 };
 
-// ==================== Helper Functions ====================
+// ==================== Helpers ====================
 function readJSON(filename) {
   const filepath = path.join(DATA_DIR, filename);
-  if (fs.existsSync(filepath)) {
-    return JSON.parse(fs.readFileSync(filepath, 'utf8'));
-  }
+  if (fs.existsSync(filepath)) return JSON.parse(fs.readFileSync(filepath, 'utf8'));
   return null;
 }
 
@@ -168,9 +151,7 @@ function writeJSON(filename, data) {
 
 function readDayData(date) {
   const filepath = path.join(DAYS_DIR, `${date}.json`);
-  if (fs.existsSync(filepath)) {
-    return JSON.parse(fs.readFileSync(filepath, 'utf8'));
-  }
+  if (fs.existsSync(filepath)) return JSON.parse(fs.readFileSync(filepath, 'utf8'));
   return { orders: [], distribution: [] };
 }
 
@@ -194,7 +175,6 @@ function addLog(user, action, details = '') {
 
 // ==================== تهيئة البيانات الافتراضية ====================
 function initializeData() {
-  // المستخدمين
   if (!readJSON('users.json')) {
     const adminPassword = bcrypt.hashSync('admin123', 10);
     writeJSON('users.json', [{
@@ -216,7 +196,6 @@ function initializeData() {
     console.log('✅ تم إنشاء حساب المدير: Admin / admin123');
   }
 
-  // الإعدادات
   if (!readJSON('settings.json')) {
     writeJSON('settings.json', defaultSettings);
     console.log('✅ تم إنشاء الإعدادات الافتراضية');
@@ -225,42 +204,66 @@ function initializeData() {
   if (!readJSON('restrictions.json')) writeJSON('restrictions.json', []);
   if (!readJSON('logs.json')) writeJSON('logs.json', []);
 }
-
 initializeData();
 
-// ==================== Middleware للتحقق من الجلسة ====================
+// ==================== Auth Middlewares ====================
 function requireAuth(req, res, next) {
-  if (req.session && req.session.user) next();
-  else res.status(401).json({ error: 'غير مصرح' });
+  if (req.session && req.session.user) return next();
+  return res.status(401).json({ error: 'غير مصرح' });
 }
 
 function requireAdmin(req, res, next) {
-  if (req.session && req.session.user && req.session.user.role === 'admin') next();
-  else res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
+  if (req.session?.user?.role === 'admin') return next();
+  return res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
 }
 
-// ==================== Health Check ====================
+// ==================== Pages ====================
+// لو فتحت الموقع بدون مسار: ودّه للطلبات إذا مسجل، وإلا للّوجين
 app.get('/', (req, res) => {
-  res.json({ ok: true, service: 'requests-backend' });
+  if (req.session?.user) return res.redirect('/orders.html');
+  return res.redirect('/login.html');
 });
 
-// ==================== API: المصادقة ====================
+// صفحة تسجيل الدخول
+app.get('/login.html', (req, res) => {
+  // لو مسجل دخول بالفعل ودّه للطلبات
+  if (req.session?.user) return res.redirect('/orders.html');
+  return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
+});
 
-// تسجيل الدخول
+// الصفحات المحمية
+const protectedPages = [
+  'orders.html',
+  'distribution.html',
+  'trucks.html',
+  'reports.html',
+  'settings.html',
+  'backup.html',
+  'users.html',
+  'restrictions.html',
+  'logs.html'
+];
+
+protectedPages.forEach(page => {
+  app.get(`/${page}`, (req, res) => {
+    if (req.session?.user) {
+      return res.sendFile(path.join(PUBLIC_DIR, page));
+    }
+    return res.redirect('/login.html');
+  });
+});
+
+// ==================== API: Auth ====================
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
 
   const users = readJSON('users.json') || [];
   const user = users.find(u => u.username.toLowerCase() === String(username || '').toLowerCase());
 
-  if (!user) {
-    return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
-  }
+  if (!user) return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
 
-  const passwordMatch = bcrypt.compareSync(String(password || ''), user.password);
-  if (!passwordMatch) {
-    return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
-  }
+  const ok = bcrypt.compareSync(String(password || ''), user.password);
+  if (!ok) return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
 
   req.session.user = {
     id: user.id,
@@ -270,25 +273,21 @@ app.post('/api/login', (req, res) => {
   };
 
   addLog(user.username, 'تسجيل دخول');
-  res.json({ success: true, user: req.session.user });
+  return res.json({ success: true, user: req.session.user });
 });
 
-// تسجيل الخروج
 app.post('/api/logout', (req, res) => {
   const u = req.session?.user?.username;
   if (u) addLog(u, 'تسجيل خروج');
 
-  req.session.destroy(() => {
-    res.json({ success: true });
-  });
+  req.session.destroy(() => res.json({ success: true }));
 });
 
-// معلومات المستخدم الحالي
 app.get('/api/me', requireAuth, (req, res) => {
   res.json({ user: req.session.user });
 });
 
-// ==================== API: الإعدادات ====================
+// ==================== API: Settings ====================
 app.get('/api/settings', requireAuth, (req, res) => {
   const settings = readJSON('settings.json') || defaultSettings;
   res.json(settings);
@@ -301,7 +300,7 @@ app.put('/api/settings', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ==================== API: بيانات اليوم ====================
+// ==================== API: Day Data ====================
 app.get('/api/day/:date', requireAuth, (req, res) => {
   const data = readDayData(req.params.date);
   res.json(data);
@@ -313,7 +312,7 @@ app.put('/api/day/:date', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ==================== API: المستخدمين ====================
+// ==================== API: Users ====================
 app.get('/api/users', requireAuth, (req, res) => {
   const users = readJSON('users.json') || [];
   const safeUsers = users.map(u => ({
@@ -400,7 +399,7 @@ app.delete('/api/users/:id', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ==================== API: القيود ====================
+// ==================== API: Restrictions ====================
 app.get('/api/restrictions', requireAuth, (req, res) => {
   const restrictions = readJSON('restrictions.json') || [];
   res.json(restrictions);
@@ -427,6 +426,7 @@ app.post('/api/restrictions', requireAuth, (req, res) => {
 
   restrictions.push(newRestriction);
   writeJSON('restrictions.json', restrictions);
+
   addLog(req.session.user.username, 'إضافة قيد', `${truckNumber} - ${(restrictedFactories || []).join(', ')}`);
 
   res.json({ success: true, id: newRestriction.id });
@@ -460,7 +460,7 @@ app.delete('/api/restrictions/:id', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-// ==================== API: التقارير ====================
+// ==================== API: Reports ====================
 app.get('/api/reports', requireAuth, (req, res) => {
   const { startDate, endDate } = req.query;
 
@@ -518,17 +518,16 @@ app.get('/api/reports', requireAuth, (req, res) => {
   });
 });
 
-// ==================== API: السجلات ====================
+// ==================== API: Logs ====================
 app.get('/api/logs', requireAuth, (req, res) => {
   if (req.session.user.role !== 'admin') {
     return res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
   }
-
   const logs = readJSON('logs.json') || [];
   res.json(logs.slice(0, 100));
 });
 
-// ==================== API: النسخ الاحتياطي ====================
+// ==================== API: Backup ====================
 app.get('/api/backup', requireAuth, (req, res) => {
   const backup = {
     settings: readJSON('settings.json'),
@@ -638,7 +637,6 @@ app.post('/api/restore', requireAuth, (req, res) => {
     }
 
     addLog(req.session.user.username, 'استعادة نسخة احتياطية');
-
     res.json({ success: true, message: `تم استعادة ${totalOrders} طلب و ${totalDist} توزيع` });
   } catch (e) {
     console.error('❌ خطأ:', e);
@@ -660,19 +658,11 @@ app.delete('/api/clear-all', requireAuth, requireAdmin, (req, res) => {
     addLog(req.session.user.username, 'مسح جميع البيانات');
     res.json({ success: true });
   } catch (error) {
-    res.status(500).json({ error: 'فشل في مسح البيانات' });
+    res.status(500).json({ error: 'فشل في مسح جميع البيانات' });
   }
 });
 
-// ==================== Error Handler for CORS ====================
-app.use((err, req, res, next) => {
-  if (String(err.message || '').startsWith('CORS blocked')) {
-    return res.status(403).json({ error: err.message });
-  }
-  next(err);
-});
-
-// ==================== Server Startup (مرة واحدة فقط) ====================
+// ==================== Startup ====================
 app.listen(PORT, () => {
   console.log('Running on port', PORT);
 });
