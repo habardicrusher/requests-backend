@@ -1,109 +1,100 @@
-/* ==================== 1. Reset & Base Variables ==================== */
+/* استيراد خط تجوال الاحترافي من جوجل */
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&display=swap');
+
 :root {
-    --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --success-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    --danger-gradient: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
-    --warning-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-    --info-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    --bg-dark: #1a1a2e;
-    --card-bg: rgba(255, 255, 255, 0.07);
-    --text-main: #ffffff;
-    --text-muted: #a8b2d1;
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --primary-color: #6366f1;
+    --secondary-color: #4f46e5;
+    --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    --card-bg: rgba(30, 41, 59, 0.7);
+    --text-main: #f8fafc;
+    --text-muted: #94a3b8;
+    --border-color: rgba(255, 255, 255, 0.1);
+    --success: #10b981;
+    --danger: #ef4444;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Tajawal', sans-serif;
+}
 
 body {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: var(--bg-gradient);
     background-attachment: fixed;
-    min-height: 100vh;
     color: var(--text-main);
+    min-height: 100vh;
     line-height: 1.6;
-    overflow-x: hidden;
 }
 
-.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.container {
+    max-width: 1200px; /* تحديد عرض مناسب للكمبيوتر */
+    margin: 0 auto;
+    padding: 20px;
+}
 
-/* ==================== 2. Header & User Info ==================== */
+/* الهيدر - تحسين المظهر العلوي */
 .header {
-    text-align: center;
-    padding: 30px;
-    background: var(--primary-gradient);
-    border-radius: 20px;
-    margin-bottom: 30px;
-    box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
-    animation: fadeInDown 0.8s ease;
-}
-
-.header h1 { font-size: clamp(1.5rem, 5vw, 2.5rem); margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
-
-.user-info {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 15px;
-    margin-top: 15px;
-    flex-wrap: wrap;
-}
-
-.user-badge {
-    background: rgba(255, 255, 255, 0.15);
-    padding: 8px 20px;
-    border-radius: 30px;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.logout-btn {
-    background: rgba(235, 51, 73, 0.2);
-    border: 1px solid #eb3349;
-    color: #fff;
-    padding: 8px 25px;
-    border-radius: 30px;
-    cursor: pointer;
-    transition: var(--transition);
-}
-.logout-btn:hover { background: #eb3349; transform: scale(1.05); }
-
-/* ==================== 3. Navigation ==================== */
-.nav-section {
     background: var(--card-bg);
-    padding: 15px;
-    border-radius: 15px;
-    margin-bottom: 25px;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    padding: 25px;
+    border-radius: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 
-.nav-links { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.header h1 {
+    font-size: 1.8rem;
+    background: linear-gradient(to right, #818cf8, #c084fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
 
-.nav-link {
-    padding: 12px 22px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    color: #fff;
+/* القائمة العلوية - جعلها تبدو كأزرار احترافية */
+.nav-section {
+    margin-bottom: 30px;
+}
+
+.nav-links {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.nav-links a {
+    background: var(--card-bg);
+    color: var(--text-main);
     text-decoration: none;
-    transition: var(--transition);
-    border: 1px solid transparent;
+    padding: 10px 20px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    transition: 0.3s;
+    font-weight: 500;
 }
 
-.nav-link:hover, .nav-link.active {
-    background: var(--primary-gradient);
-    border-color: rgba(255,255,255,0.2);
+.nav-links a:hover, .nav-links a.active {
+    background: var(--primary-color);
     transform: translateY(-3px);
-    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
 }
 
-/* ==================== 4. Cards & Stats ==================== */
+/* الكروت (البطاقات) */
 .content-card {
     background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-color);
+    padding: 30px;
     border-radius: 20px;
-    padding: 25px;
     margin-bottom: 25px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
 }
 
+/* إحصائيات النظام - ترتيبها بشكل شبكي ممتاز للكمبيوتر */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -112,158 +103,64 @@ body {
 }
 
 .stat-card {
-    background: rgba(102, 126, 234, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 20px;
     border-radius: 15px;
-    padding: 25px;
     text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    transition: var(--transition);
+    border: 1px solid var(--border-color);
+    transition: 0.3s;
 }
 
-.stat-card:hover { 
-    transform: translateY(-8px); 
-    background: rgba(102, 126, 234, 0.2);
-    box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+.stat-card:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
 
-.stat-card h3 { font-size: 2.8rem; color: #667eea; margin-bottom: 5px; }
+.stat-card h3 {
+    font-size: 2rem;
+    color: var(--primary-color);
+}
 
-/* ==================== 5. Buttons & Forms ==================== */
+/* الجداول - أهم جزء للكمبيوتر */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+th {
+    background: rgba(99, 102, 241, 0.2);
+    color: #818cf8;
+    padding: 15px;
+    text-align: right;
+}
+
+td {
+    padding: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* الأزرار */
 .btn {
-    padding: 12px 28px;
+    padding: 10px 20px;
+    border-radius: 10px;
     border: none;
-    border-radius: 12px;
     cursor: pointer;
     font-weight: 600;
-    transition: var(--transition);
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    text-decoration: none;
-    color: white;
+    transition: 0.3s;
 }
 
-.btn-primary { background: var(--primary-gradient); }
-.btn-success { background: var(--success-gradient); }
-.btn-danger { background: var(--danger-gradient); }
-.btn-warning { background: var(--warning-gradient); }
-.btn-info { background: var(--info-gradient); }
+.btn-success { background: var(--success); color: white; }
+.btn-danger { background: var(--danger); color: white; }
 
-.btn:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.1); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
-.btn:active { transform: translateY(0); }
-
-.form-group input, .form-group select, .form-group textarea {
-    width: 100%;
-    padding: 12px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    color: white;
-    transition: var(--transition);
-}
-
-.form-group input:focus, .form-group select:focus {
-    outline: none;
-    border-color: #667eea;
-    background: rgba(0, 0, 0, 0.3);
-}
-
-/* ==================== 6. Tables & Lists ==================== */
-.table-responsive { overflow-x: auto; border-radius: 15px; }
-
-table { width: 100%; border-collapse: collapse; background: rgba(0,0,0,0.1); }
-th { background: rgba(102, 126, 234, 0.2); color: #a8b2d1; padding: 18px; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 1px; }
-td { padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); text-align: center; }
-
-.order-item, .list-item {
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 12px;
-    padding: 15px;
-    margin-bottom: 12px;
-    border-right: 4px solid #667eea;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: var(--transition);
-}
-
-.order-item:hover { transform: scale(1.01) translateX(-5px); background: rgba(255,255,255,0.06); }
-
-/* ==================== 7. Modals ==================== */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.85);
-    backdrop-filter: blur(8px);
-    z-index: 2000;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    animation: fadeIn 0.3s ease;
-}
-
-.modal.active { display: flex; }
-
-.modal-content {
-    background: #1a1a2e;
-    border-radius: 20px;
-    padding: 30px;
-    width: 100%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-}
-
-/* ==================== 8. Animations & Utils ==================== */
-@keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-30px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
-.loading {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(26, 26, 46, 0.95);
-    z-index: 9999; display: none; align-items: center; justify-content: center;
-}
-
-.loading.active { display: flex; }
-
-.spinner {
-    width: 60px; height: 60px;
-    border: 5px solid rgba(102, 126, 234, 0.1);
-    border-top: 5px solid #667eea;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ==================== 9. Responsive Adjustments ==================== */
+/* شاشات الموبايل - تعديلات بسيطة */
 @media (max-width: 768px) {
+    .header { flex-direction: column; text-align: center; gap: 15px; }
     .container { padding: 10px; }
-    .nav-links { gap: 5px; }
-    .nav-link { flex: 1 1 45%; text-align: center; padding: 10px; font-size: 0.8rem; }
     .stats-grid { grid-template-columns: 1fr 1fr; }
-    .stat-card h3 { font-size: 1.8rem; }
-    .order-item { flex-direction: column; text-align: center; gap: 15px; }
-    .order-info { justify-content: center; }
-}
-
-@media (max-width: 480px) {
-    .stats-grid { grid-template-columns: 1fr; }
-    .trucks-grid { grid-template-columns: 1fr 1fr; }
-    .modal-content { padding: 20px; }
-}
-
-/* ==================== 10. Print Support ==================== */
-@media print {
-    body { background: white !important; color: black !important; }
-    .nav-section, .date-section, .btn, .logout-btn, .no-print { display: none !important; }
-    .content-card { border: 1px solid #ccc !important; background: transparent !important; box-shadow: none !important; }
-    th { background: #eee !important; color: black !important; }
 }
