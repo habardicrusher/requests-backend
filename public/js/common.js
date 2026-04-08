@@ -54,12 +54,18 @@ function showToast(msg, type = 'info') {
 
 function openModal(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.add('active');
+    if (modal) {
+        modal.style.display = 'flex'; // أو 'block' حسب تصميمك
+        modal.classList.add('active');
+    }
 }
 
 function closeModal(id) {
     const modal = document.getElementById(id);
-    if (modal) modal.classList.remove('active');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('active');
+    }
 }
 
 function populateSelect(id, items, placeholder = '-- اختر --') {
