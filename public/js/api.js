@@ -1,36 +1,51 @@
-// js/api.js
-const API_BASE = window.location.origin.includes('localhost') 
-    ? 'http://localhost:3000/api' 
-    : '/api'; 
+// تحديد الرابط الأساسي بناءً على بيئة التشغيل
+// إذا كنت ترفع الملفات مع السيرفر في نفس المشروع على Render، نستخدم مسار نسبي
+const API_BASE = window.location.origin + '/api';
 
-async function apiCall(endpoint, method = 'GET', data = null) {
+/**
+ * دالة موحدة لإرسال الطلبات للسيرفر
+ * تعالج مشاكل الـ Session و الـ Credentials تلقائياً
+ */
+async function apiRequest(endpoint, options = {}) {
+    const url = `${API_BASE}${endpoint}`;
+    
+    // إعدادات افتراضية تضمن عمل الـ Cookies (السيشن)
+    const defaultOptions = {
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        // مهم جداً: إرسال واستقبال ملفات تعريف الارتباط (Cookies)
+        credentials: 'include', 
+    };
+
+    const mergeOptions = { ...defaultOptions, ...options };
+    
+    // دمج الـ Headers إذا تم إرسالها في options
+    if (options.headers) {
+        mergeOptions.headers = { ...defaultOptions.headers, ...options.headers };
+    }
+
     try {
-        const options = {
-            method,
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
-        };
+        const response = await fetch(url, mergeOptions);
         
-        if (data && (method === 'POST' || method === 'PUT')) {
-            options.body = JSON.stringify(data);
-        }
-        
-        const response = await fetch(`${API_BASE}${endpoint}`, options);
-        
+        // إذا انتهت الجلسة أو غير مسجل دخول (401)
         if (response.status === 401) {
+            // نتحقق إذا كنا لسنا بالفعل في صفحة تسجيل الدخول لمنع اللوب
             if (!window.location.pathname.includes('login.html')) {
+                console.warn("Session expired or unauthorized. Redirecting to login...");
                 window.location.href = 'login.html';
             }
-            return null;
+            return response;
         }
-        
-        const result = await response.json();
-        if (!response.ok) {
-            throw new Error(result.error || 'خطأ في السيرفر');
-        }
-        return result;
+
+        return response;
     } catch (error) {
-        console.error('API Error:', error);
-        throw error;
+        console.error('API connection error:', error);
+        // عرض رسالة خطأ للمستخدم في الكونسول للمساعدة في التشخيص
+        return null;
     }
 }
+
+// تصدير المتغيرات لاستخدامها في الملفات الأخرى
+window.API_BASE = API_BASE;
+window.apiRequest = apiRequest;
