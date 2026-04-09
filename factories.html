@@ -35,14 +35,13 @@
         .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:1000; }
         .modal.active { display:flex; }
         .modal-content { background:#1a1a2e; border-radius:20px; padding:30px; max-width:500px; width:90%; }
-        .modal-footer { display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
     </style>
 </head>
 <body>
     <div class="loading" id="loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
     <div class="toast-container" id="toastContainer"></div>
     <div class="container">
-        <div class="header"><h1>🏭 إدارة المصانع</h1>
+        <div class="header"><h1>🏭 إدارة المصانع والمواقع</h1>
             <div style="position:absolute; top:20px; left:20px;"><button onclick="logout()" style="background:linear-gradient(135deg,#f5576c,#eb3349); border:none; padding:8px 20px; border-radius:25px; color:white; font-weight:bold; cursor:pointer;">🚪 تسجيل الخروج</button></div>
         </div>
         <div class="nav-links" id="navLinks"></div>
@@ -85,7 +84,7 @@
                     <option value="أخرى">أخرى</option>
                 </select>
             </div>
-            <div class="modal-footer"><button class="btn btn-danger" onclick="closeEditModal()">إلغاء</button><button class="btn btn-success" onclick="saveFactoryEdit()">حفظ</button></div>
+            <div style="margin-top:20px;"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="saveFactoryEdit()">حفظ</button></div>
         </div>
     </div>
 
@@ -121,8 +120,8 @@
                     <td>${escapeHtml(f.name)}</td>
                     <td>${escapeHtml(f.location || 'الرياض')}</td>
                     <td>
-                        <button class="btn btn-warning btn-sm" onclick="openEditModal(${idx})">✏️ تعديل</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteFactory(${idx})">🗑️ حذف</button>
+                        <button class="btn btn-warning" onclick="openEditModal(${idx})">✏️ تعديل</button>
+                        <button class="btn btn-danger" onclick="deleteFactory(${idx})">🗑️ حذف</button>
                     </td>
                 </tr>
             `).join('');
@@ -155,7 +154,7 @@
             factories[idx] = { name, location };
             await saveFactories();
             renderFactoriesTable();
-            closeEditModal();
+            closeModal();
             showToast('✅ تم التعديل','success');
         }
 
@@ -179,7 +178,7 @@
             } catch(e) { showToast('خطأ في حفظ البيانات','error'); }
         }
 
-        function closeEditModal() { document.getElementById('editFactoryModal').classList.remove('active'); }
+        function closeModal() { document.getElementById('editFactoryModal').classList.remove('active'); }
         function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
         function showToast(msg,type){ const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
         function showLoading(s){ document.getElementById('loading').classList.toggle('active',s); }
