@@ -6,6 +6,7 @@
     <title>الطلبات - نظام إدارة طلبات البحص</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
+        /* نفس الأنماط السابقة - لا تغيير */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -78,7 +79,6 @@
                 <div class="form-group"><label>⏰ توقيت الطلبية (اختياري):</label><input type="text" id="whatsappTime" placeholder="8 PM"></div>
             </div>
             <button class="btn btn-success" onclick="processWhatsAppOrder()">📥 تحليل وإضافة الطلبات</button>
-            <div id="whatsappDebug" style="font-size:12px; color:#a8b2d1; margin-top:10px; display:none;"></div>
         </div>
         <h2 style="margin-top: 30px;">➕ إضافة طلب جديد</h2>
         <div class="order-form">
@@ -93,10 +93,20 @@
         <div id="todayOrders"></div>
     </div>
     <div class="modal" id="editOrderModal"><div class="modal-content"><div class="modal-header"><h3>✏️ تعديل الطلب</h3><button class="close-modal" onclick="closeModal('editOrderModal')">&times;</button></div><div class="modal-body"><input type="hidden" id="editOrderId"><div class="form-group"><label>🏭 المصنع</label><select id="editOrderFactory"></select></div><div class="form-group"><label>📦 نوع البحص</label><select id="editOrderMaterial"></select></div><div class="form-group"><label>⏰ التوقيت</label><input type="text" id="editOrderTime"></div></div><div class="modal-footer"><button class="btn btn-danger" onclick="closeModal('editOrderModal')">إلغاء</button><button class="btn btn-success" onclick="saveOrderEdit()">حفظ</button></div></div></div>
+
     <script>
         const API_BASE = '/api';
         let factories = [], materials = [], orders = [], currentDate = '';
         let currentDistribution = [];
+
+        // دالة مساعدة لاستخراج النص من كائن أو سلسلة
+        function extractName(item) {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') {
+                return item.name || item.factory_name || item.material_name || item.text || '';
+            }
+            return '';
+        }
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
@@ -111,28 +121,34 @@
         async function loadSettings() {
             try {
                 const data = await apiCall('/settings');
-                factories = (data.factories || []).map(f => typeof f === 'object' ? (f.name || f.factory_name || f.text || '') : f);
-                materials = (data.materials || []).map(m => typeof m === 'object' ? (m.name || m.material_name || m.text || '') : m);
-                updateSelects(); renderQuickAddButtons();
+                // معالجة المصانع
+                factories = (data.factories || []).map(f => extractName(f)).filter(f => f);
+                // معالجة المواد
+                materials = (data.materials || []).map(m => extractName(m)).filter(m => m);
+                console.log('تم تحميل المصانع:', factories);
+                console.log('تم تحميل المواد:', materials);
+                updateSelects();
+                renderQuickAddButtons();
             } catch(e) { showToast('خطأ في تحميل الإعدادات', 'error'); }
         }
+
         function updateSelects() {
-            const validFactories = factories.filter(f => f && f.trim());
-            const factOpt = '<option value="">-- اختر --</option>' + validFactories.map(f => `<option value="${f}">${f}</option>`).join('');
+            const factOpt = '<option value="">-- اختر --</option>' + factories.map(f => `<option value="${f}">${f}</option>`).join('');
             document.getElementById('factorySelect').innerHTML = factOpt;
             document.getElementById('editOrderFactory').innerHTML = factOpt;
             document.getElementById('whatsappFactory').innerHTML = factOpt;
-            const validMaterials = materials.filter(m => m && m.trim());
-            const matOpt = '<option value="">-- اختر --</option>' + validMaterials.map(m => `<option value="${m}">بحص ${m}</option>`).join('');
+
+            const matOpt = '<option value="">-- اختر --</option>' + materials.map(m => `<option value="${m}">بحص ${m}</option>`).join('');
             document.getElementById('materialType').innerHTML = matOpt;
             document.getElementById('editOrderMaterial').innerHTML = matOpt;
         }
+
         function renderQuickAddButtons() {
             const container = document.getElementById('quickAddButtons');
-            const valid = materials.filter(m => m && m.trim());
-            if (!valid.length) { container.innerHTML = '<p>لا توجد أنواع بحص</p>'; return; }
-            container.innerHTML = valid.map(m => `<button class="quick-btn" onclick="quickAdd('${m}',1)">${m} ×1</button><button class="quick-btn" onclick="quickAdd('${m}',5)">${m} ×5</button><button class="quick-btn" onclick="quickAdd('${m}',10)">${m} ×10</button>`).join('');
+            if (!materials.length) { container.innerHTML = '<p>لا توجد أنواع بحص</p>'; return; }
+            container.innerHTML = materials.map(m => `<button class="quick-btn" onclick="quickAdd('${m}',1)">${m} ×1</button><button class="quick-btn" onclick="quickAdd('${m}',5)">${m} ×5</button><button class="quick-btn" onclick="quickAdd('${m}',10)">${m} ×10</button>`).join('');
         }
+
         async function loadDayData() {
             currentDate = document.getElementById('orderDate').value;
             try {
@@ -142,6 +158,7 @@
                 renderOrders();
             } catch(e) { orders = []; renderOrders(); showToast('خطأ في تحميل الطلبات', 'error'); }
         }
+
         async function saveData() {
             try {
                 const cleaned = orders.map(o => ({ id: o.id, factory: o.factory, material: o.material, time: o.time || '' }));
@@ -150,108 +167,53 @@
             } catch(e) { showToast('خطأ في حفظ البيانات: '+e.message, 'error'); return false; }
         }
 
-        // ========== دالة تحليل واتساب الجديدة (بسيطة وقوية) ==========
+        // دالة تحليل واتساب (نفس الكود السابق المحسن)
         function parseWhatsAppOrder(text) {
-            const debugLines = [];
-            // 1. إزالة الكلمات العربية والإنجليزية غير المرغوبة
             let cleaned = text.replace(/السلام\s*عليكم|صباح|مساء|اليوم|إنشاء\s*الله|بإذن\s*الله|حاضر|يرجى|مطلوب|طلبات?|عدد|الرجاء|من\s*فضلك|tonight|today|pm|am/gi, '');
-            // 2. تحويل الأرقام العربية إلى إنجليزية
             const arabicNumbers = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9' };
             cleaned = cleaned.replace(/[٠-٩]/g, d => arabicNumbers[d] || d);
-            debugLines.push(`بعد التنظيف: ${cleaned}`);
-            
-            // 3. استخراج التوقيت
             let extractedTime = '';
             const timeMatch = text.match(/(\d{1,2}\s*(?:AM|PM|am|pm)|tonight\s+\d{1,2}\s*(?:AM|PM|am|pm)?|\d{1,2}:\d{2})/i);
             if (timeMatch) extractedTime = timeMatch[0].trim();
-            debugLines.push(`التوقيت المستخرج: ${extractedTime || 'لا يوجد'}`);
-            
-            // 4. تقسيم النص إلى سطور
             const lines = cleaned.split(/\r?\n/);
             const items = [];
             const validMaterialsSet = new Set(materials.map(m => m.toLowerCase().trim()));
-            debugLines.push(`المواد المعروفة: ${Array.from(validMaterialsSet).join(', ')}`);
-            
-            for (let line of lines) {
+            for (const line of lines) {
                 let trimmed = line.trim();
-                if (!trimmed) continue;
-                if (/^(pm|am|tonight|today)$/i.test(trimmed)) continue;
-                debugLines.push(`--- معالجة سطر: "${trimmed}"`);
-                
-                // تقسيم السطر إلى أجزاء بمسافات
+                if (!trimmed || /^(pm|am|tonight|today)$/i.test(trimmed)) continue;
                 const parts = trimmed.split(/\s+/);
-                debugLines.push(`  الأجزاء: ${parts.join(', ')}`);
-                
-                // البحث عن أول جزء رقمي (العدد)
                 let quantity = null;
                 let materialParts = [];
-                let foundNumber = false;
-                
                 for (let i = 0; i < parts.length; i++) {
                     const part = parts[i];
-                    // إذا كان الجزء رقماً (أو رقم مع # مثل "3#" نشيل الرموز)
                     const numMatch = part.match(/^(\d+)$/);
-                    if (numMatch && !foundNumber) {
+                    if (numMatch && quantity === null) {
                         quantity = parseInt(numMatch[1]);
-                        foundNumber = true;
-                        debugLines.push(`  العدد المستخرج: ${quantity}`);
                     } else {
-                        // نضيف الجزء للمادة (نتجاهل الرموز # * ×)
                         const cleanedPart = part.replace(/[#*×]/g, '').trim();
                         if (cleanedPart) materialParts.push(cleanedPart);
                     }
                 }
-                
-                // إذا لم نجد رقماً، نتخطى
-                if (!foundNumber) {
-                    debugLines.push(`  ⚠️ لا يوجد رقم في هذا السطر -> نتخطى`);
-                    continue;
-                }
-                
-                // دمج أجزاء المادة بمسافة واحدة
+                if (quantity === null || materialParts.length === 0) continue;
                 let material = materialParts.join(' ').trim();
-                debugLines.push(`  المادة الخام: "${material}"`);
-                
-                if (!material) {
-                    debugLines.push(`  ⚠️ لا توجد مادة -> نتخطى`);
-                    continue;
-                }
-                
-                // التحقق من وجود المادة في القائمة (مطابقة مرنة)
-                let matchedMaterial = null;
+                let matched = null;
                 const materialLower = material.toLowerCase();
                 for (let known of validMaterialsSet) {
                     if (materialLower === known || materialLower.includes(known) || known.includes(materialLower)) {
-                        matchedMaterial = known;
+                        matched = known;
                         break;
                     }
                 }
-                
-                if (matchedMaterial) {
-                    debugLines.push(`  ✅ تم قبول: ${quantity} × ${matchedMaterial}`);
-                    items.push({ material: matchedMaterial, quantity });
-                } else {
-                    debugLines.push(`  ❌ المادة "${material}" غير معروفة`);
+                if (matched) {
+                    items.push({ material: matched, quantity });
                 }
             }
-            
-            // دمج العناصر المكررة
             const merged = [];
             items.forEach(item => {
                 const existing = merged.find(m => m.material === item.material);
                 if (existing) existing.quantity += item.quantity;
                 else merged.push({ ...item });
             });
-            
-            debugLines.push(`=== النتيجة النهائية: ${JSON.stringify(merged)} ===`);
-            // عرض التصحيح للمستخدم (للاختبار)
-            const debugDiv = document.getElementById('whatsappDebug');
-            if (debugDiv) {
-                debugDiv.style.display = 'block';
-                debugDiv.innerHTML = debugLines.join('<br>');
-                setTimeout(() => { debugDiv.style.display = 'none'; }, 5000);
-            }
-            
             return { items: merged, extractedTime };
         }
 
@@ -261,7 +223,7 @@
             const customTime = document.getElementById('whatsappTime').value.trim();
             if(!text || !factory) { showToast('املأ النص واختر المصنع','error'); return; }
             const { items, extractedTime } = parseWhatsAppOrder(text);
-            if(!items.length) { showToast('لم نجد طلبات صالحة. تأكد من وجود أعداد وأنواع بحص معروفة.','error'); return; }
+            if(!items.length) { showToast('لم نجد طلبات صالحة','error'); return; }
             const finalTime = customTime || extractedTime || '';
             let added=0; showLoading(true);
             for(const it of items){
