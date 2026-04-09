@@ -8,14 +8,12 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ==================== المجلدات ====================
 const DATA_DIR = path.join(__dirname, 'data');
 const DAYS_DIR = path.join(DATA_DIR, 'days');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(DAYS_DIR)) fs.mkdirSync(DAYS_DIR, { recursive: true });
 
-// ==================== البيانات الافتراضية ====================
 const defaultSettings = {
     factories: [
         { name: 'SCCCL', location: 'الرياض' },
@@ -61,7 +59,6 @@ const defaultSettings = {
     ]
 };
 
-// ==================== Middleware ====================
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
@@ -69,10 +66,9 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'gravel-system-secret-key-2024',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true, maxAge: 24 * 60 * 60 * 1000 }
+    cookie: { secure: false, httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 } // 30 يوم
 }));
 
-// ==================== Helper Functions ====================
 function readJSON(filename) {
     const filepath = path.join(DATA_DIR, filename);
     if (fs.existsSync(filepath)) return JSON.parse(fs.readFileSync(filepath, 'utf8'));
@@ -109,25 +105,27 @@ function requireAdmin(req, res, next) {
     res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
 }
 
-// ==================== تهيئة البيانات ====================
 function initializeData() {
     if (!readJSON('users.json')) {
         const hashedPassword = bcrypt.hashSync('Live#5050', 10);
+        // إضافة صلاحية manageUsers: true للمدير
+        const adminPermissions = {
+            viewOrders: true, addOrders: true, editOrders: true, deleteOrders: true,
+            viewDistribution: true, manageDistribution: true, viewTrucks: true, manageTrucks: true,
+            viewReports: true, exportReports: true, viewSettings: true, manageSettings: true,
+            viewBackup: true, manageBackup: true, manageUsers: true, manageRestrictions: true
+        };
         writeJSON('users.json', [{
             id: 1, username: 'Admin', password: hashedPassword, role: 'admin',
-            permissions: {
-                viewOrders: true, addOrders: true, editOrders: true, deleteOrders: true,
-                viewDistribution: true, manageDistribution: true, viewTrucks: true, manageTrucks: true,
-                viewReports: true, exportReports: true, viewSettings: true, manageSettings: true,
-                viewBackup: true, manageBackup: true, manageUsers: true, manageRestrictions: true
-            }, createdAt: new Date().toISOString()
+            permissions: adminPermissions,
+            createdAt: new Date().toISOString()
         }]);
-        console.log('✅ تم إنشاء حساب المدير: Admin / Live#5050');
+        console.log('✅ Admin created: Admin / Live#5050');
     }
     let settings = readJSON('settings.json');
     if (!settings) {
         writeJSON('settings.json', defaultSettings);
-        console.log('✅ تم إنشاء الإعدادات الافتراضية');
+        console.log('✅ Default settings created');
     } else {
         const migrated = migrateFactories(settings);
         if (migrated !== settings) writeJSON('settings.json', migrated);
@@ -137,7 +135,6 @@ function initializeData() {
 }
 initializeData();
 
-// ==================== API Routes ====================
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
     const users = readJSON('users.json') || [];
@@ -145,7 +142,13 @@ app.post('/api/login', (req, res) => {
     if (!user || !bcrypt.compareSync(password, user.password)) {
         return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
-    req.session.user = { id: user.id, username: user.username, role: user.role, permissions: user.permissions };
+    // تخزين كامل بيانات المستخدم في الجلسة (بما فيها الصلاحيات)
+    req.session.user = {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        permissions: user.permissions || {}
+    };
     addLog(user.username, 'تسجيل دخول');
     res.json({ success: true, user: req.session.user });
 });
@@ -184,7 +187,12 @@ app.get('/api/day/:date', requireAuth, (req, res) => {
 });
 
 app.put('/api/day/:date', requireAuth, (req, res) => {
-    const { orders, distribution } = req.body;
+    let { orders, distribution } = req.body;
+    // تنظيف الوقت من أي قيم undefined أو null
+    orders = orders.map(o => ({
+        ...o,
+        time: (o.time && o.time !== 'undefined' && o.time !== 'null') ? o.time : ''
+    }));
     writeDayData(req.params.date, { orders, distribution });
     res.json({ success: true });
 });
@@ -197,13 +205,20 @@ app.get('/api/users', requireAuth, (req, res) => {
 });
 
 app.post('/api/users', requireAuth, (req, res) => {
-    if (!req.session.user.permissions.manageUsers) return res.status(403).json({ error: 'ليس لديك صلاحية' });
+    if (!req.session.user.permissions?.manageUsers) return res.status(403).json({ error: 'ليس لديك صلاحية لإدارة المستخدمين' });
     const { username, password, role, permissions } = req.body;
     const users = readJSON('users.json') || [];
     if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
         return res.status(400).json({ error: 'اسم المستخدم موجود' });
     }
-    const newUser = { id: Date.now(), username, password: bcrypt.hashSync(password, 10), role, permissions, createdAt: new Date().toISOString() };
+    const newUser = {
+        id: Date.now(),
+        username,
+        password: bcrypt.hashSync(password, 10),
+        role,
+        permissions: permissions || {},
+        createdAt: new Date().toISOString()
+    };
     users.push(newUser);
     writeJSON('users.json', users);
     addLog(req.session.user.username, 'إضافة مستخدم', username);
@@ -211,7 +226,7 @@ app.post('/api/users', requireAuth, (req, res) => {
 });
 
 app.put('/api/users/:id', requireAuth, (req, res) => {
-    if (!req.session.user.permissions.manageUsers) return res.status(403).json({ error: 'ليس لديك صلاحية' });
+    if (!req.session.user.permissions?.manageUsers) return res.status(403).json({ error: 'ليس لديك صلاحية لإدارة المستخدمين' });
     const id = parseInt(req.params.id);
     const { username, password, role, permissions } = req.body;
     const users = readJSON('users.json') || [];
@@ -227,7 +242,7 @@ app.put('/api/users/:id', requireAuth, (req, res) => {
 });
 
 app.delete('/api/users/:id', requireAuth, (req, res) => {
-    if (!req.session.user.permissions.manageUsers) return res.status(403).json({ error: 'ليس لديك صلاحية' });
+    if (!req.session.user.permissions?.manageUsers) return res.status(403).json({ error: 'ليس لديك صلاحية لإدارة المستخدمين' });
     const id = parseInt(req.params.id);
     let users = readJSON('users.json') || [];
     const user = users.find(u => u.id === id);
@@ -244,7 +259,7 @@ app.get('/api/restrictions', requireAuth, (req, res) => {
 });
 
 app.post('/api/restrictions', requireAuth, (req, res) => {
-    if (!req.session.user.permissions.manageRestrictions) return res.status(403).json({ error: 'ليس لديك صلاحية' });
+    if (!req.session.user.permissions?.manageRestrictions) return res.status(403).json({ error: 'ليس لديك صلاحية' });
     const restrictions = readJSON('restrictions.json') || [];
     const newRestriction = { id: Date.now(), ...req.body, createdBy: req.session.user.username, createdAt: new Date().toISOString() };
     restrictions.push(newRestriction);
@@ -264,7 +279,7 @@ app.put('/api/restrictions/:id', requireAuth, (req, res) => {
 });
 
 app.delete('/api/restrictions/:id', requireAuth, (req, res) => {
-    if (!req.session.user.permissions.manageRestrictions) return res.status(403).json({ error: 'ليس لديك صلاحية' });
+    if (!req.session.user.permissions?.manageRestrictions) return res.status(403).json({ error: 'ليس لديك صلاحية' });
     const id = parseInt(req.params.id);
     let restrictions = readJSON('restrictions.json') || [];
     restrictions = restrictions.filter(r => r.id !== id);
@@ -290,7 +305,7 @@ app.get('/api/reports', requireAuth, (req, res) => {
                 if (!driverStats[key]) driverStats[key] = { number: dist.truck.number, driver: dist.truck.driver, total: 0, road1: 0, road2: 0 };
                 driverStats[key].total++;
                 if (dist.road === 1) driverStats[key].road1++;
-                else driverStats[key].road2++;
+                else if (dist.road === 2) driverStats[key].road2++;
                 if (!factoryStats[dist.factory]) factoryStats[dist.factory] = { name: dist.factory, total: 0 };
                 factoryStats[dist.factory].total++;
                 if (!materialStats[dist.material]) materialStats[dist.material] = { name: dist.material, total: 0 };
@@ -320,7 +335,7 @@ app.get('/api/backup', requireAuth, (req, res) => {
 });
 
 app.post('/api/restore', requireAuth, (req, res) => {
-    if (!req.session.user.permissions.manageBackup) return res.status(403).json({ error: 'ليس لديك صلاحية' });
+    if (!req.session.user.permissions?.manageBackup) return res.status(403).json({ error: 'ليس لديك صلاحية' });
     try {
         const data = req.body;
         let totalOrders = 0, totalDist = 0;
@@ -360,13 +375,11 @@ app.delete('/api/clear-all', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-// ==================== صفحات HTML (إضافة المسارات المفقودة) ====================
-// صفحة تسجيل الدخول (متاحة للجميع)
+// ==================== صفحات HTML ====================
 app.get('/login.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'login.html'));
 });
 
-// الصفحة الرئيسية (توجيه حسب حالة تسجيل الدخول)
 app.get('/', (req, res) => {
     if (req.session && req.session.user) {
         res.redirect('/index.html');
@@ -375,7 +388,6 @@ app.get('/', (req, res) => {
     }
 });
 
-// حماية الصفحات الأخرى (تتطلب تسجيل دخول)
 const protectedPages = ['index.html', 'orders.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html'];
 protectedPages.forEach(page => {
     app.get(`/${page}`, (req, res) => {
@@ -387,7 +399,6 @@ protectedPages.forEach(page => {
     });
 });
 
-// خدمة الملفات الثابتة (CSS, JS, images) - يجب أن تكون بعد مسارات HTML
 app.use(express.static(__dirname, {
     setHeaders: (res, filePath) => {
         const base = path.basename(filePath);
@@ -397,9 +408,6 @@ app.use(express.static(__dirname, {
     }
 }));
 
-// ==================== تشغيل السيرفر ====================
 app.listen(PORT, () => {
-    console.log('====================================');
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log('====================================');
+    console.log(`Server running on http://localhost:${PORT}`);
 });
