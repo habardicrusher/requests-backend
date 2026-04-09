@@ -66,7 +66,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'gravel-system-secret-key-2024',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 } // 30 يوم
+    cookie: { secure: false, httpOnly: true, maxAge: 30 * 24 * 60 * 60 * 1000 }
 }));
 
 function readJSON(filename) {
@@ -105,23 +105,63 @@ function requireAdmin(req, res, next) {
     res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
 }
 
+// دالة مساعدة لإرجاع جميع الصلاحيات ما عدا manageUsers
+function getAllPermissionsExceptManageUsers() {
+    return {
+        viewOrders: true, addOrders: true, editOrders: true, deleteOrders: true,
+        viewDistribution: true, manageDistribution: true, viewTrucks: true, manageTrucks: true,
+        viewReports: true, exportReports: true, viewSettings: true, manageSettings: true,
+        viewBackup: true, manageBackup: true, manageUsers: false, manageRestrictions: true
+    };
+}
+
 function initializeData() {
-    if (!readJSON('users.json')) {
+    let users = readJSON('users.json') || [];
+    let updated = false;
+    
+    // المستخدم Admin
+    if (!users.find(u => u.username === 'Admin')) {
         const hashedPassword = bcrypt.hashSync('Live#5050', 10);
-        // إضافة صلاحية manageUsers: true للمدير
-        const adminPermissions = {
-            viewOrders: true, addOrders: true, editOrders: true, deleteOrders: true,
-            viewDistribution: true, manageDistribution: true, viewTrucks: true, manageTrucks: true,
-            viewReports: true, exportReports: true, viewSettings: true, manageSettings: true,
-            viewBackup: true, manageBackup: true, manageUsers: true, manageRestrictions: true
-        };
-        writeJSON('users.json', [{
+        users.push({
             id: 1, username: 'Admin', password: hashedPassword, role: 'admin',
-            permissions: adminPermissions,
-            createdAt: new Date().toISOString()
-        }]);
+            permissions: {
+                viewOrders: true, addOrders: true, editOrders: true, deleteOrders: true,
+                viewDistribution: true, manageDistribution: true, viewTrucks: true, manageTrucks: true,
+                viewReports: true, exportReports: true, viewSettings: true, manageSettings: true,
+                viewBackup: true, manageBackup: true, manageUsers: true, manageRestrictions: true
+            }, createdAt: new Date().toISOString()
+        });
+        updated = true;
         console.log('✅ Admin created: Admin / Live#5050');
     }
+    
+    // المستخدمون الإضافيون الذين تريد تثبيتهم
+    const fixedUsers = [
+        { username: 'hassan', password: '305075', role: 'user' },
+        { username: 'Abu Naji', password: '987654', role: 'user' },
+        { username: 'GM', password: 'GmDR@2026', role: 'user' },
+        { username: 'DrH', password: 'Account@2026', role: 'user' },
+        { username: 'Kasara', password: '20102026', role: 'user' }
+    ];
+    
+    for (const fixed of fixedUsers) {
+        if (!users.find(u => u.username === fixed.username)) {
+            const hashedPassword = bcrypt.hashSync(fixed.password, 10);
+            users.push({
+                id: Date.now() + Math.random(),
+                username: fixed.username,
+                password: hashedPassword,
+                role: fixed.role,
+                permissions: getAllPermissionsExceptManageUsers(),
+                createdAt: new Date().toISOString()
+            });
+            updated = true;
+            console.log(`✅ تم إضافة المستخدم التلقائي: ${fixed.username}`);
+        }
+    }
+    
+    if (updated) writeJSON('users.json', users);
+    
     let settings = readJSON('settings.json');
     if (!settings) {
         writeJSON('settings.json', defaultSettings);
@@ -133,6 +173,7 @@ function initializeData() {
     if (!readJSON('restrictions.json')) writeJSON('restrictions.json', []);
     if (!readJSON('logs.json')) writeJSON('logs.json', []);
 }
+
 initializeData();
 
 app.post('/api/login', (req, res) => {
@@ -142,13 +183,7 @@ app.post('/api/login', (req, res) => {
     if (!user || !bcrypt.compareSync(password, user.password)) {
         return res.status(401).json({ error: 'اسم المستخدم أو كلمة المرور غير صحيحة' });
     }
-    // تخزين كامل بيانات المستخدم في الجلسة (بما فيها الصلاحيات)
-    req.session.user = {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-        permissions: user.permissions || {}
-    };
+    req.session.user = { id: user.id, username: user.username, role: user.role, permissions: user.permissions };
     addLog(user.username, 'تسجيل دخول');
     res.json({ success: true, user: req.session.user });
 });
@@ -188,7 +223,6 @@ app.get('/api/day/:date', requireAuth, (req, res) => {
 
 app.put('/api/day/:date', requireAuth, (req, res) => {
     let { orders, distribution } = req.body;
-    // تنظيف الوقت من أي قيم undefined أو null
     orders = orders.map(o => ({
         ...o,
         time: (o.time && o.time !== 'undefined' && o.time !== 'null') ? o.time : ''
