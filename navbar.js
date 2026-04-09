@@ -1,6 +1,23 @@
-// navbar.js - إنشاء شريط التنقل الموحد في جميع الصفحات
+// navbar.js - شريط التنقل الموحد مع دعم الجلسات والـ credentials
 (function() {
-    // إضافة keep-alive للحفاظ على الجلسة
+    // دالة مساعدة لطلب API مع credentials
+    async function apiCall(endpoint, method = 'GET', data = null) {
+        const options = { 
+            method, 
+            headers: { 'Content-Type': 'application/json' }, 
+            credentials: 'include'   // مهم جدًا للحفاظ على الجلسة
+        };
+        if (data && (method === 'POST' || method === 'PUT')) options.body = JSON.stringify(data);
+        const res = await fetch(`/api${endpoint}`, options);
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            throw new Error('غير مصرح');
+        }
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+    }
+
+    // Keep-alive: كل 5 دقائق للحفاظ على الجلسة
     setInterval(async () => {
         try {
             await fetch('/api/me', { credentials: 'include' });
@@ -8,7 +25,19 @@
         } catch(e) {}
     }, 5 * 60 * 1000);
 
-    function renderNavbar() {
+    async function renderNavbar() {
+        try {
+            // التحقق من صحة الجلسة
+            const data = await apiCall('/me');
+            if (!data.user) {
+                window.location.href = '/login.html';
+                return;
+            }
+        } catch(e) {
+            window.location.href = '/login.html';
+            return;
+        }
+
         let navContainer = document.querySelector('.nav-links');
         if (!navContainer) {
             const container = document.querySelector('.container');
@@ -78,19 +107,10 @@
         }
     }
 
-    // التحقق من المستخدم دون التسبب في logout مفاجئ
-    fetch('/api/me', { credentials: 'include' })
-        .then(res => {
-            if (res.status === 401) {
-                // لا نوجه مباشرة، نترك الصفحة تتعامل مع 401 بنفسها
-                return null;
-            }
-            return res.json();
-        })
-        .then(data => {
-            if (data && data.user) {
-                renderNavbar();
-            }
-        })
-        .catch(() => {});
+    // بدء التشغيل بعد تحميل الصفحة
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderNavbar);
+    } else {
+        renderNavbar();
+    }
 })();
