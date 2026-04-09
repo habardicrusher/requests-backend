@@ -6,11 +6,10 @@
     <title>الطلبات - نظام إدارة طلبات البحص</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* جميع الأنماط كما هي - تم حذفها للاختصار ولكن أضمن أنها موجودة */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; }
+        .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; position: relative; }
         .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
         .nav-link { padding: 12px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; text-decoration: none; color: #fff; transition: all 0.3s; font-weight: 600; }
         .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transform: translateY(-2px); }
@@ -63,52 +62,27 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <div class="container">
-        <div class="header"><h1>📝 إدارة الطلبات</h1></div>
-        <div class="nav-links">
-            <a href="index.html" class="nav-link">📊 الرئيسية</a>
-            <a href="orders.html" class="nav-link active">📝 الطلبات</a>
-            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-            <a href="factories.html" class="nav-link">🏭 المصانع</a>
-            <a href="reports.html" class="nav-link">📊 التقارير</a>
-            <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+        <div class="header"><h1>📝 إدارة الطلبات</h1>
+            <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
+                <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
+            </div>
         </div>
+        <div class="nav-links" id="navLinks"></div>
 
         <div class="date-section">
             <div><label>📅 تاريخ العمل: </label><input type="date" id="orderDate" onchange="loadDayData()"></div>
             <div><button class="btn btn-info" onclick="exportOrdersToExcel()">📥 تصدير Excel</button></div>
         </div>
 
-        <!-- قسم طلب واتساب -->
         <div class="whatsapp-section">
             <h3>💬 طلب واتساب</h3>
-            <p style="color: #a8b2d1; margin-bottom: 15px; font-size: 0.9em;">الصق نص الطلب من واتساب، ثم اختر المصنع والتوقيت (اختياري)</p>
+            <p style="color: #a8b2d1; margin-bottom: 15px;">الصق نص الطلب، ثم اختر المصنع والتوقيت (اختياري)</p>
             <div class="order-form">
-                <div class="form-group" style="grid-column: span 2;">
-                    <label>📋 نص الطلب:</label>
-                    <textarea id="whatsappText" rows="4" placeholder="مثال:
-السلام عليكم اليوم إنشاء الله
- 15   3/4
- 15   3/8
-أو
-3/4 # 3
-3/8 # 2
-3/16 # 2
-tonight 8 PM"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>🏭 المصنع:</label>
-                    <select id="whatsappFactory"></select>
-                </div>
-                <div class="form-group">
-                    <label>⏰ توقيت الطلبية (اختياري):</label>
-                    <input type="text" id="whatsappTime" class="time-input" placeholder="مثال: 8 PM, tonight, 20:00">
-                </div>
+                <div class="form-group" style="grid-column: span 2;"><label>📋 نص الطلب:</label><textarea id="whatsappText" rows="4" placeholder="مثال:&#10;السلام عليكم اليوم إنشاء الله&#10; 20   3/4&#10; 15   3/8"></textarea></div>
+                <div class="form-group"><label>🏭 المصنع:</label><select id="whatsappFactory"></select></div>
+                <div class="form-group"><label>⏰ التوقيت (اختياري):</label><input type="text" id="whatsappTime" placeholder="8 PM"></div>
             </div>
-            <button class="btn btn-success" onclick="processWhatsAppOrder()">
-                📥 تحليل وإضافة الطلبات
-            </button>
+            <button class="btn btn-success" onclick="processWhatsAppOrder()">📥 تحليل وإضافة الطلبات</button>
         </div>
 
         <h2 style="margin-top: 30px;">➕ إضافة طلب جديد</h2>
@@ -116,86 +90,60 @@ tonight 8 PM"></textarea>
             <div class="form-group"><label>🏭 المصنع</label><select id="factorySelect"></select></div>
             <div class="form-group"><label>📦 نوع البحص</label><select id="materialType"></select></div>
             <div class="form-group"><label>🔢 العدد</label><input type="number" id="orderCount" min="1" value="1"></div>
-            <div class="form-group"><label>⏰ التوقيت (اختياري)</label><input type="text" id="orderTime" placeholder="مثال: 8 PM"></div>
+            <div class="form-group"><label>⏰ التوقيت</label><input type="text" id="orderTime" placeholder="8 PM"></div>
         </div>
         <button class="btn btn-success" onclick="addOrder()">✅ إضافة الطلب</button>
 
-        <div class="quick-add-section">
-            <h4>⚡ إضافة سريعة (اختر المصنع أولاً)</h4>
-            <div class="quick-add-grid" id="quickAddButtons"></div>
-        </div>
-
+        <div class="quick-add-section"><h4>⚡ إضافة سريعة (اختر المصنع أولاً)</h4><div class="quick-add-grid" id="quickAddButtons"></div></div>
         <h3 style="margin-top: 30px;">📋 طلبات اليوم (<span id="ordersCount">0</span> طلب)</h3>
         <div id="todayOrders"></div>
     </div>
 
-    <!-- Modal تعديل الطلب -->
-    <div class="modal" id="editOrderModal">
-        <div class="modal-content">
-            <div class="modal-header"><h3>✏️ تعديل الطلب</h3><button class="close-modal" onclick="closeModal('editOrderModal')">&times;</button></div>
-            <div class="modal-body">
-                <input type="hidden" id="editOrderId">
-                <div class="form-group"><label>🏭 المصنع</label><select id="editOrderFactory"></select></div>
-                <div class="form-group"><label>📦 نوع البحص</label><select id="editOrderMaterial"></select></div>
-                <div class="form-group"><label>⏰ التوقيت</label><input type="text" id="editOrderTime" placeholder="اختياري"></div>
-            </div>
-            <div class="modal-footer"><button class="btn btn-danger" onclick="closeModal('editOrderModal')">إلغاء</button><button class="btn btn-success" onclick="saveOrderEdit()">حفظ</button></div>
-        </div>
-    </div>
+    <div class="modal" id="editOrderModal"><div class="modal-content"><div class="modal-header"><h3>✏️ تعديل الطلب</h3><button class="close-modal" onclick="closeModal('editOrderModal')">&times;</button></div><div class="modal-body"><input type="hidden" id="editOrderId"><div class="form-group"><label>🏭 المصنع</label><select id="editOrderFactory"></select></div><div class="form-group"><label>📦 نوع البحص</label><select id="editOrderMaterial"></select></div><div class="form-group"><label>⏰ التوقيت</label><input type="text" id="editOrderTime"></div></div><div class="modal-footer"><button class="btn btn-danger" onclick="closeModal('editOrderModal')">إلغاء</button><button class="btn btn-success" onclick="saveOrderEdit()">حفظ</button></div></div></div>
 
     <script>
         const API_BASE = '/api';
         let factories = [], materials = [], orders = [], currentDate = '';
+        let currentDistribution = [];
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
-            if (data && (method === 'POST' || method === 'PUT')) options.body = JSON.stringify(data);
-            const response = await fetch(`${API_BASE}${endpoint}`, options);
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `HTTP ${response.status}`);
-            }
-            return response.json();
+            if (data) options.body = JSON.stringify(data);
+            const res = await fetch(`${API_BASE}${endpoint}`, options);
+            if (res.status === 401) { window.location.href = '/login.html'; throw new Error('غير مصرح'); }
+            if (!res.ok) throw new Error(await res.text());
+            return res.json();
         }
+
+        setInterval(async () => { try { await fetch('/api/me', { credentials: 'include' }); } catch(e) {} }, 5 * 60 * 1000);
 
         async function loadSettings() {
             try {
                 const data = await apiCall('/settings');
                 factories = (data.factories || []).map(f => typeof f === 'object' ? (f.name || f.factory_name || f.text || '') : f);
                 materials = (data.materials || []).map(m => typeof m === 'object' ? (m.name || m.material_name || m.text || '') : m);
-                updateSelects();
-                renderQuickAddButtons();
-            } catch (error) {
-                console.error(error);
-                showToast('خطأ في تحميل البيانات الأساسية: ' + error.message, 'error');
-            }
+                updateSelects(); renderQuickAddButtons();
+            } catch(e) { showToast('خطأ في تحميل الإعدادات', 'error'); }
         }
 
         function updateSelects() {
             const validFactories = factories.filter(f => f && f.trim());
-            const factoryOptions = '<option value="">-- اختر --</option>' + validFactories.map(f => `<option value="${f}">${f}</option>`).join('');
-            document.getElementById('factorySelect').innerHTML = factoryOptions;
-            document.getElementById('editOrderFactory').innerHTML = factoryOptions;
-            document.getElementById('whatsappFactory').innerHTML = factoryOptions;
+            const factOpt = '<option value="">-- اختر --</option>' + validFactories.map(f => `<option value="${f}">${f}</option>`).join('');
+            document.getElementById('factorySelect').innerHTML = factOpt;
+            document.getElementById('editOrderFactory').innerHTML = factOpt;
+            document.getElementById('whatsappFactory').innerHTML = factOpt;
 
             const validMaterials = materials.filter(m => m && m.trim());
-            const materialOptions = '<option value="">-- اختر --</option>' + validMaterials.map(m => `<option value="${m}">بحص ${m}</option>`).join('');
-            document.getElementById('materialType').innerHTML = materialOptions;
-            document.getElementById('editOrderMaterial').innerHTML = materialOptions;
+            const matOpt = '<option value="">-- اختر --</option>' + validMaterials.map(m => `<option value="${m}">بحص ${m}</option>`).join('');
+            document.getElementById('materialType').innerHTML = matOpt;
+            document.getElementById('editOrderMaterial').innerHTML = matOpt;
         }
 
         function renderQuickAddButtons() {
             const container = document.getElementById('quickAddButtons');
-            const validMaterials = materials.filter(m => m && m.trim());
-            if (!validMaterials.length) {
-                container.innerHTML = '<p style="color:#a8b2d1;">لا توجد أنواع بحص متاحة</p>';
-                return;
-            }
-            container.innerHTML = validMaterials.map(m => 
-                `<button class="quick-btn" onclick="quickAdd('${m}', 1)">${m} ×1</button>
-                 <button class="quick-btn" onclick="quickAdd('${m}', 5)">${m} ×5</button>
-                 <button class="quick-btn" onclick="quickAdd('${m}', 10)">${m} ×10</button>`
-            ).join('');
+            const valid = materials.filter(m => m && m.trim());
+            if (!valid.length) { container.innerHTML = '<p>لا توجد أنواع بحص</p>'; return; }
+            container.innerHTML = valid.map(m => `<button class="quick-btn" onclick="quickAdd('${m}',1)">${m} ×1</button><button class="quick-btn" onclick="quickAdd('${m}',5)">${m} ×5</button><button class="quick-btn" onclick="quickAdd('${m}',10)">${m} ×10</button>`).join('');
         }
 
         async function loadDayData() {
@@ -203,143 +151,75 @@ tonight 8 PM"></textarea>
             try {
                 const data = await apiCall(`/day/${currentDate}`);
                 orders = data.orders || [];
+                currentDistribution = data.distribution || [];
                 renderOrders();
-            } catch (error) {
-                console.error(error);
-                orders = [];
-                renderOrders();
-                showToast('خطأ في تحميل طلبات اليوم: ' + error.message, 'error');
-            }
+            } catch(e) { orders = []; renderOrders(); showToast('خطأ في تحميل الطلبات', 'error'); }
         }
 
-        // إصلاح دالة حفظ البيانات: إرسال فقط الحقول الأساسية التي يتوقعها الخادم
         async function saveData() {
             try {
-                // تحويل الطلبات إلى الشكل المتوقع (بدون الحقول الإضافية time, timestamp, id إذا كانت تسبب مشكلة)
-                // لكن الخادم قد يحتاج id لتحديث الطلبات. سنحتفظ بالـ id ونزيل الحقول الإضافية الأخرى.
-                const cleanedOrders = orders.map(order => ({
-                    id: order.id,
-                    factory: order.factory,
-                    material: order.material
-                    // لا نرسل time, timestamp لأن الخادم الأصلي لا يعرفها
-                }));
-                await apiCall(`/day/${currentDate}`, 'PUT', { orders: cleanedOrders, distribution: [] });
+                const cleaned = orders.map(o => ({ id: o.id, factory: o.factory, material: o.material }));
+                await apiCall(`/day/${currentDate}`, 'PUT', { orders: cleaned, distribution: currentDistribution });
                 return true;
-            } catch (error) {
-                showToast('خطأ في حفظ البيانات: ' + error.message, 'error');
-                return false;
-            }
+            } catch(e) { showToast('خطأ في حفظ البيانات: '+e.message, 'error'); return false; }
         }
 
-        // دالة تحليل نصوص الواتساب (محسنة)
+        // تحليل نص واتساب المعدل
         function parseWhatsAppOrder(text) {
             let cleaned = text.replace(/السلام\s*عليكم|صباح|مساء|اليوم|إنشاء\s*الله|بإذن\s*الله|حاضر|يرجى|مطلوب|طلبات?|عدد|الرجاء|من\s*فضلك|tonight|today|pm|am/gi, '');
             const arabicNumbers = { '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9' };
             cleaned = cleaned.replace(/[٠-٩]/g, d => arabicNumbers[d] || d);
-            
             let extractedTime = '';
-            const timeMatch = text.match(/(\d{1,2}\s*(?:AM|PM|am|pm)|tonight\s+\d{1,2}\s*(?:AM|PM|am|pm)?|\d{1,2}:\d{2})/i);
-            if (timeMatch) extractedTime = timeMatch[0].trim();
-            
+            const tm = text.match(/(\d{1,2}\s*(?:AM|PM|am|pm)|tonight\s+\d{1,2}\s*(?:AM|PM|am|pm)?|\d{1,2}:\d{2})/i);
+            if (tm) extractedTime = tm[0].trim();
             const lines = cleaned.split(/\r?\n/);
             const items = [];
-            const validMaterialsSet = new Set(materials.map(m => m.toLowerCase()));
-            
+            const validSet = new Set(materials.map(m => m.toLowerCase()));
             for (const line of lines) {
-                let trimmed = line.trim();
-                if (!trimmed) continue;
-                if (/^(pm|am|tonight|today)$/i.test(trimmed)) continue;
-                
-                const numbers = trimmed.match(/\b\d+\b/g);
-                const fractions = trimmed.match(/\d+\s*\/\s*\d+/g);
-                const words = trimmed.split(/\s+/).filter(part => !/^\d+$/.test(part) && !/^[#*×]$/.test(part) && !/^[\/\-_]$/.test(part));
-                let possibleMaterials = fractions ? [...fractions] : [];
-                possibleMaterials.push(...words);
-                
-                if (!numbers || numbers.length === 0) continue;
-                if (possibleMaterials.length === 0) continue;
-                
-                if (numbers.length === 1 && possibleMaterials.length === 1) {
-                    let qty = parseInt(numbers[0]);
-                    let material = possibleMaterials[0].trim().replace(/[#*×]/g, '');
-                    if (material && qty > 0 && validMaterialsSet.has(material.toLowerCase())) {
-                        items.push({ material, quantity: qty });
-                    }
+                let l = line.trim();
+                if (!l || /^(pm|am|tonight|today)$/i.test(l)) continue;
+                let match = l.match(/^\s*(\d+)\s+([^\d]+?)\s*$/);
+                if (match) {
+                    let q = parseInt(match[1]), m = match[2].trim().replace(/[#*×]/g,'');
+                    if (m && q>0 && validSet.has(m.toLowerCase())) items.push({ material: m, quantity: q });
                     continue;
                 }
-                
-                for (let num of numbers) {
-                    let qty = parseInt(num);
-                    let bestMatch = possibleMaterials.find(m => !/^\d+$/.test(m));
-                    if (bestMatch) {
-                        let material = bestMatch.trim().replace(/[#*×]/g, '');
-                        if (material && qty > 0 && validMaterialsSet.has(material.toLowerCase())) {
-                            items.push({ material, quantity: qty });
-                            const index = possibleMaterials.indexOf(bestMatch);
-                            if (index !== -1) possibleMaterials.splice(index, 1);
-                        }
-                    }
+                match = l.match(/^\s*([^\d]+?)\s+(\d+)\s*$/);
+                if (match) {
+                    let m = match[1].trim().replace(/[#*×]/g,''), q = parseInt(match[2]);
+                    if (m && q>0 && validSet.has(m.toLowerCase())) items.push({ material: m, quantity: q });
+                    continue;
+                }
+                match = l.match(/([^\d\s]+)\s*[#*×]\s*(\d+)/);
+                if (match) {
+                    let m = match[1].trim(), q = parseInt(match[2]);
+                    if (m && q>0 && validSet.has(m.toLowerCase())) items.push({ material: m, quantity: q });
                 }
             }
-            
             const merged = [];
-            items.forEach(item => {
-                const existing = merged.find(m => m.material === item.material);
-                if (existing) existing.quantity += item.quantity;
-                else merged.push({ ...item });
-            });
-            
-            const unknown = merged.filter(item => !validMaterialsSet.has(item.material.toLowerCase()));
-            if (unknown.length) {
-                showToast(`⚠️ الأنواع التالية غير معروفة: ${unknown.map(u => u.material).join(', ')}. تم تخطيها.`, 'warning');
-            }
-            const finalItems = merged.filter(item => validMaterialsSet.has(item.material.toLowerCase()));
-            return { items: finalItems, extractedTime };
+            items.forEach(it => { let ex = merged.find(x => x.material === it.material); if(ex) ex.quantity += it.quantity; else merged.push({...it}); });
+            const unknown = merged.filter(it => !validSet.has(it.material.toLowerCase()));
+            if(unknown.length) showToast(`⚠️ أنواع غير معروفة: ${unknown.map(u=>u.material).join(', ')}`, 'warning');
+            return { items: merged.filter(it => validSet.has(it.material.toLowerCase())), extractedTime };
         }
 
         async function processWhatsAppOrder() {
             const text = document.getElementById('whatsappText').value.trim();
             const factory = document.getElementById('whatsappFactory').value;
             const customTime = document.getElementById('whatsappTime').value.trim();
-            if (!text) { showToast('الرجاء لصق نص الطلب', 'error'); return; }
-            if (!factory) { showToast('الرجاء اختيار المصنع', 'error'); return; }
-            
+            if(!text || !factory) { showToast('املأ النص واختر المصنع','error'); return; }
             const { items, extractedTime } = parseWhatsAppOrder(text);
-            if (items.length === 0) {
-                showToast('لم يتم العثور على طلبات صالحة. تأكد من وجود أعداد وأنواع بحص معروفة.', 'error');
-                return;
-            }
-            
+            if(!items.length) { showToast('لم نجد طلبات صالحة','error'); return; }
             const finalTime = customTime || extractedTime || '';
-            let totalAdded = 0;
-            showLoading(true);
-            
-            for (const item of items) {
-                for (let i = 0; i < item.quantity; i++) {
-                    orders.push({
-                        id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9) + '_' + totalAdded,
-                        factory: factory,
-                        material: item.material,
-                        // لا نضيف time هنا لأن الخادم لا يقبله، سنخزنه محلياً فقط للعرض؟ 
-                        // لكن لعرض التوقيت في الواجهة نحتاج الاحتفاظ به. سأضيفه كحقل مخصص ولكنه لن يُرسل للحفظ.
-                        // لذا سنستخدم متغير منفصل للتوقيت في العرض. لكن الأسهل: إضافة time كحقل custom ولكن نمنع إرساله.
-                        // الحل: سنضيفه في الكائن ولكن عند الحفظ نستبعده. هذا ما فعلناه في saveData.
-                        time: finalTime,
-                        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })
-                    });
-                    totalAdded++;
+            let added=0; showLoading(true);
+            for(const it of items){
+                for(let i=0;i<it.quantity;i++){
+                    orders.push({ id: Date.now()+'_'+Math.random().toString(36).substr(2,9)+'_'+added, factory, material: it.material, time: finalTime, timestamp: new Date().toLocaleTimeString('ar-SA') });
+                    added++;
                 }
             }
-            
-            const success = await saveData();
+            if(await saveData()){ renderOrders(); document.getElementById('whatsappText').value=''; document.getElementById('whatsappFactory').value=''; document.getElementById('whatsappTime').value=''; showToast(`✅ تم إضافة ${added} طلب`,'success'); }
             showLoading(false);
-            if (success) {
-                renderOrders();
-                document.getElementById('whatsappText').value = '';
-                document.getElementById('whatsappFactory').value = '';
-                document.getElementById('whatsappTime').value = '';
-                showToast(`✅ تم إضافة ${totalAdded} طلب ${finalTime ? 'للتوقيت: ' + finalTime : ''}`, 'success');
-            }
         }
 
         async function addOrder() {
@@ -347,127 +227,35 @@ tonight 8 PM"></textarea>
             const material = document.getElementById('materialType').value;
             const count = parseInt(document.getElementById('orderCount').value);
             const time = document.getElementById('orderTime').value.trim();
-            if (!factory || !material || !count) { showToast('يرجى ملء جميع الحقول', 'error'); return; }
+            if(!factory || !material || !count) { showToast('املأ الحقول','error'); return; }
             showLoading(true);
-            for (let i = 0; i < count; i++) {
-                orders.push({
-                    id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
-                    factory, material,
-                    time: time,
-                    timestamp: new Date().toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' })
-                });
-            }
-            const success = await saveData();
+            for(let i=0;i<count;i++) orders.push({ id: Date.now()+'_'+Math.random().toString(36).substr(2,9), factory, material, time, timestamp: new Date().toLocaleTimeString('ar-SA') });
+            if(await saveData()){ renderOrders(); document.getElementById('orderCount').value='1'; document.getElementById('orderTime').value=''; showToast(`✅ تم إضافة ${count} طلب`,'success'); }
             showLoading(false);
-            if (success) {
-                renderOrders();
-                document.getElementById('orderCount').value = '1';
-                document.getElementById('orderTime').value = '';
-                showToast(`✅ تم إضافة ${count} طلب`, 'success');
-            }
         }
 
-        async function quickAdd(material, count) {
+        async function quickAdd(material,count) {
             const factory = document.getElementById('factorySelect').value;
             const time = document.getElementById('orderTime').value.trim();
-            if (!factory) { showToast('اختر المصنع أولاً', 'error'); return; }
+            if(!factory){ showToast('اختر المصنع أولاً','error'); return; }
             showLoading(true);
-            for (let i = 0; i < count; i++) {
-                orders.push({
-                    id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9),
-                    factory, material,
-                    time: time,
-                    timestamp: new Date().toLocaleTimeString('ar-SA', { hour:'2-digit', minute:'2-digit' })
-                });
-            }
-            const success = await saveData();
+            for(let i=0;i<count;i++) orders.push({ id: Date.now()+'_'+Math.random().toString(36).substr(2,9), factory, material, time, timestamp: new Date().toLocaleTimeString('ar-SA') });
+            if(await saveData()){ renderOrders(); showToast(`✅ تم إضافة ${count} طلب ${material}`,'success'); }
             showLoading(false);
-            if (success) { renderOrders(); showToast(`✅ تم إضافة ${count} طلب ${material}`, 'success'); }
         }
 
-        async function deleteOrder(id) {
-            if (!confirm('حذف هذا الطلب؟')) return;
-            orders = orders.filter(o => o.id !== id);
-            if (await saveData()) { renderOrders(); showToast('تم الحذف', 'info'); }
-        }
-
-        function openEditOrderModal(id) {
-            const order = orders.find(o => o.id === id);
-            if (!order) return;
-            document.getElementById('editOrderId').value = id;
-            document.getElementById('editOrderFactory').value = order.factory;
-            document.getElementById('editOrderMaterial').value = order.material;
-            document.getElementById('editOrderTime').value = order.time || '';
-            openModal('editOrderModal');
-        }
-
-        async function saveOrderEdit() {
-            const id = document.getElementById('editOrderId').value;
-            const idx = orders.findIndex(o => o.id === id);
-            if (idx !== -1) {
-                orders[idx].factory = document.getElementById('editOrderFactory').value;
-                orders[idx].material = document.getElementById('editOrderMaterial').value;
-                orders[idx].time = document.getElementById('editOrderTime').value;
-                if (await saveData()) { renderOrders(); closeModal('editOrderModal'); showToast('✅ تم التعديل', 'success'); }
-            }
-        }
-
-        function renderOrders() {
-            const container = document.getElementById('todayOrders');
-            document.getElementById('ordersCount').textContent = orders.length;
-            if (!orders.length) { container.innerHTML = '<p style="color:#a8b2d1; text-align:center; padding:30px;">لا توجد طلبات</p>'; return; }
-            container.innerHTML = orders.map((o, i) => `
-                <div class="order-item">
-                    <div class="order-info">
-                        <span><strong>#${i+1}</strong></span>
-                        <span>🏭 ${o.factory}</span>
-                        <span>📦 ${o.material}</span>
-                        ${o.time ? `<span>⏰ ${o.time}</span>` : ''}
-                        <span>🕐 ${o.timestamp}</span>
-                    </div>
-                    <div class="order-actions">
-                        <button class="btn btn-sm btn-warning" onclick="openEditOrderModal('${o.id}')">✏️</button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑️</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function exportOrdersToExcel() {
-            if (!orders.length) { showToast('لا توجد طلبات للتصدير', 'error'); return; }
-            const data = orders.map((o, i) => ({ '#': i+1, 'المصنع': o.factory, 'نوع البحص': o.material, 'التوقيت': o.time || '', 'وقت الإضافة': o.timestamp }));
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'الطلبات');
-            XLSX.writeFile(wb, `طلبات_${currentDate}.xlsx`);
-            showToast('✅ تم التصدير', 'success');
-        }
-
-        function showToast(msg, type) {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = msg;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
-        }
-
-        function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
+        async function deleteOrder(id) { if(confirm('حذف؟')){ orders = orders.filter(o=>o.id!==id); if(await saveData()) renderOrders(); } }
+        function openEditOrderModal(id) { let o = orders.find(o=>o.id===id); if(o){ document.getElementById('editOrderId').value=id; document.getElementById('editOrderFactory').value=o.factory; document.getElementById('editOrderMaterial').value=o.material; document.getElementById('editOrderTime').value=o.time||''; openModal('editOrderModal'); } }
+        async function saveOrderEdit() { let id=document.getElementById('editOrderId').value, idx=orders.findIndex(o=>o.id===id); if(idx!==-1){ orders[idx].factory=document.getElementById('editOrderFactory').value; orders[idx].material=document.getElementById('editOrderMaterial').value; orders[idx].time=document.getElementById('editOrderTime').value; if(await saveData()){ renderOrders(); closeModal('editOrderModal'); } } }
+        function renderOrders() { let c=document.getElementById('todayOrders'), count=orders.length; document.getElementById('ordersCount').innerText=count; if(!count){ c.innerHTML='<p style="text-align:center;padding:30px;">لا توجد طلبات</p>'; return; } c.innerHTML=orders.map((o,i)=>`<div class="order-item"><div class="order-info"><span><strong>#${i+1}</strong></span><span>🏭 ${o.factory}</span><span>📦 ${o.material}</span>${o.time?`<span>⏰ ${o.time}</span>`:''}<span>🕐 ${o.timestamp}</span></div><div class="order-actions"><button class="btn btn-sm btn-warning" onclick="openEditOrderModal('${o.id}')">✏️</button><button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑️</button></div></div>`).join(''); }
+        function exportOrdersToExcel() { if(!orders.length){ showToast('لا توجد طلبات','error'); return; } let data=orders.map((o,i)=>({'#':i+1,'المصنع':o.factory,'نوع البحص':o.material,'التوقيت':o.time||'','وقت الإضافة':o.timestamp})); let ws=XLSX.utils.json_to_sheet(data); let wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'الطلبات'); XLSX.writeFile(wb,`طلبات_${currentDate}.xlsx`); showToast('✅ تم التصدير','success'); }
+        function showToast(msg,type) { let c=document.getElementById('toastContainer'); let t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
+        function showLoading(s) { document.getElementById('loading').classList.toggle('active',s); }
         function openModal(id) { document.getElementById(id).classList.add('active'); }
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
-        document.addEventListener('DOMContentLoaded', async () => {
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('orderDate').value = today;
-            currentDate = today;
-            showLoading(true);
-            try {
-                await loadSettings();
-                await loadDayData();
-                showToast('✅ تم تحميل البيانات', 'success');
-            } catch (error) { console.error(error); showToast('⚠️ خطأ في تحميل البيانات', 'error'); }
-            showLoading(false);
-        });
+        function logout() { if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
+        function loadNav() { fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{ if(data.user) document.getElementById('navLinks').innerHTML=`<a href="index.html" class="nav-link">📊 الرئيسية</a><a href="orders.html" class="nav-link active">📝 الطلبات</a><a href="distribution.html" class="nav-link">🚚 التوزيع</a><a href="trucks.html" class="nav-link">🚛 السيارات</a><a href="products.html" class="nav-link">📦 أنواع البحص</a><a href="factories.html" class="nav-link">🏭 المصانع</a><a href="reports.html" class="nav-link">📊 التقارير</a><a href="settings.html" class="nav-link">⚙️ الإعدادات</a><a href="restrictions.html" class="nav-link">⛔ الحظر</a><a href="users.html" class="nav-link">👥 المستخدمين</a><a href="logs.html" class="nav-link">📜 السجلات</a>`; else window.location.href='/login.html'; }).catch(()=>window.location.href='/login.html'); }
+        document.addEventListener('DOMContentLoaded', async () => { loadNav(); const today = new Date().toISOString().split('T')[0]; document.getElementById('orderDate').value = today; currentDate = today; showLoading(true); await loadSettings(); await loadDayData(); showLoading(false); });
     </script>
 </body>
 </html>
