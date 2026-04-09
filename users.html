@@ -12,7 +12,7 @@
             color: #fff;
         }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; }
+        .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; position: relative; }
         .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
         .nav-link { padding: 12px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; text-decoration: none; color: #fff; font-weight: 600; }
         .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
@@ -41,29 +41,36 @@
         .modal { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:1000; }
         .modal.active { display: flex; }
         .modal-content { background: #1a1a2e; border-radius: 20px; padding: 30px; max-width: 600px; width: 90%; }
+        .unauthorized { text-align: center; padding: 50px; color: #f5576c; font-size: 1.2em; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
     <div class="loading" id="loading"><div class="spinner"></div></div>
     <div class="toast-container" id="toastContainer"></div>
     <div class="container">
-        <div class="header"><h1>👥 إدارة المستخدمين والصلاحيات</h1></div>
+        <div class="header"><h1>👥 إدارة المستخدمين والصلاحيات</h1>
+            <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;"><button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button></div>
+        </div>
         <div class="nav-links" id="navLinks"></div>
 
-        <div class="card">
-            <h3>➕ إضافة مستخدم جديد</h3>
-            <div class="form-row">
-                <div class="form-group"><label>اسم المستخدم</label><input type="text" id="newUsername"></div>
-                <div class="form-group"><label>كلمة المرور</label><input type="password" id="newPassword"></div>
-                <div class="form-group"><label>الدور</label><select id="newRole"><option value="user">مستخدم عادي</option><option value="admin">مدير</option></select></div>
-                <div class="form-group"><button class="btn btn-success" onclick="addUser()">➕ إضافة</button></div>
+        <div id="unauthorizedMsg" class="unauthorized hidden"></div>
+        <div id="authorizedContent" class="hidden">
+            <div class="card">
+                <h3>➕ إضافة مستخدم جديد</h3>
+                <div class="form-row">
+                    <div class="form-group"><label>اسم المستخدم</label><input type="text" id="newUsername"></div>
+                    <div class="form-group"><label>كلمة المرور</label><input type="password" id="newPassword"></div>
+                    <div class="form-group"><label>الدور</label><select id="newRole"><option value="user">مستخدم عادي</option><option value="admin">مدير</option></select></div>
+                    <div class="form-group"><button class="btn btn-success" onclick="addUser()">➕ إضافة</button></div>
+                </div>
+                <div class="permissions-grid" id="permissionsGrid"></div>
             </div>
-            <div class="permissions-grid" id="permissionsGrid"></div>
-        </div>
 
-        <div class="card">
-            <h3>📋 قائمة المستخدمين</h3>
-            <table id="usersTable"><thead><tr><th>#</th><th>اسم المستخدم</th><th>الدور</th><th>تاريخ الإنشاء</th><th>إجراءات</th></tr></thead><tbody id="usersBody"></tbody></table>
+            <div class="card">
+                <h3>📋 قائمة المستخدمين</h3>
+                <table id="usersTable"><thead><tr><th>#</th><th>اسم المستخدم</th><th>الدور</th><th>تاريخ الإنشاء</th><th>إجراءات</th></tr></thead><tbody id="usersBody"></tbody></table>
+            </div>
         </div>
     </div>
 
@@ -71,12 +78,13 @@
 
     <script>
         const API_BASE = '/api';
-        let users = [], currentUserRole = '';
+        let users = [], currentUserRole = '', currentUserPermissions = {};
 
         async function apiCall(endpoint, method='GET', data=null) {
             const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'include' };
             if(data && (method==='POST'||method==='PUT')) opts.body = JSON.stringify(data);
             const res = await fetch(`${API_BASE}${endpoint}`, opts);
+            if (res.status === 401) { window.location.href = '/login.html'; throw new Error('غير مصرح'); }
             if(!res.ok) throw new Error(await res.text());
             return res.json();
         }
@@ -84,12 +92,33 @@
         async function loadUsers() {
             showLoading(true);
             try {
-                users = await apiCall('/users');
+                // جلب معلومات المستخدم الحالي للتحقق من الصلاحية
                 const me = await apiCall('/me');
                 currentUserRole = me.user.role;
+                currentUserPermissions = me.user.permissions || {};
+                
+                // التحقق من صلاحية manageUsers
+                const hasManageUsers = (currentUserRole === 'admin') || (currentUserPermissions && currentUserPermissions.manageUsers === true);
+                
+                if (!hasManageUsers) {
+                    document.getElementById('unauthorizedMsg').innerHTML = '⛔ غير مصرح لك بالوصول إلى إدارة المستخدمين. هذه الصفحة متاحة فقط للمديرين.';
+                    document.getElementById('unauthorizedMsg').classList.remove('hidden');
+                    document.getElementById('authorizedContent').classList.add('hidden');
+                    showLoading(false);
+                    return;
+                }
+                
+                // إذا كان مصرحاً، نعرض المحتوى ونجلب المستخدمين
+                document.getElementById('unauthorizedMsg').classList.add('hidden');
+                document.getElementById('authorizedContent').classList.remove('hidden');
+                
+                users = await apiCall('/users');
                 renderUsersTable();
                 renderPermissionsCheckboxes();
-            } catch(e) { showToast('خطأ في تحميل المستخدمين', 'error'); }
+            } catch(e) { 
+                showToast('خطأ في تحميل البيانات', 'error');
+                console.error(e);
+            }
             showLoading(false);
         }
 
@@ -100,6 +129,11 @@
         }
 
         async function addUser() {
+            // التحقق مرة أخرى من الصلاحية
+            if (currentUserRole !== 'admin' && (!currentUserPermissions || !currentUserPermissions.manageUsers)) {
+                showToast('غير مصرح لك بإضافة مستخدمين', 'error');
+                return;
+            }
             const username = document.getElementById('newUsername').value.trim();
             const password = document.getElementById('newPassword').value;
             const role = document.getElementById('newRole').value;
@@ -118,6 +152,10 @@
         }
 
         async function deleteUser(id, username) {
+            if (currentUserRole !== 'admin' && (!currentUserPermissions || !currentUserPermissions.manageUsers)) {
+                showToast('غير مصرح لك بحذف مستخدمين', 'error');
+                return;
+            }
             if(username === 'Admin') { showToast('لا يمكن حذف المدير الرئيسي', 'error'); return; }
             if(!confirm(`حذف المستخدم ${username}؟`)) return;
             showLoading(true);
@@ -130,6 +168,10 @@
         }
 
         function openEditModal(user) {
+            if (currentUserRole !== 'admin' && (!currentUserPermissions || !currentUserPermissions.manageUsers)) {
+                showToast('غير مصرح لك بتعديل المستخدمين', 'error');
+                return;
+            }
             document.getElementById('editUserId').value = user.id;
             document.getElementById('editRole').value = user.role;
             document.getElementById('editPassword').value = '';
@@ -141,6 +183,10 @@
         }
 
         async function saveUserEdit() {
+            if (currentUserRole !== 'admin' && (!currentUserPermissions || !currentUserPermissions.manageUsers)) {
+                showToast('غير مصرح لك بتعديل المستخدمين', 'error');
+                return;
+            }
             const id = document.getElementById('editUserId').value;
             const role = document.getElementById('editRole').value;
             const password = document.getElementById('editPassword').value;
@@ -179,10 +225,10 @@
         function showToast(msg,type) { const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
         function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
         function closeModal() { document.getElementById('editUserModal').classList.remove('active'); }
+        function logout() { if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
         function loadNav() { fetch('/api/me', {credentials:'include'}).then(r=>r.json()).then(data=>{ if(data.user) document.getElementById('navLinks').innerHTML = `<a href="index.html" class="nav-link">📊 الرئيسية</a><a href="orders.html" class="nav-link">📝 الطلبات</a><a href="distribution.html" class="nav-link">🚚 التوزيع</a><a href="trucks.html" class="nav-link">🚛 السيارات</a><a href="products.html" class="nav-link">📦 أنواع البحص</a><a href="factories.html" class="nav-link">🏭 المصانع</a><a href="reports.html" class="nav-link">📊 التقارير</a><a href="settings.html" class="nav-link">⚙️ الإعدادات</a><a href="restrictions.html" class="nav-link">⛔ الحظر</a><a href="users.html" class="nav-link active">👥 المستخدمين</a><a href="logs.html" class="nav-link">📜 السجلات</a>`; }).catch(()=>{ window.location='/login.html'; }); }
 
         document.addEventListener('DOMContentLoaded', () => { loadNav(); loadUsers(); });
     </script>
-<script src="navbar.js"></script>
 </body>
 </html>
