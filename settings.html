@@ -4,260 +4,312 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>الإعدادات - نظام إدارة طلبات البحص</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            min-height: 100vh;
-            color: #fff;
-        }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; }
-        .header h1 { font-size: 2.5em; }
-        .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
-        .nav-link { padding: 12px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; text-decoration: none; color: #fff; transition: all 0.3s; font-weight: 600; }
-        .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transform: translateY(-2px); }
-        .settings-section {
-            background: rgba(255,255,255,0.05);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-        }
-        .settings-section h3 {
-            margin-bottom: 20px;
-            color: #667eea;
-        }
-        .btn {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            font-size: 1em;
-            font-weight: 600;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin: 5px;
-        }
-        .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #fff; }
-        .btn-info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #fff; }
-        .btn-danger { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: #fff; }
-        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
-        .toast-container { position: fixed; top: 20px; left: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
-        .toast { padding: 15px 25px; border-radius: 10px; font-weight: 600; animation: slideIn 0.3s ease; }
-        .toast-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color:#fff; }
-        .toast-error { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color:#fff; }
-        .toast-info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color:#fff; }
-        .loading { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; align-items:center; justify-content:center; flex-direction:column; }
-        .loading.active { display: flex; }
-        .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .connection-status { position: fixed; bottom: 20px; right: 20px; padding: 8px 16px; border-radius: 25px; font-size: 0.8em; background: rgba(56,239,125,0.2); border:1px solid #38ef7d; color:#38ef7d; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; }
+        .container { max-width:1200px; margin:0 auto; padding:20px; }
+        .header { text-align:center; padding:30px; background:linear-gradient(135deg,#667eea,#764ba2); border-radius:20px; margin-bottom:30px; position:relative; }
+        .nav-links { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-bottom:30px; }
+        .nav-link { padding:12px 24px; background:rgba(255,255,255,0.1); border-radius:12px; text-decoration:none; color:#fff; font-weight:600; }
+        .nav-link:hover,.nav-link.active { background:linear-gradient(135deg,#667eea,#764ba2); }
+        .btn { padding:10px 20px; border:none; border-radius:8px; cursor:pointer; font-weight:600; margin:5px; }
+        .btn-success { background:#11998e; color:#fff; }
+        .btn-danger { background:#eb3349; color:#fff; }
+        .btn-warning { background:#f093fb; color:#fff; }
+        .btn-info { background:#4facfe; color:#fff; }
+        .btn-local { background:#38ef7d; color:#1a1a2e; }
+        .card { background:rgba(255,255,255,0.05); border-radius:15px; padding:20px; margin-bottom:25px; }
+        .card h3 { margin-bottom:15px; color:#667eea; }
+        .form-group { margin-bottom:15px; display:flex; flex-direction:column; gap:5px; }
+        .form-group label { font-weight:600; color:#a8b2d1; }
+        .form-group input, .form-group select { padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; }
+        table { width:100%; border-collapse:collapse; margin-top:15px; }
+        th, td { padding:10px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.1); }
+        th { background:rgba(102,126,234,0.3); }
+        .actions { display:flex; gap:8px; justify-content:center; }
+        .toast-container { position:fixed; top:20px; left:20px; z-index:3000; }
+        .toast { padding:12px 20px; border-radius:8px; margin-bottom:10px; font-weight:600; }
+        .toast-success { background:#11998e; }
+        .toast-error { background:#eb3349; }
+        .toast-info { background:#4facfe; }
+        .loading { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; align-items:center; justify-content:center; flex-direction:column; z-index:2000; }
+        .loading.active { display:flex; }
+        .spinner { width:40px; height:40px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation:spin 1s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .local-backup { background:rgba(56,239,125,0.1); border:1px solid #38ef7d; margin-bottom:15px; }
     </style>
 </head>
 <body>
     <div class="loading" id="loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
     <div class="toast-container" id="toastContainer"></div>
-    <div class="connection-status" id="connectionStatus">✅ متصل بالسيرفر</div>
-
     <div class="container">
-        <div class="header"><h1>⚙️ الإعدادات والنسخ الاحتياطي</h1><p>إدارة البيانات والاستيراد والتصدير</p></div>
-        <div class="nav-links">
-            <a href="index.html" class="nav-link">📊 الرئيسية</a>
-            <a href="orders.html" class="nav-link">📝 الطلبات</a>
-            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-            <a href="factories.html" class="nav-link">🏭 المصانع</a>
-            <a href="reports.html" class="nav-link">📊 التقارير</a>
-            <a href="settings.html" class="nav-link active">⚙️ الإعدادات</a>
+        <div class="header"><h1>⚙️ الإعدادات العامة</h1>
+            <div style="position:absolute; top:20px; left:20px;"><button onclick="logout()" style="background:linear-gradient(135deg,#f5576c,#eb3349); border:none; padding:8px 20px; border-radius:25px; color:white; font-weight:bold; cursor:pointer;">🚪 تسجيل الخروج</button></div>
+        </div>
+        <div class="nav-links" id="navLinks"></div>
+
+        <!-- قسم النسخ الاحتياطي المحلي (حل مؤقت) -->
+        <div class="card local-backup">
+            <h3>💾 حفظ واستعادة البيانات محلياً (حل مؤقت لمنع الفقدان)</h3>
+            <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:10px;">
+                <button class="btn btn-local" onclick="saveToLocalStorage()">💾 حفظ البيانات الحالية في المتصفح</button>
+                <button class="btn btn-warning" onclick="restoreFromLocalStorage()">📂 استعادة البيانات من المتصفح</button>
+                <button class="btn btn-danger" onclick="clearLocalStorage()">🗑️ مسح البيانات المحفوظة</button>
+            </div>
+            <p style="color:#a8b2d1; font-size:0.85em;">⚠️ هذه البيانات تحفظ فقط في متصفحك الحالي. استخدمها كحل مؤقت لحين استخدام قاعدة بيانات حقيقية.</p>
         </div>
 
-        <!-- قسم النسخ الاحتياطي والاستيراد -->
-        <div class="settings-section">
-            <h3>💾 النسخ الاحتياطي والاستيراد</h3>
-            <button class="btn btn-success" onclick="exportDataToFile()">📤 تصدير نسخة احتياطية (JSON)</button>
-            <label class="btn btn-info" style="cursor:pointer;">📂 استيراد من JSON
-                <input type="file" id="backupFile" accept=".json" style="display:none;" onchange="importDataFromFile(event)">
-            </label>
-            <label class="btn btn-primary" style="cursor:pointer;">📂 استيراد طلبات من Excel
-                <input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none;" onchange="importFromExcel(event)">
-            </label>
-            <button class="btn btn-info" onclick="downloadExcelTemplate()">📥 تحميل قالب Excel</button>
+        <!-- إدارة المصانع -->
+        <div class="card">
+            <h3>🏭 المصانع</h3>
+            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
+                <input type="text" id="newFactoryName" placeholder="اسم المصنع" style="flex:2; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff;">
+                <select id="newFactoryLocation" style="flex:1; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff;">
+                    <option value="الرياض">الرياض</option>
+                    <option value="الدمام">الدمام</option>
+                    <option value="جدة">جدة</option>
+                    <option value="أخرى">أخرى</option>
+                </select>
+                <button class="btn btn-success" onclick="addFactory()">➕ إضافة</button>
+            </div>
+            <table id="factoriesTable">
+                <thead><tr><th>#</th><th>اسم المصنع</th><th>الموقع</th><th>إجراءات</th></tr></thead>
+                <tbody id="factoriesBody"></tbody>
+            </table>
         </div>
 
-        <!-- قسم مسح البيانات -->
-        <div class="settings-section">
-            <h3 style="color:#f5576c;">⚠️ مسح البيانات</h3>
-            <button class="btn btn-danger" onclick="clearDayOrders()">🗑️ مسح طلبات اليوم فقط</button>
-            <button class="btn btn-danger" onclick="clearAllData()">🗑️ مسح جميع البيانات (لا يمكن التراجع)</button>
+        <!-- إدارة أنواع البحص -->
+        <div class="card">
+            <h3>📦 أنواع البحص</h3>
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <input type="text" id="newMaterial" placeholder="مثال: 3/4" style="flex:3; padding:10px;">
+                <button class="btn btn-success" onclick="addMaterial()">➕ إضافة</button>
+            </div>
+            <table id="materialsTable">
+                <thead><tr><th>#</th><th>نوع البحص</th><th>إجراءات</th></tr></thead>
+                <tbody id="materialsBody"></tbody>
+            </table>
+        </div>
+
+        <!-- إدارة السيارات -->
+        <div class="card">
+            <h3>🚛 السيارات والسائقين</h3>
+            <div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">
+                <input type="text" id="newTruckNumber" placeholder="رقم السيارة" style="flex:1;">
+                <input type="text" id="newTruckDriver" placeholder="اسم السائق" style="flex:2;">
+                <button class="btn btn-success" onclick="addTruck()">➕ إضافة</button>
+            </div>
+            <table id="trucksTable">
+                <thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>إجراءات</th></tr></thead>
+                <tbody id="trucksBody"></tbody>
+            </table>
         </div>
     </div>
 
     <script>
         const API_BASE = '/api';
+        let factories = [], materials = [], trucks = [];
 
-        async function apiCall(endpoint, method = 'GET', data = null) {
-            const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
-            if (data && (method === 'POST' || method === 'PUT')) options.body = JSON.stringify(data);
-            const res = await fetch(`${API_BASE}${endpoint}`, options);
-            if (!res.ok) throw new Error(await res.text());
+        async function apiCall(endpoint, method='GET', data=null) {
+            const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'include' };
+            if(data && (method==='POST'||method==='PUT')) opts.body = JSON.stringify(data);
+            const res = await fetch(`${API_BASE}${endpoint}`, opts);
+            if(res.status === 401) { window.location.href='/login.html'; throw new Error('غير مصرح'); }
+            if(!res.ok) throw new Error(await res.text());
             return res.json();
         }
 
-        // تصدير نسخة احتياطية كاملة
-        async function exportDataToFile() {
+        async function loadSettings() {
             showLoading(true);
             try {
-                const res = await fetch('/api/backup', { credentials: 'include' });
-                if (!res.ok) throw new Error('فشل التصدير');
-                const data = await res.json();
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-                saveAs(blob, `نسخة_احتياطية_${new Date().toISOString().split('T')[0]}.json`);
-                showToast('✅ تم تصدير النسخة الاحتياطية', 'success');
-            } catch (err) {
-                showToast('❌ خطأ في التصدير', 'error');
-            }
-            showLoading(false);
-        }
+                const data = await apiCall('/settings');
+                let loadedFactories = data.factories || [];
+                let loadedMaterials = data.materials || [];
+                let loadedTrucks = data.trucks || [];
 
-        // استيراد من JSON
-        async function importDataFromFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            showLoading(true);
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    const res = await fetch('/api/restore', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify(data)
-                    });
-                    const result = await res.json();
-                    if (res.ok && result.success) {
-                        showToast('✅ تم استعادة البيانات', 'success');
-                    } else {
-                        throw new Error(result.error || 'فشل الاستعادة');
-                    }
-                } catch (err) {
-                    showToast('❌ خطأ في الملف: ' + err.message, 'error');
-                }
-                showLoading(false);
-            };
-            reader.readAsText(file);
-            event.target.value = '';
-        }
-
-        // استيراد من Excel (طلبات فقط)
-        async function importFromExcel(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            showLoading(true);
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const wb = XLSX.read(data, { type: 'array' });
-                    const sheet = wb.Sheets[wb.SheetNames[0]];
-                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-                    const today = new Date().toISOString().split('T')[0];
-                    let orders = [];
-                    for (let i = 1; i < rows.length; i++) {
-                        const row = rows[i];
-                        if (row[0] && row[1]) {
-                            const count = parseInt(row[2]) || 1;
-                            for (let j = 0; j < count; j++) {
-                                orders.push({
-                                    id: Date.now() + '_' + i + '_' + j,
-                                    factory: row[0].toString(),
-                                    material: row[1].toString(),
-                                    timestamp: new Date().toLocaleTimeString('ar-SA')
-                                });
+                // التحقق مما إذا كانت البيانات افتراضية (عدد قليل أو اسماء افتراضية)
+                const isDefault = (loadedFactories.length === 3 && loadedFactories[0].name === 'مصنع الرياض') ||
+                                  (loadedFactories.length === 0);
+                if (isDefault) {
+                    const saved = localStorage.getItem('gravelSystemSettings');
+                    if (saved) {
+                        try {
+                            const localData = JSON.parse(saved);
+                            if (localData.factories && localData.factories.length) {
+                                loadedFactories = localData.factories;
+                                loadedMaterials = localData.materials;
+                                loadedTrucks = localData.trucks;
+                                showToast('⚠️ تم استعادة البيانات من المتصفح (الخادم فقد البيانات)', 'warning');
                             }
-                        }
+                        } catch(e) {}
                     }
-                    if (orders.length) {
-                        const dayData = await apiCall(`/day/${today}`);
-                        const existingOrders = dayData.orders || [];
-                        const allOrders = [...existingOrders, ...orders];
-                        await apiCall(`/day/${today}`, 'PUT', { orders: allOrders, distribution: [] });
-                        showToast(`✅ تم استيراد ${orders.length} طلب لليوم`, 'success');
-                    } else {
-                        showToast('لا توجد بيانات صالحة في الملف', 'error');
-                    }
-                } catch (err) {
-                    showToast('خطأ في الاستيراد', 'error');
                 }
-                showLoading(false);
-            };
-            reader.readAsArrayBuffer(file);
-            event.target.value = '';
-        }
-
-        function downloadExcelTemplate() {
-            const ws = XLSX.utils.aoa_to_sheet([['المصنع', 'نوع البحص', 'العدد'], ['SCCCL', '3/4', 5]]);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'قالب_الطلبات');
-            XLSX.writeFile(wb, 'قالب_استيراد_طلبات.xlsx');
-            showToast('✅ تم تحميل القالب', 'success');
-        }
-
-        async function clearDayOrders() {
-            if (!confirm('هل أنت متأكد من مسح طلبات اليوم الحالي؟')) return;
-            const today = new Date().toISOString().split('T')[0];
-            showLoading(true);
-            try {
-                await apiCall(`/day/${today}`, 'PUT', { orders: [], distribution: [] });
-                showToast('✅ تم مسح طلبات اليوم', 'success');
-            } catch (err) {
-                showToast('❌ خطأ في المسح', 'error');
-            }
+                factories = loadedFactories;
+                materials = loadedMaterials;
+                trucks = loadedTrucks;
+                renderTables();
+            } catch(e) { showToast('خطأ في تحميل الإعدادات','error'); }
             showLoading(false);
         }
 
-        async function clearAllData() {
-            if (!confirm('⚠️ تحذير: هذا الإجراء سيمسح جميع البيانات (الطلبات، التوزيعات، الإعدادات) نهائياً. لا يمكن التراجع. هل أنت متأكد؟')) return;
-            showLoading(true);
-            try {
-                await apiCall('/clear-all', 'DELETE');
-                showToast('✅ تم مسح جميع البيانات', 'success');
-            } catch (err) {
-                showToast('❌ خطأ في مسح البيانات', 'error');
-            }
-            showLoading(false);
+        function renderTables() {
+            // المصانع
+            const fBody = document.getElementById('factoriesBody');
+            fBody.innerHTML = factories.map((f, idx) => `
+                <tr>
+                    <td>${idx+1}</td>
+                    <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location || 'الرياض')}</td>
+                    <td class="actions">
+                        <button class="btn btn-warning btn-sm" onclick="editFactory(${idx})">✏️</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteFactory(${idx})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            // المواد
+            const mBody = document.getElementById('materialsBody');
+            mBody.innerHTML = materials.map((m, idx) => `
+                <tr><td>${idx+1}</td><td>${escapeHtml(m)}</td>
+                    <td class="actions"><button class="btn btn-danger btn-sm" onclick="deleteMaterial(${idx})">🗑️</button></td>
+                </tr>
+            `).join('');
+
+            // السيارات
+            const tBody = document.getElementById('trucksBody');
+            tBody.innerHTML = trucks.map((t, idx) => `
+                <tr><td>${idx+1}</td><td>${escapeHtml(t.number)}</td><td>${escapeHtml(t.driver)}</td>
+                    <td class="actions">
+                        <button class="btn btn-warning btn-sm" onclick="editTruck(${idx})">✏️</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteTruck(${idx})">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
         }
 
-        function showToast(msg, type) {
-            const container = document.getElementById('toastContainer');
-            const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.innerText = msg;
-            container.appendChild(toast);
-            setTimeout(() => toast.remove(), 3000);
+        // المصانع
+        async function addFactory() {
+            const name = document.getElementById('newFactoryName').value.trim();
+            const location = document.getElementById('newFactoryLocation').value;
+            if(!name) { showToast('أدخل اسم المصنع','error'); return; }
+            factories.push({ name, location });
+            await saveSettings();
+            document.getElementById('newFactoryName').value = '';
+            renderTables();
+            showToast('✅ تم إضافة المصنع','success');
         }
-        function showLoading(show) {
-            document.getElementById('loading').classList.toggle('active', show);
+        function editFactory(idx) {
+            const newName = prompt('اسم المصنع الجديد:', factories[idx].name);
+            if(newName && newName.trim()) {
+                const newLoc = prompt('الموقع (الرياض/الدمام/جدة/أخرى):', factories[idx].location || 'الرياض');
+                factories[idx] = { name: newName.trim(), location: newLoc?.trim() || 'الرياض' };
+                saveSettings();
+                renderTables();
+                showToast('تم التعديل','success');
+            }
+        }
+        async function deleteFactory(idx) {
+            if(confirm(`حذف المصنع "${factories[idx].name}"؟`)) {
+                factories.splice(idx,1);
+                await saveSettings();
+                renderTables();
+                showToast('تم الحذف','info');
+            }
         }
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            showLoading(true);
-            try {
-                // فقط نتحقق من الاتصال عبر استدعاء health (اختياري)
-                await fetch('/api/health', { credentials: 'include' });
-                showToast('✅ النظام جاهز', 'success');
-            } catch (e) {
-                showToast('⚠️ تحذير: غير متصل بالسيرفر', 'error');
+        // المواد
+        async function addMaterial() {
+            const mat = document.getElementById('newMaterial').value.trim();
+            if(!mat) { showToast('أدخل نوع البحص','error'); return; }
+            materials.push(mat);
+            await saveSettings();
+            document.getElementById('newMaterial').value = '';
+            renderTables();
+            showToast('✅ تم إضافة النوع','success');
+        }
+        async function deleteMaterial(idx) {
+            if(confirm(`حذف نوع البحص "${materials[idx]}"؟`)) {
+                materials.splice(idx,1);
+                await saveSettings();
+                renderTables();
+                showToast('تم الحذف','info');
             }
-            showLoading(false);
-        });
+        }
+
+        // السيارات
+        async function addTruck() {
+            const number = document.getElementById('newTruckNumber').value.trim();
+            const driver = document.getElementById('newTruckDriver').value.trim();
+            if(!number || !driver) { showToast('املأ الرقم والسائق','error'); return; }
+            trucks.push({ number, driver });
+            await saveSettings();
+            document.getElementById('newTruckNumber').value = '';
+            document.getElementById('newTruckDriver').value = '';
+            renderTables();
+            showToast('✅ تم إضافة السيارة','success');
+        }
+        function editTruck(idx) {
+            const newNumber = prompt('رقم السيارة الجديد:', trucks[idx].number);
+            const newDriver = prompt('اسم السائق الجديد:', trucks[idx].driver);
+            if(newNumber && newNumber.trim() && newDriver && newDriver.trim()) {
+                trucks[idx] = { number: newNumber.trim(), driver: newDriver.trim() };
+                saveSettings();
+                renderTables();
+                showToast('تم التعديل','success');
+            }
+        }
+        async function deleteTruck(idx) {
+            if(confirm(`حذف السيارة ${trucks[idx].number}؟`)) {
+                trucks.splice(idx,1);
+                await saveSettings();
+                renderTables();
+                showToast('تم الحذف','info');
+            }
+        }
+
+        async function saveSettings() {
+            try {
+                await apiCall('/settings', 'PUT', { factories, materials, trucks });
+                // حفظ نسخة في localStorage أيضاً
+                const dataToSave = { factories, materials, trucks, savedAt: new Date().toISOString() };
+                localStorage.setItem('gravelSystemSettings', JSON.stringify(dataToSave));
+            } catch(e) { showToast('خطأ في حفظ الإعدادات','error'); }
+        }
+
+        // دوال التخزين المحلي
+        function saveToLocalStorage() {
+            const data = { factories, materials, trucks, savedAt: new Date().toISOString() };
+            localStorage.setItem('gravelSystemSettings', JSON.stringify(data));
+            showToast('✅ تم حفظ الإعدادات في متصفحك', 'success');
+        }
+
+        function restoreFromLocalStorage() {
+            const saved = localStorage.getItem('gravelSystemSettings');
+            if (!saved) {
+                showToast('لا توجد بيانات محفوظة مسبقاً', 'error');
+                return;
+            }
+            try {
+                const data = JSON.parse(saved);
+                if (data.factories) factories = data.factories;
+                if (data.materials) materials = data.materials;
+                if (data.trucks) trucks = data.trucks;
+                renderTables();
+                saveSettings(); // حفظ على الخادم أيضاً
+                showToast('✅ تم استعادة البيانات من المتصفح', 'success');
+            } catch(e) { showToast('فشل الاستعادة: '+e.message, 'error'); }
+        }
+
+        function clearLocalStorage() {
+            localStorage.removeItem('gravelSystemSettings');
+            showToast('تم مسح البيانات المحفوظة في المتصفح', 'info');
+        }
+
+        function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+        function showToast(msg,type){ const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
+        function showLoading(s){ document.getElementById('loading').classList.toggle('active',s); }
+        function logout(){ if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
+        function loadNav(){ fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{ if(data.user) document.getElementById('navLinks').innerHTML=`<a href="index.html" class="nav-link">📊 الرئيسية</a><a href="orders.html" class="nav-link">📝 الطلبات</a><a href="distribution.html" class="nav-link">🚚 التوزيع</a><a href="trucks.html" class="nav-link">🚛 السيارات</a><a href="products.html" class="nav-link">📦 أنواع البحص</a><a href="factories.html" class="nav-link">🏭 المصانع</a><a href="reports.html" class="nav-link">📊 التقارير</a><a href="settings.html" class="nav-link active">⚙️ الإعدادات</a><a href="restrictions.html" class="nav-link">⛔ الحظر</a><a href="users.html" class="nav-link">👥 المستخدمين</a><a href="logs.html" class="nav-link">📜 السجلات</a>`; else window.location.href='/login.html'; }).catch(()=>window.location.href='/login.html'); }
+        document.addEventListener('DOMContentLoaded', () => { loadNav(); loadSettings(); });
     </script>
-<script src="navbar.js"></script>
 </body>
 </html>
