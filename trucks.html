@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>السيارات - نظام إدارة طلبات البحص</title>
+    <title>السيارات - نظام إدارة طلبات كسارة الحبردي</title>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; }
@@ -42,6 +42,7 @@
         .loading.active { display:flex; }
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation:spin 1s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
+        .warning-message { background: rgba(235,51,73,0.2); border-right: 3px solid #eb3349; padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
@@ -61,6 +62,11 @@
             <a href="reports.html" class="nav-link">📊 التقارير</a>
             <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
         </div>
+        
+        <div id="warningMessage" style="display: none;" class="warning-message">
+            ⚠️ لا توجد سيارات مسجلة. الرجاء إضافة سيارات لإتمام عملية التوزيع.
+        </div>
+
         <div class="stats-grid" id="statsGrid"></div>
         <button class="btn btn-success" onclick="openAddTruckModal()">➕ إضافة سيارة</button>
         <input type="text" class="search-box" id="truckSearch" placeholder="🔍 بحث..." onkeyup="renderTrucksGrid()">
@@ -84,6 +90,11 @@
         async function loadSettings() {
             const data = await apiCall('/settings');
             trucks = data.trucks || [];
+            if (trucks.length === 0) {
+                document.getElementById('warningMessage').style.display = 'block';
+            } else {
+                document.getElementById('warningMessage').style.display = 'none';
+            }
         }
 
         async function loadTodayDistribution() {
@@ -93,15 +104,19 @@
         }
 
         async function saveSettings() {
-            // نحتاج إلى حفظ الإعدادات كاملة مع الحفاظ على المصانع والمواد
             const currentSettings = await apiCall('/settings');
             const settings = { factories: currentSettings.factories, materials: currentSettings.materials, trucks };
             await apiCall('/settings', 'PUT', settings);
+            // تحديث التحذير
+            if (trucks.length === 0) {
+                document.getElementById('warningMessage').style.display = 'block';
+            } else {
+                document.getElementById('warningMessage').style.display = 'none';
+            }
         }
 
-        // حساب الإحصائيات: عدد السيارات الفريدة المخصصة لكل رود
         function getRoadStats() {
-            const roadTrucks = new Map(); // road -> Set of truck numbers
+            const roadTrucks = new Map();
             distribution.forEach(d => {
                 if (d.truck && d.road) {
                     if (!roadTrucks.has(d.road)) roadTrucks.set(d.road, new Set());
@@ -112,7 +127,6 @@
             for (let [road, trucksSet] of roadTrucks.entries()) {
                 stats[road] = trucksSet.size;
             }
-            // السيارات المستخدمة في أي رود
             const usedTrucks = new Set();
             distribution.forEach(d => { if (d.truck) usedTrucks.add(d.truck.number); });
             const available = trucks.length - usedTrucks.size;
@@ -141,8 +155,7 @@
         async function renderTrucksGrid() {
             const search = document.getElementById('truckSearch').value.toLowerCase();
             const filtered = trucks.filter(t => t.number.toLowerCase().includes(search) || t.driver.toLowerCase().includes(search));
-            // تجميع الروдات لكل سيارة من التوزيع الحالي
-            const truckRoads = new Map(); // truck number -> Set of roads
+            const truckRoads = new Map();
             distribution.forEach(d => {
                 if (d.truck) {
                     if (!truckRoads.has(d.truck.number)) truckRoads.set(d.truck.number, new Set());
@@ -165,13 +178,12 @@
                         return `رود ${r}`;
                     }).join('+');
                     statusText = roadIcons + ` رود ${roadArray.join('+')}`;
-                    // تحديد class بناءً على أعلى رود (للتمييز البصري)
                     const maxRoad = Math.max(...roadArray);
                     if (maxRoad === 1) cls = 'assigned-road1';
                     else if (maxRoad === 2) cls = 'assigned-road2';
                     else if (maxRoad === 3) cls = 'assigned-road3';
                     else if (maxRoad === 4) cls = 'assigned-road4';
-                    else cls = 'assigned-road1'; // fallback
+                    else cls = 'assigned-road1';
                 }
                 const originalIdx = trucks.findIndex(tr => tr.number === t.number);
                 return `<div class="truck-card ${cls}">
