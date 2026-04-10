@@ -17,7 +17,6 @@
         .btn-danger { background:#eb3349; color:#fff; }
         .btn-warning { background:#f093fb; color:#fff; }
         .btn-info { background:#4facfe; color:#fff; }
-        .btn-local { background:#38ef7d; color:#1a1a2e; }
         .card { background:rgba(255,255,255,0.05); border-radius:15px; padding:20px; margin-bottom:25px; }
         .card h3 { margin-bottom:15px; color:#667eea; }
         .form-group { margin-bottom:15px; display:flex; flex-direction:column; gap:5px; }
@@ -36,7 +35,6 @@
         .loading.active { display:flex; }
         .spinner { width:40px; height:40px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation:spin 1s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        .local-backup { background:rgba(56,239,125,0.1); border:1px solid #38ef7d; margin-bottom:15px; }
     </style>
 </head>
 <body>
@@ -47,17 +45,6 @@
             <div style="position:absolute; top:20px; left:20px;"><button onclick="logout()" style="background:linear-gradient(135deg,#f5576c,#eb3349); border:none; padding:8px 20px; border-radius:25px; color:white; font-weight:bold; cursor:pointer;">🚪 تسجيل الخروج</button></div>
         </div>
         <div class="nav-links" id="navLinks"></div>
-
-        <!-- قسم النسخ الاحتياطي المحلي (حل مؤقت) -->
-        <div class="card local-backup">
-            <h3>💾 حفظ واستعادة البيانات محلياً (حل مؤقت لمنع الفقدان)</h3>
-            <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:10px;">
-                <button class="btn btn-local" onclick="saveToLocalStorage()">💾 حفظ البيانات الحالية في المتصفح</button>
-                <button class="btn btn-warning" onclick="restoreFromLocalStorage()">📂 استعادة البيانات من المتصفح</button>
-                <button class="btn btn-danger" onclick="clearLocalStorage()">🗑️ مسح البيانات المحفوظة</button>
-            </div>
-            <p style="color:#a8b2d1; font-size:0.85em;">⚠️ هذه البيانات تحفظ فقط في متصفحك الحالي. استخدمها كحل مؤقت لحين استخدام قاعدة بيانات حقيقية.</p>
-        </div>
 
         <!-- إدارة المصانع -->
         <div class="card">
@@ -123,30 +110,9 @@
             showLoading(true);
             try {
                 const data = await apiCall('/settings');
-                let loadedFactories = data.factories || [];
-                let loadedMaterials = data.materials || [];
-                let loadedTrucks = data.trucks || [];
-
-                // التحقق مما إذا كانت البيانات افتراضية (عدد قليل أو اسماء افتراضية)
-                const isDefault = (loadedFactories.length === 3 && loadedFactories[0].name === 'مصنع الرياض') ||
-                                  (loadedFactories.length === 0);
-                if (isDefault) {
-                    const saved = localStorage.getItem('gravelSystemSettings');
-                    if (saved) {
-                        try {
-                            const localData = JSON.parse(saved);
-                            if (localData.factories && localData.factories.length) {
-                                loadedFactories = localData.factories;
-                                loadedMaterials = localData.materials;
-                                loadedTrucks = localData.trucks;
-                                showToast('⚠️ تم استعادة البيانات من المتصفح (الخادم فقد البيانات)', 'warning');
-                            }
-                        } catch(e) {}
-                    }
-                }
-                factories = loadedFactories;
-                materials = loadedMaterials;
-                trucks = loadedTrucks;
+                factories = data.factories || [];
+                materials = data.materials || [];
+                trucks = data.trucks || [];
                 renderTables();
             } catch(e) { showToast('خطأ في تحميل الإعدادات','error'); }
             showLoading(false);
@@ -155,35 +121,50 @@
         function renderTables() {
             // المصانع
             const fBody = document.getElementById('factoriesBody');
-            fBody.innerHTML = factories.map((f, idx) => `
-                <tr>
-                    <td>${idx+1}</td>
-                    <td>${escapeHtml(f.name)}</td><td>${escapeHtml(f.location || 'الرياض')}</td>
-                    <td class="actions">
-                        <button class="btn btn-warning btn-sm" onclick="editFactory(${idx})">✏️</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteFactory(${idx})">🗑️</button>
-                    </td>
-                </tr>
-            `).join('');
+            if(!factories.length) fBody.innerHTML = '<tr><td colspan="4">لا توجد مصانع</td></tr>';
+            else {
+                fBody.innerHTML = factories.map((f, idx) => `
+                    <tr>
+                        <td>${idx+1}</td>
+                        <td>${escapeHtml(f.name)}</td>
+                        <td>${escapeHtml(f.location || 'الرياض')}</td>
+                        <td class="actions">
+                            <button class="btn btn-warning btn-sm" onclick="editFactory(${idx})">✏️</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteFactory(${idx})">🗑️</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
 
             // المواد
             const mBody = document.getElementById('materialsBody');
-            mBody.innerHTML = materials.map((m, idx) => `
-                <tr><td>${idx+1}</td><td>${escapeHtml(m)}</td>
-                    <td class="actions"><button class="btn btn-danger btn-sm" onclick="deleteMaterial(${idx})">🗑️</button></td>
-                </tr>
-            `).join('');
+            if(!materials.length) mBody.innerHTML = '<tr><td colspan="3">لا توجد أنواع بحص</td></tr>';
+            else {
+                mBody.innerHTML = materials.map((m, idx) => `
+                    <tr>
+                        <td>${idx+1}</td>
+                        <td>${escapeHtml(m)}</td>
+                        <td class="actions"><button class="btn btn-danger btn-sm" onclick="deleteMaterial(${idx})">🗑️</button></td>
+                    </tr>
+                `).join('');
+            }
 
             // السيارات
             const tBody = document.getElementById('trucksBody');
-            tBody.innerHTML = trucks.map((t, idx) => `
-                <tr><td>${idx+1}</td><td>${escapeHtml(t.number)}</td><td>${escapeHtml(t.driver)}</td>
-                    <td class="actions">
-                        <button class="btn btn-warning btn-sm" onclick="editTruck(${idx})">✏️</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteTruck(${idx})">🗑️</button>
-                    </td>
-                </tr>
-            `).join('');
+            if(!trucks.length) tBody.innerHTML = '<tr><td colspan="4">لا توجد سيارات</td></tr>';
+            else {
+                tBody.innerHTML = trucks.map((t, idx) => `
+                    <tr>
+                        <td>${idx+1}</td>
+                        <td>${escapeHtml(t.number)}</td>
+                        <td>${escapeHtml(t.driver)}</td>
+                        <td class="actions">
+                            <button class="btn btn-warning btn-sm" onclick="editTruck(${idx})">✏️</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteTruck(${idx})">🗑️</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
         }
 
         // المصانع
@@ -269,39 +250,7 @@
         async function saveSettings() {
             try {
                 await apiCall('/settings', 'PUT', { factories, materials, trucks });
-                // حفظ نسخة في localStorage أيضاً
-                const dataToSave = { factories, materials, trucks, savedAt: new Date().toISOString() };
-                localStorage.setItem('gravelSystemSettings', JSON.stringify(dataToSave));
             } catch(e) { showToast('خطأ في حفظ الإعدادات','error'); }
-        }
-
-        // دوال التخزين المحلي
-        function saveToLocalStorage() {
-            const data = { factories, materials, trucks, savedAt: new Date().toISOString() };
-            localStorage.setItem('gravelSystemSettings', JSON.stringify(data));
-            showToast('✅ تم حفظ الإعدادات في متصفحك', 'success');
-        }
-
-        function restoreFromLocalStorage() {
-            const saved = localStorage.getItem('gravelSystemSettings');
-            if (!saved) {
-                showToast('لا توجد بيانات محفوظة مسبقاً', 'error');
-                return;
-            }
-            try {
-                const data = JSON.parse(saved);
-                if (data.factories) factories = data.factories;
-                if (data.materials) materials = data.materials;
-                if (data.trucks) trucks = data.trucks;
-                renderTables();
-                saveSettings(); // حفظ على الخادم أيضاً
-                showToast('✅ تم استعادة البيانات من المتصفح', 'success');
-            } catch(e) { showToast('فشل الاستعادة: '+e.message, 'error'); }
-        }
-
-        function clearLocalStorage() {
-            localStorage.removeItem('gravelSystemSettings');
-            showToast('تم مسح البيانات المحفوظة في المتصفح', 'info');
         }
 
         function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
