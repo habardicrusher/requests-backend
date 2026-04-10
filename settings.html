@@ -92,6 +92,22 @@
         const API_BASE = '/api';
         let currentDate = new Date().toISOString().split('T')[0];
 
+        // الخريطة الجغرافية للمصانع (للاستعادة عند فقدانها)
+        const factoryLocations = {
+            'SCCCL': 'الدمام',
+            'الحارث للمنتجات الاسمنيه': 'الدمام',
+            'الحارثي القديم': 'الدمام',
+            'المعجل لمنتجات الاسمنت': 'الدمام',
+            'الحارث العزيزية': 'الدمام',
+            'سارمكس النظيم': 'الرياض',
+            'عبر الخليج': 'الرياض',
+            'الكفاح للخرسانة الجاهزة': 'الدمام',
+            'القيشان 3': 'الدمام',
+            'القيشان 2 - الأحجار الشرقية': 'الدمام',
+            'القيشان 1': 'الدمام',
+            'الفهد للبلوك والخرسانة': 'الرياض'
+        };
+
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
             if (data && (method === 'POST' || method === 'PUT')) options.body = JSON.stringify(data);
@@ -102,6 +118,23 @@
             }
             if (!res.ok) throw new Error(await res.text());
             return res.json();
+        }
+
+        // دالة لإصلاح المصانع وإضافة المواقع المفقودة
+        function fixFactoryLocations(factories) {
+            if (!factories || !factories.length) return [];
+            return factories.map(f => {
+                // إذا كان المصنع نصاً (سلسلة) وليس كائنًا
+                if (typeof f === 'string') {
+                    return { name: f, location: factoryLocations[f] || 'الرياض' };
+                }
+                // إذا كان كائنًا ولكن بدون موقع
+                if (f && !f.location) {
+                    return { name: f.name, location: factoryLocations[f.name] || 'الرياض' };
+                }
+                // إذا كان كائنًا سليمًا
+                return f;
+            });
         }
 
         // إضافة keep-alive لمنع انتهاء الجلسة
@@ -132,7 +165,7 @@
             showLoading(false);
         }
 
-        // استيراد من JSON (طريقة مبسطة تعمل)
+        // استيراد من JSON مع الحفاظ على المواقع الجغرافية
         function importBackup() {
             const input = document.createElement('input');
             input.type = 'file';
@@ -144,7 +177,27 @@
                 const reader = new FileReader();
                 reader.onload = async function(e) {
                     try {
-                        const backupData = JSON.parse(e.target.result);
+                        let backupData = JSON.parse(e.target.result);
+                        
+                        // إصلاح المصانع في النسخة المستعادة
+                        if (backupData.settings && backupData.settings.factories) {
+                            backupData.settings.factories = fixFactoryLocations(backupData.settings.factories);
+                        }
+                        // إصلاح المصانع في أيام التوزيع (إذا كانت موجودة)
+                        if (backupData.days) {
+                            for (const date in backupData.days) {
+                                const dayData = backupData.days[date];
+                                if (dayData.distribution) {
+                                    dayData.distribution = dayData.distribution.map(dist => {
+                                        if (dist.factory && factoryLocations[dist.factory]) {
+                                            // لا نحتاج لتعديل هنا، نحتفظ باسم المصنع فقط
+                                        }
+                                        return dist;
+                                    });
+                                }
+                            }
+                        }
+                        
                         const res = await fetch('/api/restore', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -222,8 +275,9 @@
         function downloadExcelTemplate() {
             const ws = XLSX.utils.aoa_to_sheet([
                 ['المصنع', 'نوع البحص', 'العدد'],
-                ['مثال: SCCCL', '3/4', '5'],
-                ['مثال: عبر الخليج', '3/8', '3']
+                ['SCCCL', '3/4', '5'],
+                ['عبر الخليج', '3/8', '3'],
+                ['القيشان 1', '3/16', '2']
             ]);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'قالب_الطلبات');
