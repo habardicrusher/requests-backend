@@ -20,6 +20,7 @@
         .form-group label { font-weight: 600; color: #a8b2d1; }
         .form-group select, .form-group input { padding: 12px 15px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff; font-size: 1em; }
         .form-group select option { background: #1a1a2e; }
+        .form-group .fixed-factory { background: rgba(102,126,234,0.3); padding: 12px 15px; border-radius: 10px; font-weight: bold; }
         .btn { padding: 12px 25px; border: none; border-radius: 12px; cursor: pointer; font-size: 1em; font-weight: 600; transition: all 0.3s; display: inline-flex; align-items: center; gap: 8px; }
         .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #fff; }
         .btn-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: #fff; }
@@ -73,7 +74,10 @@
 
         <h2>➕ إضافة طلب جديد</h2>
         <div class="order-form">
-            <div class="form-group"><label>🏭 المصنع</label><select id="factorySelect"></select></div>
+            <div class="form-group" id="factoryFieldContainer">
+                <label>🏭 المصنع</label>
+                <div id="factorySelectContainer"></div>
+            </div>
             <div class="form-group"><label>📦 نوع البحص</label><select id="materialType"></select></div>
             <div class="form-group"><label>🔢 العدد</label><input type="number" id="orderCount" min="1" value="1"></div>
             <div class="form-group"><label>⏰ التوقيت (اختياري)</label><input type="text" id="orderTime" placeholder="مثال: 8 PM"></div>
@@ -89,7 +93,7 @@
         <div id="todayOrders"></div>
     </div>
 
-    <div class="modal" id="editOrderModal"><div class="modal-content"><div class="modal-header"><h3>✏️ تعديل الطلب</h3><button class="close-modal" onclick="closeModal('editOrderModal')">&times;</button></div><div class="modal-body"><input type="hidden" id="editOrderId"><div class="form-group"><label>🏭 المصنع</label><select id="editOrderFactory"></select></div><div class="form-group"><label>📦 نوع البحص</label><select id="editOrderMaterial"></select></div><div class="form-group"><label>⏰ التوقيت</label><input type="text" id="editOrderTime" placeholder="اختياري"></div></div><div class="modal-footer"><button class="btn btn-danger" onclick="closeModal('editOrderModal')">إلغاء</button><button class="btn btn-success" onclick="saveOrderEdit()">حفظ</button></div></div></div>
+    <div class="modal" id="editOrderModal"><div class="modal-content"><div class="modal-header"><h3>✏️ تعديل الطلب</h3><button class="close-modal" onclick="closeModal('editOrderModal')">&times;</button></div><div class="modal-body"><input type="hidden" id="editOrderId"><div class="form-group" id="editFactoryFieldContainer"><label>🏭 المصنع</label><div id="editFactoryContainer"></div></div><div class="form-group"><label>📦 نوع البحص</label><select id="editOrderMaterial"></select></div><div class="form-group"><label>⏰ التوقيت</label><input type="text" id="editOrderTime" placeholder="اختياري"></div></div><div class="modal-footer"><button class="btn btn-danger" onclick="closeModal('editOrderModal')">إلغاء</button><button class="btn btn-success" onclick="saveOrderEdit()">حفظ</button></div></div></div>
 
     <script src="notifications.js"></script>
     <script>
@@ -97,6 +101,8 @@
         let factories = [], materials = [], orders = [], currentDate = '';
         let currentDistribution = [];
         let currentUser = null;
+        let currentUserFactory = null;
+        let currentUserRole = null;
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
@@ -109,32 +115,68 @@
 
         setInterval(async () => { try { await fetch('/api/me', { credentials: 'include' }); } catch(e) {} }, 4 * 60 * 1000);
 
+        async function loadCurrentUser() {
+            try {
+                const me = await apiCall('/me');
+                currentUser = me.user;
+                currentUserRole = me.user.role;
+                currentUserFactory = me.user.factory;
+                console.log('User role:', currentUserRole, 'Factory:', currentUserFactory);
+            } catch(e) {}
+        }
+
         async function loadSettings() {
             try {
                 const data = await apiCall('/settings');
                 factories = (data.factories || []).map(f => typeof f === 'object' ? (f.name || f.factory_name || f.text || '') : f);
                 materials = (data.materials || []).map(m => typeof m === 'object' ? (m.name || m.material_name || m.text || '') : m);
-                updateSelects(); renderQuickAddButtons();
+                updateUI();
+                renderQuickAddButtons();
             } catch(e) { showToast('خطأ في تحميل الإعدادات', 'error'); }
         }
 
-        async function loadCurrentUser() {
-            try {
-                const me = await apiCall('/me');
-                currentUser = me.user;
-            } catch(e) {}
-        }
-
-        function updateSelects() {
-            const validFactories = factories.filter(f => f && f.trim());
-            const factoryOptions = '<option value="">-- اختر --</option>' + validFactories.map(f => `<option value="${f}">${f}</option>`).join('');
-            document.getElementById('factorySelect').innerHTML = factoryOptions;
-            document.getElementById('editOrderFactory').innerHTML = factoryOptions;
-
+        function updateUI() {
+            // تحديث حقل المصنع (إما قائمة منسدلة أو نص ثابت)
+            const factoryContainer = document.getElementById('factorySelectContainer');
+            const editFactoryContainer = document.getElementById('editFactoryContainer');
+            
+            if (currentUserRole === 'client' && currentUserFactory) {
+                // عميل مصنع: يظهر اسم المصنع كنص ثابت
+                factoryContainer.innerHTML = `<div class="fixed-factory">${currentUserFactory}</div>`;
+                editFactoryContainer.innerHTML = `<div class="fixed-factory">${currentUserFactory}</div>`;
+                // تحديث القائمة المنسدلة في quick add (إذا كانت موجودة) - سنستخدم نفس المصنع الثابت
+            } else {
+                // مدير أو مستخدم داخلي: يظهر قائمة منسدلة بكل المصانع
+                const validFactories = factories.filter(f => f && f.trim());
+                const factoryOptions = '<option value="">-- اختر --</option>' + validFactories.map(f => `<option value="${f}">${f}</option>`).join('');
+                factoryContainer.innerHTML = `<select id="factorySelect" style="width:100%; padding:12px 15px; border-radius:10px; border:2px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:#fff;">${factoryOptions}</select>`;
+                editFactoryContainer.innerHTML = `<select id="editOrderFactory" style="width:100%; padding:12px 15px; border-radius:10px; border:2px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:#fff;">${factoryOptions}</select>`;
+            }
+            
+            // تحديث المواد
             const validMaterials = materials.filter(m => m && m.trim());
             const materialOptions = '<option value="">-- اختر --</option>' + validMaterials.map(m => `<option value="${m}">بحص ${m}</option>`).join('');
-            document.getElementById('materialType').innerHTML = materialOptions;
-            document.getElementById('editOrderMaterial').innerHTML = materialOptions;
+            const materialSelect = document.getElementById('materialType');
+            const editMaterialSelect = document.getElementById('editOrderMaterial');
+            if (materialSelect) materialSelect.innerHTML = materialOptions;
+            if (editMaterialSelect) editMaterialSelect.innerHTML = materialOptions;
+        }
+        
+        // دالة مساعدة للحصول على المصنع المختار (سواء من القائمة أو النص الثابت)
+        function getSelectedFactory() {
+            if (currentUserRole === 'client' && currentUserFactory) {
+                return currentUserFactory;
+            }
+            const select = document.getElementById('factorySelect');
+            return select ? select.value : '';
+        }
+        
+        function getSelectedEditFactory() {
+            if (currentUserRole === 'client' && currentUserFactory) {
+                return currentUserFactory;
+            }
+            const select = document.getElementById('editOrderFactory');
+            return select ? select.value : '';
         }
 
         function renderQuickAddButtons() {
@@ -235,14 +277,15 @@
                         });
                     }
                     
-                    showToast(`✅ تم توزيع ${orders.length} طلب تلقائياً على ${trucksUsed} سيارة (الرود ${lastRoad})`, 'success');
+                    if (currentUserRole === 'admin') {
+                        showToast(`✅ تم توزيع ${orders.length} طلب تلقائياً على ${trucksUsed} سيارة (الرود ${lastRoad})`, 'success');
+                    }
                 }
             } catch(e) {
                 console.error('خطأ في التوزيع التلقائي:', e);
             }
         }
 
-        // دالة التوزيع اليدوي
         async function manualDistribute() {
             showLoading(true);
             await autoDistributeAfterOrder();
@@ -253,7 +296,7 @@
 
         // ==================== دوال الطلبات ====================
         async function addOrder() {
-            const factory = document.getElementById('factorySelect').value;
+            const factory = getSelectedFactory();
             const material = document.getElementById('materialType').value;
             const count = parseInt(document.getElementById('orderCount').value);
             let time = document.getElementById('orderTime').value.trim();
@@ -278,7 +321,6 @@
                 document.getElementById('orderTime').value = '';
                 showToast(`✅ تم إضافة ${count} طلب`, 'success');
                 
-                // التوزيع التلقائي بعد إضافة الطلب
                 await autoDistributeAfterOrder();
                 await loadDayData();
             }
@@ -286,7 +328,7 @@
         }
 
         async function quickAdd(material, count) {
-            const factory = document.getElementById('factorySelect').value;
+            const factory = getSelectedFactory();
             let time = document.getElementById('orderTime').value.trim();
             if (time === 'undefined' || time === 'null') time = '';
             if (!factory) {
@@ -307,7 +349,6 @@
                 renderOrders();
                 showToast(`✅ تم إضافة ${count} طلب ${material}`, 'success');
                 
-                // التوزيع التلقائي بعد إضافة الطلب
                 await autoDistributeAfterOrder();
                 await loadDayData();
             }
@@ -329,8 +370,12 @@
             let o = orders.find(o => o.id === id);
             if (o) {
                 document.getElementById('editOrderId').value = id;
-                document.getElementById('editOrderFactory').value = o.factory;
-                document.getElementById('editOrderMaterial').value = o.material;
+                if (currentUserRole !== 'client') {
+                    const editSelect = document.getElementById('editOrderFactory');
+                    if (editSelect) editSelect.value = o.factory;
+                }
+                const editMaterial = document.getElementById('editOrderMaterial');
+                if (editMaterial) editMaterial.value = o.material;
                 document.getElementById('editOrderTime').value = (o.time && o.time !== 'undefined') ? o.time : '';
                 openModal('editOrderModal');
             }
@@ -340,7 +385,7 @@
             let id = document.getElementById('editOrderId').value;
             let idx = orders.findIndex(o => o.id === id);
             if (idx !== -1) {
-                orders[idx].factory = document.getElementById('editOrderFactory').value;
+                orders[idx].factory = getSelectedEditFactory();
                 orders[idx].material = document.getElementById('editOrderMaterial').value;
                 let newTime = document.getElementById('editOrderTime').value.trim();
                 if (newTime === 'undefined' || newTime === 'null') newTime = '';
@@ -411,6 +456,7 @@
             fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{ 
                 if(data.user) {
                     const isAdmin = data.user.role === 'admin';
+                    const isClient = data.user.role === 'client';
                     document.getElementById('navLinks').innerHTML = isAdmin ? `
                         <a href="index.html" class="nav-link">📊 الرئيسية</a>
                         <a href="orders.html" class="nav-link active">📝 الطلبات</a>
@@ -423,9 +469,21 @@
                         <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
                         <a href="users.html" class="nav-link">👥 المستخدمين</a>
                         <a href="logs.html" class="nav-link">📜 السجلات</a>
-                    ` : `
+                    ` : (isClient ? `
                         <a href="orders.html" class="nav-link active">📝 الطلبات</a>
-                    `;
+                    ` : `
+                        <a href="index.html" class="nav-link">📊 الرئيسية</a>
+                        <a href="orders.html" class="nav-link active">📝 الطلبات</a>
+                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                        <a href="reports.html" class="nav-link">📊 التقارير</a>
+                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                        <a href="logs.html" class="nav-link">📜 السجلات</a>
+                    `);
                 } else window.location.href='/login.html'; 
             }).catch(()=>window.location.href='/login.html'); 
         }
@@ -441,10 +499,10 @@
             await loadDayData(); 
             showLoading(false); 
             
-            // قراءة معامل الفلتر من الرابط
+            // قراءة معامل الفلتر من الرابط (للمدير فقط)
             const urlParams = new URLSearchParams(window.location.search);
             const filterFactory = urlParams.get('filter');
-            if (filterFactory) {
+            if (filterFactory && currentUserRole !== 'client') {
                 setTimeout(() => {
                     const factorySelect = document.getElementById('factorySelect');
                     if (factorySelect) {
