@@ -36,14 +36,12 @@ const defaultTrucks = [
     { number: '9495', driver: 'ميزان' }, { number: '9496', driver: 'غفور احمد' }
 ];
 
-// اختبار الاتصال
 pool.connect((err, client, release) => {
     if (err) return console.error('❌ خطأ في الاتصال بقاعدة البيانات:', err.stack);
     console.log('✅ تم الاتصال بقاعدة البيانات بنجاح');
     release();
 });
 
-// إنشاء جدول الإعدادات وإضافة السيارات الافتراضية إذا كانت فارغة
 async function initSettingsTable() {
     try {
         await pool.query(`
@@ -78,18 +76,12 @@ async function initSettingsTable() {
             );
             console.log('✅ تم إنشاء جدول الإعدادات مع السيارات الـ 74');
         } else {
-            // إذا كان الجدول موجوداً، تحقق مما إذا كانت السيارات فارغة
-            const current = res.rows[0];
-            const trucks = current.trucks || [];
-            if (trucks.length === 0) {
-                await pool.query(
-                    'UPDATE app_settings SET trucks = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
-                    [JSON.stringify(defaultTrucks)]
-                );
-                console.log('✅ تم إضافة السيارات الـ 74 إلى الإعدادات الموجودة');
-            } else {
-                console.log(`✅ السيارات موجودة بالفعل (${trucks.length} سيارة). لم يتم التعديل.`);
-            }
+            // تحديث قائمة السيارات إلى القائمة الكاملة (استبدال)
+            await pool.query(
+                'UPDATE app_settings SET trucks = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 1',
+                [JSON.stringify(defaultTrucks)]
+            );
+            console.log('✅ تم تحديث السيارات إلى القائمة الكاملة (74 سيارة)');
         }
     } catch (err) {
         console.error('❌ خطأ في إنشاء جدول الإعدادات:', err);
