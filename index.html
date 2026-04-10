@@ -276,14 +276,10 @@
                 if (!recent.length) tbody.innerHTML = '<td><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
                 else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
 
-                // تحديث العداد بناءً على الطلبات الجديدة (للمدير فقط)
                 if (currentUserRole === 'admin') {
                     const storedCount = localStorage.getItem('pendingOrdersCount');
-                    if (storedCount && !isNaN(parseInt(storedCount))) {
-                        pendingOrdersCount = parseInt(storedCount);
-                    } else {
-                        pendingOrdersCount = 0;
-                    }
+                    if (storedCount && !isNaN(parseInt(storedCount))) pendingOrdersCount = parseInt(storedCount);
+                    else pendingOrdersCount = 0;
                     updateAlertBadge();
                 }
             } catch(e) { console.error(e); showToast('خطأ في تحميل البيانات', 'error'); }
@@ -321,7 +317,6 @@
             showToast('تم تحديث البيانات بنجاح', 'success');
         }
 
-        // الاستماع للإشارة من orders.html
         window.addEventListener('storage', function(e) {
             if (e.key === 'newOrderTimestamp') {
                 console.log('🔄 تم اكتشاف طلب جديد، جارٍ التحديث');
@@ -347,41 +342,44 @@
             }
         }
 
-        async function loadNavAndUser() {
-            try {
-                const data = await apiCall('/me');
-                if (data.user) {
-                    currentUserRole = data.user.role;
-                    const isAdmin = currentUserRole === 'admin';
-                    let navHtml = '';
-                    if (isAdmin) {
-                        navHtml = `
-                            <a href="index.html" class="nav-link active">📊 الرئيسية</a>
-                            <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-                            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                            <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                            <a href="reports.html" class="nav-link">📊 التقارير</a>
-                            <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                            <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                            <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                            <a href="logs.html" class="nav-link">📜 السجلات</a>
-                        `;
+        // دالة تحميل شريط التنقل حسب صلاحيات المستخدم
+        function loadNav() {
+            fetch('/api/me', { credentials: 'include' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.user) {
+                        const role = data.user.role;
+                        currentUserRole = role;
+                        let navHtml = '';
+                        if (role === 'admin' || role === 'user') {
+                            navHtml = `
+                                <a href="index.html" class="nav-link active">📊 الرئيسية</a>
+                                <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                                <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                                <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                                <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                                <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                                <a href="reports.html" class="nav-link">📊 التقارير</a>
+                                <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                                <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                                <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                                <a href="logs.html" class="nav-link">📜 السجلات</a>
+                            `;
+                        } else if (role === 'client') {
+                            // العملاء لا يصلون إلى هذه الصفحة أصلاً، لكن احتياطاً
+                            window.location.href = '/orders.html';
+                            return;
+                        }
+                        document.getElementById('navLinks').innerHTML = navHtml;
                     } else {
-                        // إذا لم يكن مديراً، نعيده إلى orders.html
-                        window.location.href = '/orders.html';
-                        return;
+                        window.location.href = '/login.html';
                     }
-                    document.getElementById('navLinks').innerHTML = navHtml;
-                } else {
-                    window.location.href = '/login.html';
-                }
-            } catch(e) { window.location.href = '/login.html'; }
+                })
+                .catch(() => window.location.href = '/login.html');
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            await loadNavAndUser();
+            await loadNav(); // تحميل شريط التنقل أولاً
             loadAlertCount();
             showLoading(true);
             await loadDashboard();
