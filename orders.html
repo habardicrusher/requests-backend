@@ -20,7 +20,6 @@
         .form-group label { font-weight: 600; color: #a8b2d1; }
         .form-group select, .form-group input { padding: 12px 15px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05); color: #fff; font-size: 1em; }
         .form-group select option { background: #1a1a2e; }
-        .form-group .fixed-factory { background: rgba(102,126,234,0.3); padding: 12px 15px; border-radius: 10px; font-weight: bold; }
         .btn { padding: 12px 25px; border: none; border-radius: 12px; cursor: pointer; font-size: 1em; font-weight: 600; transition: all 0.3s; display: inline-flex; align-items: center; gap: 8px; }
         .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #fff; }
         .btn-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: #fff; }
@@ -136,24 +135,19 @@
         }
 
         function updateUI() {
-            // تحديث حقل المصنع (إما قائمة منسدلة أو نص ثابت)
             const factoryContainer = document.getElementById('factorySelectContainer');
             const editFactoryContainer = document.getElementById('editFactoryContainer');
             
             if (currentUserRole === 'client' && currentUserFactory) {
-                // عميل مصنع: يظهر اسم المصنع كنص ثابت
-                factoryContainer.innerHTML = `<div class="fixed-factory">${currentUserFactory}</div>`;
-                editFactoryContainer.innerHTML = `<div class="fixed-factory">${currentUserFactory}</div>`;
-                // تحديث القائمة المنسدلة في quick add (إذا كانت موجودة) - سنستخدم نفس المصنع الثابت
+                factoryContainer.innerHTML = `<div class="fixed-factory" style="background:rgba(102,126,234,0.3); padding:12px 15px; border-radius:10px; font-weight:bold;">${currentUserFactory}</div>`;
+                editFactoryContainer.innerHTML = `<div class="fixed-factory" style="background:rgba(102,126,234,0.3); padding:12px 15px; border-radius:10px; font-weight:bold;">${currentUserFactory}</div>`;
             } else {
-                // مدير أو مستخدم داخلي: يظهر قائمة منسدلة بكل المصانع
                 const validFactories = factories.filter(f => f && f.trim());
                 const factoryOptions = '<option value="">-- اختر --</option>' + validFactories.map(f => `<option value="${f}">${f}</option>`).join('');
                 factoryContainer.innerHTML = `<select id="factorySelect" style="width:100%; padding:12px 15px; border-radius:10px; border:2px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:#fff;">${factoryOptions}</select>`;
                 editFactoryContainer.innerHTML = `<select id="editOrderFactory" style="width:100%; padding:12px 15px; border-radius:10px; border:2px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.05); color:#fff;">${factoryOptions}</select>`;
             }
             
-            // تحديث المواد
             const validMaterials = materials.filter(m => m && m.trim());
             const materialOptions = '<option value="">-- اختر --</option>' + validMaterials.map(m => `<option value="${m}">بحص ${m}</option>`).join('');
             const materialSelect = document.getElementById('materialType');
@@ -162,19 +156,14 @@
             if (editMaterialSelect) editMaterialSelect.innerHTML = materialOptions;
         }
         
-        // دالة مساعدة للحصول على المصنع المختار (سواء من القائمة أو النص الثابت)
         function getSelectedFactory() {
-            if (currentUserRole === 'client' && currentUserFactory) {
-                return currentUserFactory;
-            }
+            if (currentUserRole === 'client' && currentUserFactory) return currentUserFactory;
             const select = document.getElementById('factorySelect');
             return select ? select.value : '';
         }
         
         function getSelectedEditFactory() {
-            if (currentUserRole === 'client' && currentUserFactory) {
-                return currentUserFactory;
-            }
+            if (currentUserRole === 'client' && currentUserFactory) return currentUserFactory;
             const select = document.getElementById('editOrderFactory');
             return select ? select.value : '';
         }
@@ -321,6 +310,9 @@
                 document.getElementById('orderTime').value = '';
                 showToast(`✅ تم إضافة ${count} طلب`, 'success');
                 
+                // ✅ إشارة للإشعار في index.html
+                localStorage.setItem('newOrderTimestamp', Date.now());
+                
                 await autoDistributeAfterOrder();
                 await loadDayData();
             }
@@ -348,6 +340,9 @@
             if (await saveData()) {
                 renderOrders();
                 showToast(`✅ تم إضافة ${count} طلب ${material}`, 'success');
+                
+                // ✅ إشارة للإشعار في index.html
+                localStorage.setItem('newOrderTimestamp', Date.now());
                 
                 await autoDistributeAfterOrder();
                 await loadDayData();
@@ -499,7 +494,6 @@
             await loadDayData(); 
             showLoading(false); 
             
-            // قراءة معامل الفلتر من الرابط (للمدير فقط)
             const urlParams = new URLSearchParams(window.location.search);
             const filterFactory = urlParams.get('filter');
             if (filterFactory && currentUserRole !== 'client') {
