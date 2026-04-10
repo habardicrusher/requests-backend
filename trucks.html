@@ -6,6 +6,7 @@
     <title>السيارات - نظام إدارة طلبات كسارة الحبردي</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
+        /* نفس الأنماط السابقة مع إضافة زر مسح الكل */
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; }
         .container { max-width:1400px; margin:0 auto; padding:20px; }
@@ -48,6 +49,7 @@
         .upload-label { background:#4facfe; padding:10px 20px; border-radius:30px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; font-weight:bold; transition:0.3s; }
         .upload-label:hover { background:#2a7fbf; transform:scale(1.02); }
         .file-name { color:#a8b2d1; font-size:0.9em; }
+        .btn-clear { background:#eb3349; }
     </style>
 </head>
 <body>
@@ -74,6 +76,7 @@
                 📂 رفع ملف Excel/CSV
                 <input type="file" id="uploadFile" accept=".xlsx, .csv, .xls" style="display:none;" onchange="importTrucksFromFile(event)">
             </label>
+            <button class="btn btn-danger btn-clear" onclick="clearAllTrucks()">🗑️ مسح جميع السيارات</button>
             <span id="fileNameDisplay" class="file-name"></span>
         </div>
         <input type="text" class="search-box" id="truckSearch" placeholder="🔍 بحث..." onkeyup="renderTrucksGrid()">
@@ -97,6 +100,7 @@
         async function loadSettings() {
             const data = await apiCall('/settings');
             trucks = data.trucks || [];
+            console.log('✅ تم تحميل السيارات:', trucks.length);
         }
 
         async function loadTodayDistribution() {
@@ -227,16 +231,17 @@
                     
                     let addedCount = 0;
                     let duplicateCount = 0;
+                    let duplicateNumbers = [];
                     for (let i = 1; i < rows.length; i++) {
                         const row = rows[i];
                         if (!row || row.length < 2) continue;
                         let number = row[numberColIdx] ? String(row[numberColIdx]).trim() : '';
                         let driver = row[driverColIdx] ? String(row[driverColIdx]).trim() : '';
                         if (number === '' || driver === '') continue;
-                        // التحقق من التكرار
                         const existing = trucks.find(t => t.number === number);
                         if (existing) {
                             duplicateCount++;
+                            duplicateNumbers.push(number);
                             continue;
                         }
                         trucks.push({ number, driver });
@@ -245,9 +250,13 @@
                     if (addedCount > 0) {
                         await saveSettings();
                         await renderTrucksGrid();
-                        showToast(`✅ تم إضافة ${addedCount} سيارة جديدة (تم تخطي ${duplicateCount} مكررة)`, 'success');
+                        showToast(`✅ تم إضافة ${addedCount} سيارة جديدة (تم تخطي ${duplicateCount} مكررة: ${duplicateNumbers.slice(0,5).join(', ')}${duplicateCount>5?'...':''})`, 'success');
                     } else {
-                        showToast(`لم يتم إضافة أي سيارات جديدة (كلها مكررة أو غير صالحة)`, 'info');
+                        if (duplicateCount > 0) {
+                            showToast(`⚠️ لم تتم إضافة أي سيارة جديدة. كل السيارات الموجودة في الملف مكررة بالفعل (${duplicateCount} سيارة). يمكنك مسح السيارات الحالية أولاً ثم إعادة الرفع.`, 'warning');
+                        } else {
+                            showToast('لم يتم العثور على بيانات صالحة في الملف', 'error');
+                        }
                     }
                 } catch (err) {
                     console.error(err);
@@ -259,6 +268,22 @@
                 }
             };
             reader.readAsArrayBuffer(file);
+        }
+
+        // مسح جميع السيارات
+        async function clearAllTrucks() {
+            if (!confirm('⚠️ تحذير: هذا الإجراء سيمسح جميع السيارات الحالية. لا يمكن التراجع. هل أنت متأكد؟')) return;
+            showLoading(true);
+            try {
+                trucks = [];
+                await saveSettings();
+                await renderTrucksGrid();
+                showToast('✅ تم مسح جميع السيارات', 'success');
+            } catch (err) {
+                showToast('خطأ في المسح: ' + err.message, 'error');
+            } finally {
+                showLoading(false);
+            }
         }
 
         function openAddTruckModal() {
@@ -312,6 +337,7 @@
             await loadSettings();
             await loadTodayDistribution();
             await renderTrucksGrid();
+            console.log('عدد السيارات الحالية:', trucks.length);
             showLoading(false);
         });
     </script>
