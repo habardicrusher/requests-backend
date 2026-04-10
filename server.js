@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const path = require('path');
 const { pool } = require('./db');
@@ -7,6 +8,7 @@ const { pool } = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
@@ -24,28 +26,64 @@ require('./routes/userRoutes')(app);
 require('./routes/orderRoutes')(app);
 require('./routes/restrictionRoutes')(app);
 require('./routes/reportRoutes')(app);
-require('./routes/settingsRoutes')(app);   // <-- هذا السطر مهم
+require('./routes/settingsRoutes')(app);
 
 // ==================== صفحات HTML ====================
-app.get('/login.html', (req, res) => { res.sendFile(path.join(__dirname, 'login.html')); });
-app.get('/', (req, res) => {
-    if (req.session.user) res.redirect('/index.html');
-    else res.redirect('/login.html');
+app.get('/login.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'login.html'));
 });
-const protectedPages = ['index.html', 'orders.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html'];
-protectedPages.forEach(page => {
+
+app.get('/', (req, res) => {
+    if (req.session && req.session.user) {
+        // توجيه حسب الدور
+        if (req.session.user.role === 'client') {
+            res.redirect('/orders.html');
+        } else {
+            res.redirect('/index.html');
+        }
+    } else {
+        res.redirect('/login.html');
+    }
+});
+
+// الصفحات المحمية (باستثناء login)
+const allProtectedPages = ['index.html', 'orders.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html'];
+
+allProtectedPages.forEach(page => {
     app.get(`/${page}`, (req, res) => {
-        if (req.session.user) res.sendFile(path.join(__dirname, page));
-        else res.redirect('/login.html');
+        if (!req.session || !req.session.user) {
+            return res.redirect('/login.html');
+        }
+        const role = req.session.user.role;
+        // العملاء (clients) يسمح لهم فقط بـ orders.html
+        if (role === 'client') {
+            if (page === 'orders.html') {
+                res.sendFile(path.join(__dirname, page));
+            } else {
+                res.redirect('/orders.html');
+            }
+        }
+        // المدير (admin) والمستخدم العادي (user) يسمح لهم بكل الصفحات
+        else if (role === 'admin' || role === 'user') {
+            res.sendFile(path.join(__dirname, page));
+        }
+        else {
+            res.redirect('/login.html');
+        }
     });
 });
+
+// خدمة الملفات الثابتة (CSS, JS, images) مع منع الوصول المباشر لملفات HTML المحمية
 app.use(express.static(__dirname, {
     setHeaders: (res, filePath) => {
         const base = path.basename(filePath);
-        if ([...protectedPages, 'login.html'].includes(base)) res.status(404).end();
+        if (allProtectedPages.includes(base) || base === 'login.html') {
+            res.status(404).end();
+        }
     }
 }));
 
+// تشغيل السيرفر
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
