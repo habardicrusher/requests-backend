@@ -117,7 +117,7 @@
         let factoriesChart, materialsChart;
         let currentDate = new Date().toISOString().split('T')[0];
         let pendingOrdersCount = 0;
-        let lastOrderCount = 0;
+        let currentUserRole = null;
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
@@ -132,32 +132,31 @@
             const badge = document.getElementById('alertBadge');
             const countSpan = document.getElementById('alertCount');
             if (!badge) return;
-            if (pendingOrdersCount > 0) {
+            // الأيقونة تظهر فقط للمدير
+            if (currentUserRole === 'admin' && pendingOrdersCount > 0) {
                 badge.classList.remove('hidden');
                 countSpan.textContent = pendingOrdersCount;
-                console.log('✅ الأيقونة ظهرت بعدد:', pendingOrdersCount);
             } else {
                 badge.classList.add('hidden');
-                console.log('❌ الأيقونة مخفية');
             }
         }
 
         function incrementAlertCount() {
+            if (currentUserRole !== 'admin') return; // فقط المدير يزيد العداد
             pendingOrdersCount++;
             updateAlertBadge();
             playBeep();
             localStorage.setItem('pendingOrdersCount', pendingOrdersCount);
-            console.log('🔔 تم زيادة العداد إلى:', pendingOrdersCount);
         }
 
         function resetAlertCount() {
             pendingOrdersCount = 0;
             updateAlertBadge();
             localStorage.setItem('pendingOrdersCount', '0');
-            console.log('🔄 تم تصفير العداد');
         }
 
         function playBeep() {
+            if (currentUserRole !== 'admin') return;
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 if (AudioContext) {
@@ -173,13 +172,12 @@
                     gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
                     osc.stop(ctx.currentTime + 0.5);
                     setTimeout(() => ctx.close(), 600);
-                    console.log('🔊 تم تشغيل الصوت');
                 }
-            } catch(e) { console.log('⚠️ فشل تشغيل الصوت', e); }
+            } catch(e) {}
         }
 
         function goToDistribution() {
-            resetAlertCount(); // تصفير العداد قبل الانتقال
+            resetAlertCount();
             window.location.href = 'distribution.html';
         }
 
@@ -242,7 +240,7 @@
             } catch(e) { console.error('❌ خطأ في التوزيع التلقائي:', e); }
         }
 
-        async function loadDashboard(updateLastCount = true) {
+        async function loadDashboard() {
             showLoading(true);
             try {
                 const [settings, dayData] = await Promise.all([
@@ -277,16 +275,17 @@
                 }));
                 const tbody = document.getElementById('recentOrdersBody');
                 if (!recent.length) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
-                else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}</td><td>${o.factory}</td><td>${o.material}</td><td>${o.time}</td><td>${o.timestamp}</td></tr>`).join('');
+                else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
 
-                if (updateLastCount) {
-                    if (orders.length > lastOrderCount) {
-                        const newCount = orders.length - lastOrderCount;
-                        console.log(`🆕 تم اكتشاف ${newCount} طلب جديد (من ${lastOrderCount} إلى ${orders.length})`);
-                        for (let i = 0; i < newCount; i++) incrementAlertCount();
-                        await autoDistributeAfterOrder();
+                // تحديث العداد بناءً على الطلبات الجديدة (للمدير فقط)
+                if (currentUserRole === 'admin') {
+                    const storedCount = localStorage.getItem('pendingOrdersCount');
+                    if (storedCount && !isNaN(parseInt(storedCount))) {
+                        pendingOrdersCount = parseInt(storedCount);
+                    } else {
+                        pendingOrdersCount = 0;
                     }
-                    lastOrderCount = orders.length;
+                    updateAlertBadge();
                 }
             } catch(e) { console.error(e); showToast('خطأ في تحميل البيانات', 'error'); }
             showLoading(false);
@@ -318,23 +317,15 @@
         }
 
         async function manualCheckOrders() {
-            console.log('🔄 تحديث يدوي: جلب أحدث البيانات');
             showToast('جاري تحديث البيانات...', 'info');
-            await loadDashboard(true);
+            await loadDashboard();
             showToast('تم تحديث البيانات بنجاح', 'success');
         }
 
-        function startPolling() {
-            setTimeout(() => loadDashboard(true), 1000);
-            setInterval(async () => {
-                await loadDashboard(true);
-            }, 5000);
-            console.log('🚀 بدء مراقبة الطلبات الجديدة كل 5 ثوانٍ');
-        }
-
+        // الاستماع للإشارة من orders.html (عند إضافة طلب جديد)
         window.addEventListener('storage', function(e) {
             if (e.key === 'newOrderTimestamp') {
-                console.log('🔄 تم اكتشاف طلب جديد من orders.html عبر localStorage');
+                console.log('🔄 تم اكتشاف طلب جديد، جارٍ التحديث');
                 manualCheckOrders();
             }
         });
@@ -357,36 +348,43 @@
             }
         }
 
-        function loadNav() {
-            fetch('/api/me', { credentials: 'include' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.user) {
-                        const isAdmin = data.user.role === 'admin';
-                        document.getElementById('navLinks').innerHTML = isAdmin ? `
-                            <a href="index.html" class="nav-link active">📊 الرئيسية</a>
-                            <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-                            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                            <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                            <a href="reports.html" class="nav-link">📊 التقارير</a>
-                            <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                            <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                            <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                            <a href="logs.html" class="nav-link">📜 السجلات</a>
-                        ` : `<a href="orders.html" class="nav-link">📝 الطلبات</a>`;
-                    } else { window.location.href = '/login.html'; }
-                }).catch(() => { window.location.href = '/login.html'; });
+        async function loadNavAndUser() {
+            try {
+                const data = await apiCall('/me');
+                if (data.user) {
+                    currentUserRole = data.user.role;
+                    const isAdmin = currentUserRole === 'admin';
+                    document.getElementById('navLinks').innerHTML = isAdmin ? `
+                        <a href="index.html" class="nav-link active">📊 الرئيسية</a>
+                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                        <a href="reports.html" class="nav-link">📊 التقارير</a>
+                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                        <a href="logs.html" class="nav-link">📜 السجلات</a>
+                    ` : `<a href="orders.html" class="nav-link">📝 الطلبات</a>`;
+                    
+                    // إذا كان المستخدم ليس مديراً، نعيده إلى orders.html
+                    if (!isAdmin) {
+                        window.location.href = '/orders.html';
+                        return;
+                    }
+                } else {
+                    window.location.href = '/login.html';
+                }
+            } catch(e) { window.location.href = '/login.html'; }
         }
 
         document.addEventListener('DOMContentLoaded', async () => {
-            loadNav();
+            await loadNavAndUser();
             loadAlertCount();
             showLoading(true);
-            await loadDashboard(true);
+            await loadDashboard();
             showLoading(false);
-            startPolling();
         });
     </script>
 </body>
