@@ -115,7 +115,7 @@ function requireAdmin(req, res, next) {
     res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
 }
 
-// ==================== صلاحيات المستخدم العادي (يضيف طلبات فقط) ====================
+// ==================== صلاحيات المستخدم العادي ====================
 function getUserPermissions() {
     return {
         viewOrders: true, addOrders: true, editOrders: false, deleteOrders: false,
@@ -125,7 +125,7 @@ function getUserPermissions() {
     };
 }
 
-// ==================== قائمة عملاء المصانع ====================
+// ==================== قائمة عملاء المصانع (12 مستخدم) ====================
 const clientUsers = [
     { username: 'scccl_client', password: 'SCCCL@2025', factory: 'SCCCL' },
     { username: 'alharith_client', password: 'ALHarith@2025', factory: 'الحارث للمنتجات الاسمنيه' },
@@ -141,12 +141,21 @@ const clientUsers = [
     { username: 'alfahad', password: 'Fahad@2025', factory: 'الفهد للبلوك والخرسانة' }
 ];
 
+// ==================== قائمة المستخدمين الإضافيين (hassan, GM, إلخ) ====================
+const extraUsers = [
+    { username: 'hassan', password: '305075', role: 'user' },
+    { username: 'Abu Naji', password: '987654', role: 'user' },
+    { username: 'GM', password: 'GmDR@2026', role: 'user' },
+    { username: 'DrH', password: 'Account@2026', role: 'user' },
+    { username: 'Kasara', password: '20102026', role: 'user' }
+];
+
 // ==================== تهيئة البيانات ====================
 function initializeData() {
     let users = readJSON('users.json') || [];
     let updated = false;
 
-    // مستخدم Admin
+    // 1. مستخدم Admin
     if (!users.find(u => u.username === 'Admin')) {
         const hashedPassword = bcrypt.hashSync('Live#5050', 10);
         users.push({
@@ -163,7 +172,25 @@ function initializeData() {
         console.log('✅ Admin created: Admin / Live#5050');
     }
 
-    // إضافة عملاء المصانع
+    // 2. المستخدمين الإضافيين (hassan, GM, إلخ)
+    for (const extra of extraUsers) {
+        if (!users.find(u => u.username === extra.username)) {
+            const hashedPassword = bcrypt.hashSync(extra.password, 10);
+            users.push({
+                id: Date.now() + Math.random(),
+                username: extra.username,
+                password: hashedPassword,
+                role: extra.role,
+                factory: null,
+                permissions: getUserPermissions(),
+                createdAt: new Date().toISOString()
+            });
+            updated = true;
+            console.log(`✅ تم إضافة المستخدم: ${extra.username}`);
+        }
+    }
+
+    // 3. عملاء المصانع (12 مستخدم)
     for (const client of clientUsers) {
         if (!users.find(u => u.username === client.username)) {
             const hashedPassword = bcrypt.hashSync(client.password, 10);
@@ -183,6 +210,7 @@ function initializeData() {
 
     if (updated) writeJSON('users.json', users);
 
+    // إعدادات المصانع والمواد والمركبات
     let settings = readJSON('settings.json');
     if (!settings) {
         writeJSON('settings.json', defaultSettings);
@@ -244,7 +272,6 @@ app.get('/api/settings', requireAuth, (req, res) => {
     let settings = readJSON('settings.json') || defaultSettings;
     settings = migrateFactories(settings);
     
-    // إذا كان المستخدم عميلاً (ليس admin)، نرسل فقط مصنعه
     if (req.session.user.role !== 'admin' && req.session.user.factory) {
         const userFactory = settings.factories.find(f => f.name === req.session.user.factory);
         settings.factories = userFactory ? [userFactory] : [];
@@ -252,7 +279,6 @@ app.get('/api/settings', requireAuth, (req, res) => {
     res.json(settings);
 });
 
-// باقي الـ API Routes (بنفس الكود السابق)
 app.put('/api/settings', requireAuth, (req, res) => {
     if (req.session.user.role !== 'admin') {
         return res.status(403).json({ error: 'غير مصرح' });
