@@ -6,9 +6,13 @@
     <title>الرئيسية - نظام إدارة طلبات البحص</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* جميع الأنماط كما هي (لم تتغير) - مختصرة للاختصار */
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; position: relative; }
         .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
@@ -31,7 +35,6 @@
         .btn-sm { padding: 5px 10px; font-size: 0.8em; }
         .btn-info { background: #4facfe; color: #fff; }
         .btn-danger { background: #eb3349; color: #fff; }
-        .btn-warning { background: #f093fb; color: #fff; }
         .toast-container { position: fixed; top: 20px; left: 20px; z-index: 3000; }
         .toast { padding: 12px 20px; border-radius: 8px; margin-bottom: 10px; font-weight: 600; animation: slideIn 0.3s ease; }
         .toast-success { background: #11998e; }
@@ -41,9 +44,32 @@
         .loading.active { display: flex; }
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        .alert-badge { position: absolute; top: 15px; right: 20px; background: #eb3349; color: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.4em; cursor: pointer; box-shadow: 0 0 10px rgba(235,51,73,0.5); transition: all 0.3s ease; z-index: 100; animation: pulse 1s infinite; }
+        .alert-badge {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: #eb3349;
+            color: white;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.4em;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(235,51,73,0.5);
+            transition: all 0.3s ease;
+            z-index: 100;
+            animation: pulse 1s infinite;
+        }
         .alert-badge:hover { transform: scale(1.1); }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(235,51,73,0.7); } 70% { box-shadow: 0 0 0 15px rgba(235,51,73,0); } 100% { box-shadow: 0 0 0 0 rgba(235,51,73,0); } }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(235,51,73,0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(235,51,73,0); }
+            100% { box-shadow: 0 0 0 0 rgba(235,51,73,0); }
+        }
         .alert-badge.hidden { display: none; }
         @media (max-width:768px){ .charts-grid { grid-template-columns:1fr; } .chart-wrapper { height:250px; } }
     </style>
@@ -55,10 +81,9 @@
         <div class="header">
             <h1>📊 لوحة التحكم الرئيسية</h1>
             <p>نظام إدارة طلبات وتوزيع البحص</p>
-            <div style="position: absolute; top: 20px; left: 20px; display: flex; gap: 10px;">
+            <div style="position: absolute; top: 20px; left: 20px;">
                 <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
-                <button onclick="manualCheckOrders()" style="background: #4facfe; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🔄 تحديث يدوي</button>
-                <button onclick="testAlert()" style="background: #f093fb; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🔔 اختبار الإشعار</button>
+                <button onclick="manualCheckOrders()" style="background: #4facfe; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer; margin-right: 10px;">🔄 تحديث يدوي</button>
             </div>
             <div id="alertBadge" class="alert-badge hidden" onclick="goToDistribution()">
                 <span id="alertCount">0</span>
@@ -80,7 +105,10 @@
 
         <div class="recent-orders">
             <h3>📋 آخر 10 طلبات اليوم</h3>
-            <table id="recentOrdersTable"><thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>التوقيت</th><th>وقت الإضافة</th></tr></thead><tbody id="recentOrdersBody"></tbody></table>
+            <table id="recentOrdersTable">
+                <thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>التوقيت</th><th>وقت الإضافة</th></tr></thead>
+                <tbody id="recentOrdersBody"></tbody>
+            </table>
         </div>
     </div>
 
@@ -151,13 +179,8 @@
         }
 
         function goToDistribution() {
-            resetAlertCount();
+            resetAlertCount(); // تصفير العداد قبل الانتقال
             window.location.href = 'distribution.html';
-        }
-
-        function testAlert() {
-            console.log('🧪 زر الاختبار: زيادة العداد يدوياً');
-            incrementAlertCount();
         }
 
         function loadAlertCount() {
@@ -254,9 +277,8 @@
                 }));
                 const tbody = document.getElementById('recentOrdersBody');
                 if (!recent.length) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
-                else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
+                else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}</td><td>${o.factory}</td><td>${o.material}</td><td>${o.time}</td><td>${o.timestamp}</td></tr>`).join('');
 
-                // تحديث lastOrderCount إذا طلبنا ذلك
                 if (updateLastCount) {
                     if (orders.length > lastOrderCount) {
                         const newCount = orders.length - lastOrderCount;
@@ -303,20 +325,17 @@
         }
 
         function startPolling() {
-            // فحص فوري أول مرة
             setTimeout(() => loadDashboard(true), 1000);
-            // ثم كل 5 ثوانٍ
             setInterval(async () => {
                 await loadDashboard(true);
             }, 5000);
             console.log('🚀 بدء مراقبة الطلبات الجديدة كل 5 ثوانٍ');
         }
 
-        // استماع للإشارة من orders.html (بين التبويبات)
         window.addEventListener('storage', function(e) {
             if (e.key === 'newOrderTimestamp') {
                 console.log('🔄 تم اكتشاف طلب جديد من orders.html عبر localStorage');
-                manualCheckOrders(); // يقوم بفحص فوري
+                manualCheckOrders();
             }
         });
 
@@ -365,7 +384,7 @@
             loadNav();
             loadAlertCount();
             showLoading(true);
-            await loadDashboard(true); // load with update
+            await loadDashboard(true);
             showLoading(false);
             startPolling();
         });
