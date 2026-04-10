@@ -45,7 +45,6 @@
         .loading.active { display: flex; }
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
-        /* قسم الإشعارات في الأعلى */
         .notifications-section {
             background: rgba(255,255,255,0.05);
             border-radius: 15px;
@@ -60,21 +59,9 @@
             flex-wrap: wrap;
             gap: 10px;
         }
-        .notifications-header h3 {
-            color: #667eea;
-            margin: 0;
-        }
-        .notif-badge {
-            background: #f5576c;
-            border-radius: 20px;
-            padding: 2px 8px;
-            font-size: 0.7em;
-            margin-right: 8px;
-        }
-        .notifications-list {
-            max-height: 250px;
-            overflow-y: auto;
-        }
+        .notifications-header h3 { color: #667eea; margin: 0; }
+        .notif-badge { background: #f5576c; border-radius: 20px; padding: 2px 8px; font-size: 0.7em; margin-right: 8px; }
+        .notifications-list { max-height: 250px; overflow-y: auto; }
         .notification-item {
             padding: 12px;
             margin-bottom: 8px;
@@ -85,28 +72,12 @@
             cursor: pointer;
             transition: all 0.3s ease;
         }
-        .notification-item:hover {
-            transform: translateX(-5px);
-        }
-        .notification-item.unread {
-            background: rgba(102,126,234,0.2);
-            border-right: 3px solid #38ef7d;
-        }
-        .notification-item.read {
-            background: rgba(255,255,255,0.03);
-            border-right: 3px solid #4facfe;
-        }
-        .notifications-list::-webkit-scrollbar {
-            width: 6px;
-        }
-        .notifications-list::-webkit-scrollbar-track {
-            background: rgba(255,255,255,0.1);
-            border-radius: 10px;
-        }
-        .notifications-list::-webkit-scrollbar-thumb {
-            background: #667eea;
-            border-radius: 10px;
-        }
+        .notification-item:hover { transform: translateX(-5px); }
+        .notification-item.unread { background: rgba(102,126,234,0.2); border-right: 3px solid #38ef7d; }
+        .notification-item.read { background: rgba(255,255,255,0.03); border-right: 3px solid #4facfe; }
+        .notifications-list::-webkit-scrollbar { width: 6px; }
+        .notifications-list::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .notifications-list::-webkit-scrollbar-thumb { background: #667eea; border-radius: 10px; }
         @media (max-width:768px){ .charts-grid { grid-template-columns:1fr; } .chart-wrapper { height:250px; } }
     </style>
 </head>
@@ -123,7 +94,6 @@
         </div>
         <div class="nav-links" id="navLinks"></div>
 
-        <!-- ==================== قسم الإشعارات في الأعلى ==================== -->
         <div class="notifications-section" id="notificationsSection" style="display: none;">
             <div class="notifications-header">
                 <h3>🔔 الإشعارات <span id="notifCount" class="notif-badge">0</span></h3>
@@ -137,7 +107,6 @@
             </div>
         </div>
 
-        <!-- الإحصائيات -->
         <div class="stats-grid">
             <div class="stat-card"><h3 id="totalOrders">0</h3><p>📋 إجمالي الطلبات اليوم</p></div>
             <div class="stat-card"><h3 id="totalTrips">0</h3><p>🚚 الرحلات الموزعة</p></div>
@@ -145,16 +114,14 @@
             <div class="stat-card"><h3 id="completedPercentage">0%</h3><p>📈 نسبة الإنجاز</p></div>
         </div>
 
-        <!-- الرسوم البيانية -->
         <div class="charts-grid">
             <div class="chart-container"><h3>📈 توزيع الطلبات حسب المصنع</h3><div class="chart-wrapper"><canvas id="factoriesChart"></canvas></div></div>
             <div class="chart-container"><h3>📦 توزيع الطلبات حسب نوع البحص</h3><div class="chart-wrapper"><canvas id="materialsChart"></canvas></div></div>
         </div>
 
-        <!-- آخر الطلبات -->
         <div class="recent-orders">
             <h3>📋 آخر 10 طلبات اليوم</h3>
-            <table id="recentOrdersTable">
+            <table>
                 <thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>التوقيت</th><th>وقت الإضافة</th></tr></thead>
                 <tbody id="recentOrdersBody"></tbody>
             </table>
@@ -184,9 +151,7 @@
             return value;
         }
 
-        function formatTime(time) {
-            return cleanValue(time, '—');
-        }
+        function formatTime(time) { return cleanValue(time, '—'); }
 
         async function loadDashboard() {
             showLoading(true);
@@ -209,16 +174,9 @@
                 document.getElementById('completedPercentage').textContent = percentage + '%';
                 
                 const factoryStats = {};
-                orders.forEach(order => {
-                    const factory = cleanValue(order.factory, 'غير محدد');
-                    factoryStats[factory] = (factoryStats[factory] || 0) + 1;
-                });
-                
+                orders.forEach(order => { const factory = cleanValue(order.factory, 'غير محدد'); factoryStats[factory] = (factoryStats[factory] || 0) + 1; });
                 const materialStats = {};
-                orders.forEach(order => {
-                    const material = cleanValue(order.material, 'غير محدد');
-                    materialStats[material] = (materialStats[material] || 0) + 1;
-                });
+                orders.forEach(order => { const material = cleanValue(order.material, 'غير محدد'); materialStats[material] = (materialStats[material] || 0) + 1; });
                 
                 renderFactoriesChart(factoryStats);
                 renderMaterialsChart(materialStats);
@@ -230,7 +188,6 @@
                     timestamp: cleanValue(order.timestamp, 'غير محدد')
                 }));
                 renderRecentOrders(recent);
-                
             } catch (error) {
                 console.error(error);
                 showToast('خطأ في تحميل البيانات', 'error');
@@ -265,22 +222,18 @@
         
         function renderRecentOrders(orders) {
             const tbody = document.getElementById('recentOrdersBody');
-            if (!orders.length) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم</td></tr>';
-                return;
-            }
-            tbody.innerHTML = orders.map((order, i) => `
-                <tr>
-                    <td>${i+1}</td>
-                    <td>${order.factory}</td>
-                    <td>${order.material}</td>
-                    <td>${order.time}</td>
-                    <td>${order.timestamp}</td>
-                </tr>
-            `).join('');
+            if (!orders.length) { tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>'; return; }
+            tbody.innerHTML = orders.map((order, i) => `<tr><td>${i+1}</td><td>${order.factory}</td><td>${order.material}</td><td>${order.time}</td><td>${order.timestamp}</td><\/tr>`).join('');
         }
         
-        // ==================== دوال الإشعارات (معدلة بالكامل) ====================
+        // ==================== دوال الإشعارات ====================
+        function goToOrdersWithFilter(factory) {
+            window.location.href = `orders.html?filter=${encodeURIComponent(factory)}`;
+        }
+        
+        function goToDistributionPage() {
+            window.location.href = 'distribution.html';
+        }
         
         function renderNotifications() {
             if (!notificationsSection) return;
@@ -301,13 +254,12 @@
             }
             
             container.innerHTML = notifications.items.map(n => {
-                // إشعار توزيع
                 if (n.type === 'distribution') {
                     return `
                         <div class="notification-item ${n.read ? 'read' : 'unread'}" onclick="goToDistributionPage()">
                             <div style="flex:1">
                                 <div style="font-weight:bold">🔄 ${n.title || 'توزيع تلقائي'}</div>
-                                <div>${n.message || ''}</div>
+                                <div>📊 ${n.message || ''}</div>
                                 <div style="font-size:0.75em;color:#a8b2d1">🕐 ${n.timestamp}</div>
                             </div>
                             <div onclick="event.stopPropagation()">
@@ -316,14 +268,12 @@
                             </div>
                         </div>
                     `;
-                } 
-                // إشعار طلب عادي
-                else {
+                } else {
                     return `
                         <div class="notification-item ${n.read ? 'read' : 'unread'}" onclick="goToOrdersWithFilter('${n.factory}')">
                             <div style="flex:1">
                                 <div style="font-weight:bold">📋 ${n.factory} - ${n.material} ${n.count > 1 ? `(${n.count} طلبات)` : ''}</div>
-                                ${n.distributionInfo ? `<div style="font-size:0.75em;color:#38ef7d">${n.distributionInfo}</div>` : ''}
+                                <div style="font-size:0.75em;color:#38ef7d">✅ تم توزيعها تلقائياً</div>
                                 <div style="font-size:0.75em;color:#a8b2d1">🕐 ${n.timestamp}</div>
                             </div>
                             <div onclick="event.stopPropagation()">
@@ -334,16 +284,6 @@
                     `;
                 }
             }).join('');
-        }
-        
-        // دالة للذهاب إلى صفحة الطلبات مع فلتر المصنع
-        function goToOrdersWithFilter(factory) {
-            window.location.href = `orders.html?filter=${encodeURIComponent(factory)}`;
-        }
-        
-        // دالة للذهاب إلى صفحة التوزيع
-        function goToDistributionPage() {
-            window.location.href = 'distribution.html';
         }
         
         function markNotificationRead(id) {
@@ -364,12 +304,9 @@
         function toggleNotificationSound() {
             const enabled = notifications.toggleSound();
             const btn = document.getElementById('soundBtn');
-            if (btn) {
-                btn.innerHTML = enabled ? '🔊 الصوت مفعل' : '🔇 الصوت معطل';
-            }
+            if (btn) btn.innerHTML = enabled ? '🔊 الصوت مفعل' : '🔇 الصوت معطل';
         }
         
-        // ==================== دوال عامة ====================
         function showToast(msg, type) {
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
@@ -379,70 +316,47 @@
             setTimeout(() => toast.remove(), 3000);
         }
         
-        function showLoading(show) {
-            document.getElementById('loading').classList.toggle('active', show);
-        }
+        function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
         
         function logout() {
-            if (confirm('تسجيل الخروج؟')) {
-                fetch('/api/logout', { method: 'POST', credentials: 'include' })
-                    .then(() => window.location.href = '/login.html');
-            }
+            if (confirm('تسجيل الخروج؟')) fetch('/api/logout', { method: 'POST', credentials: 'include' }).then(() => window.location.href = '/login.html');
         }
         
         function loadNav() {
-            fetch('/api/me', { credentials: 'include' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.user) {
-                        const isAdmin = data.user.role === 'admin';
-                        document.getElementById('navLinks').innerHTML = isAdmin ? `
-                            <a href="index.html" class="nav-link active">📊 الرئيسية</a>
-                            <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-                            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                            <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                            <a href="reports.html" class="nav-link">📊 التقارير</a>
-                            <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                            <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                            <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                            <a href="logs.html" class="nav-link">📜 السجلات</a>
-                        ` : `
-                            <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                        `;
-                    } else {
-                        window.location.href = '/login.html';
-                    }
-                })
-                .catch(() => { window.location.href = '/login.html'; });
+            fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(data => {
+                if (data.user) {
+                    const isAdmin = data.user.role === 'admin';
+                    document.getElementById('navLinks').innerHTML = isAdmin ? `
+                        <a href="index.html" class="nav-link active">📊 الرئيسية</a>
+                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                        <a href="reports.html" class="nav-link">📊 التقارير</a>
+                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                        <a href="logs.html" class="nav-link">📜 السجلات</a>
+                    ` : `<a href="orders.html" class="nav-link">📝 الطلبات</a>`;
+                } else { window.location.href = '/login.html'; }
+            }).catch(() => { window.location.href = '/login.html'; });
         }
         
-        // ==================== تهيئة الصفحة ====================
         document.addEventListener('DOMContentLoaded', async () => {
             loadNav();
             showLoading(true);
             await loadDashboard();
             showLoading(false);
             
-            // تهيئة الإشعارات
             if (typeof notifications !== 'undefined') {
-                // تعيين دالة العرض
                 window.renderNotifications = renderNotifications;
                 renderNotifications();
-                
-                // إعداد زر الصوت
                 const soundEnabled = localStorage.getItem('soundEnabled');
                 if (soundEnabled !== null) notifications.audioEnabled = soundEnabled === 'true';
                 const soundBtn = document.getElementById('soundBtn');
-                if (soundBtn) {
-                    soundBtn.innerHTML = notifications.audioEnabled ? '🔊 الصوت مفعل' : '🔇 الصوت معطل';
-                }
-                
-                // الاستماع للتغييرات
-                if (notifications.addListener) {
-                    notifications.addListener(() => renderNotifications());
-                }
+                if (soundBtn) soundBtn.innerHTML = notifications.audioEnabled ? '🔊 الصوت مفعل' : '🔇 الصوت معطل';
+                if (notifications.addListener) notifications.addListener(() => renderNotifications());
             }
         });
     </script>
