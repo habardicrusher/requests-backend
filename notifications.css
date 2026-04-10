@@ -1,0 +1,21 @@
+/* notifications.css */
+.notification-item {
+    transition: all 0.3s ease;
+}
+.notification-item:hover {
+    transform: translateX(-5px);
+}
+.notification-item.unread {
+    border-right-color: #38ef7d !important;
+}
+#notificationsList::-webkit-scrollbar {
+    width: 6px;
+}
+#notificationsList::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+}
+#notificationsList::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 10px;
+}
