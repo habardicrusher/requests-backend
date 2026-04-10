@@ -26,57 +26,120 @@ const notifications = {
                 osc.frequency.value = 880;
                 gain.gain.value = 0.2;
                 osc.start();
-                gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
-                osc.stop(ctx.currentTime + 0.5);
+                gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
+                osc.stop(ctx.currentTime + 0.8);
                 setTimeout(() => ctx.close(), 600);
             }
         } catch(e) {}
     },
 
-    add: function(order) {
+    // إضافة إشعار طلب جديد مع التوزيع
+    addOrderWithDistribution: function(order, distributionResult) {
         const existing = this.items.find(n => !n.read && n.factory === order.factory && n.material === order.material);
+        let notification;
+        
+        const distributionInfo = distributionResult ? 
+            `✅ تم التوزيع: ${distributionResult.totalDistributed} طلب على ${distributionResult.trucksUsed} سيارة (آخر رود ${distributionResult.lastRoad})` : 
+            '⚠️ لم يتم التوزيع بعد';
+        
         if (existing) {
             existing.count++;
+            existing.distributionInfo = distributionInfo;
             existing.timestamp = new Date().toLocaleTimeString('ar-SA');
+            notification = existing;
         } else {
-            this.items.unshift({
+            notification = {
                 id: Date.now(),
+                type: 'order',
                 factory: order.factory,
                 material: order.material,
-                count: 1,
+                count: order.count || 1,
+                distributionInfo: distributionInfo,
                 timestamp: new Date().toLocaleTimeString('ar-SA'),
                 read: false
-            });
+            };
+            this.items.unshift(notification);
         }
+        
         if (this.items.length > 50) this.items.pop();
         localStorage.setItem('gravel_notifications', JSON.stringify(this.items));
         this.playBeep();
-        this.showPopup(order);
+        this.showPopup(order, distributionResult);
+        this.updateBadge();
+        if (window.renderNotifications) window.renderNotifications();
+        return notification;
+    },
+    
+    // إضافة إشعار توزيع عام
+    addDistributionNotification: function(result) {
+        const notification = {
+            id: Date.now(),
+            type: 'distribution',
+            title: '🔄 توزيع تلقائي',
+            message: `تم توزيع ${result.totalOrders} طلب على ${result.trucksUsed} سيارة (الرود ${result.lastRoad})`,
+            details: result.details,
+            timestamp: new Date().toLocaleTimeString('ar-SA'),
+            read: false
+        };
+        this.items.unshift(notification);
+        localStorage.setItem('gravel_notifications', JSON.stringify(this.items));
+        this.playBeep();
+        this.showDistributionPopup(result);
         this.updateBadge();
         if (window.renderNotifications) window.renderNotifications();
     },
 
-    showPopup: function(order) {
+    showPopup: function(order, distributionResult) {
         let container = document.getElementById('notifyPopup');
         if (!container) {
             container = document.createElement('div');
             container.id = 'notifyPopup';
-            container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;background:#1a1a2e;border-right:4px solid #38ef7d;border-radius:12px;padding:15px;box-shadow:0 4px 15px rgba(0,0,0,0.3);min-width:280px;direction:rtl';
+            container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;background:#1a1a2e;border-right:4px solid #38ef7d;border-radius:12px;padding:15px;box-shadow:0 4px 15px rgba(0,0,0,0.3);min-width:300px;direction:rtl';
             document.body.appendChild(container);
         }
+        
+        const distText = distributionResult ? 
+            `<div style="font-size:0.75em;color:#38ef7d;margin-top:5px;">✅ توزيع: ${distributionResult.totalDistributed} طلب على ${distributionResult.trucksUsed} سيارة</div>` : '';
+        
         container.innerHTML = `
             <div style="display:flex;align-items:center;gap:12px">
-                <div style="font-size:28px">🔔</div>
+                <div style="font-size:28px">📋</div>
                 <div style="flex:1">
                     <div style="font-weight:bold">طلب جديد!</div>
                     <div>🏭 ${order.factory}</div>
                     <div>📦 ${order.material}</div>
-                    <div style="font-size:0.75em;color:#a8b2d1">${new Date().toLocaleTimeString('ar-SA')}</div>
+                    <div>🔢 ${order.count || 1} طلب</div>
+                    ${distText}
+                    <div style="font-size:0.7em;color:#a8b2d1;margin-top:5px">${new Date().toLocaleTimeString('ar-SA')}</div>
                 </div>
                 <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer">✕</button>
             </div>
         `;
-        setTimeout(() => { if(container) container.remove(); }, 5000);
+        setTimeout(() => { if(container && container.parentElement) container.remove(); }, 8000);
+    },
+    
+    showDistributionPopup: function(result) {
+        let container = document.getElementById('notifyPopup');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'notifyPopup';
+            container.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;background:#1a1a2e;border-right:4px solid #4facfe;border-radius:12px;padding:15px;box-shadow:0 4px 15px rgba(0,0,0,0.3);min-width:300px;direction:rtl';
+            document.body.appendChild(container);
+        }
+        container.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px">
+                <div style="font-size:28px">🔄</div>
+                <div style="flex:1">
+                    <div style="font-weight:bold">توزيع تلقائي!</div>
+                    <div>📊 تم توزيع ${result.totalOrders} طلب</div>
+                    <div>🚛 على ${result.trucksUsed} سيارة</div>
+                    <div>🔄 الرود ${result.lastRoad}</div>
+                    <div style="font-size:0.7em;color:#a8b2d1;margin-top:5px">${new Date().toLocaleTimeString('ar-SA')}</div>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:#fff;cursor:pointer">✕</button>
+            </div>
+        `;
+        setTimeout(() => { if(container && container.parentElement) container.remove(); }, 8000);
     },
 
     updateBadge: function() {
@@ -86,19 +149,28 @@ const notifications = {
     },
 
     startPolling: function() {
-        let lastId = localStorage.getItem('lastOrderId') || '';
+        let lastNotifiedId = localStorage.getItem('lastNotifiedOrderId') || '';
         setInterval(async () => {
             try {
                 const today = new Date().toISOString().split('T')[0];
                 const res = await fetch(`/api/day/${today}`, { credentials: 'include' });
                 const data = await res.json();
                 const orders = data.orders || [];
-                if (orders.length > 0 && orders[0].id !== lastId) {
-                    this.add(orders[0]);
-                    localStorage.setItem('lastOrderId', orders[0].id);
+                if (orders.length > 0 && orders[0].id !== lastNotifiedId) {
+                    const newOrder = orders[0];
+                    // جلب التوزيع الحالي
+                    const distRes = await fetch(`/api/day/${today}`, { credentials: 'include' });
+                    const distData = await distRes.json();
+                    const distribution = distData.distribution || [];
+                    this.addOrderWithDistribution(newOrder, {
+                        totalDistributed: distribution.length,
+                        trucksUsed: new Set(distribution.map(d => d.truck?.number)).size,
+                        lastRoad: distribution.length ? Math.max(...distribution.map(d => d.road)) : 0
+                    });
+                    localStorage.setItem('lastNotifiedOrderId', orders[0].id);
                 }
             } catch(e) {}
-        }, 10000);
+        }, 8000);
     },
 
     getUnread: function() { return this.items.filter(n => !n.read); },
