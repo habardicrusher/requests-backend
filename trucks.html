@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>السيارات - نظام إدارة طلبات كسارة الحبردي</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; }
@@ -27,6 +28,7 @@
         .btn-success { background:linear-gradient(135deg,#11998e,#38ef7d); color:#fff; }
         .btn-warning { background:linear-gradient(135deg,#f093fb,#f5576c); color:#fff; }
         .btn-danger { background:linear-gradient(135deg,#eb3349,#f45c43); color:#fff; }
+        .btn-info { background:#4facfe; color:#fff; }
         .btn-sm { padding:6px 12px; font-size:0.9em; }
         .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); align-items:center; justify-content:center; z-index:1000; }
         .modal.active { display:flex; }
@@ -42,7 +44,10 @@
         .loading.active { display:flex; }
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation:spin 1s linear infinite; }
         @keyframes spin { to { transform:rotate(360deg); } }
-        .warning-message { background: rgba(235,51,73,0.2); border-right: 3px solid #eb3349; padding: 12px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .upload-section { display:flex; gap:15px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+        .upload-label { background:#4facfe; padding:10px 20px; border-radius:30px; cursor:pointer; display:inline-flex; align-items:center; gap:8px; font-weight:bold; transition:0.3s; }
+        .upload-label:hover { background:#2a7fbf; transform:scale(1.02); }
+        .file-name { color:#a8b2d1; font-size:0.9em; }
     </style>
 </head>
 <body>
@@ -62,13 +67,15 @@
             <a href="reports.html" class="nav-link">📊 التقارير</a>
             <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
         </div>
-        
-        <div id="warningMessage" style="display: none;" class="warning-message">
-            ⚠️ لا توجد سيارات مسجلة. الرجاء إضافة سيارات لإتمام عملية التوزيع.
-        </div>
-
         <div class="stats-grid" id="statsGrid"></div>
-        <button class="btn btn-success" onclick="openAddTruckModal()">➕ إضافة سيارة</button>
+        <div class="upload-section">
+            <button class="btn btn-success" onclick="openAddTruckModal()">➕ إضافة سيارة</button>
+            <label class="upload-label">
+                📂 رفع ملف Excel/CSV
+                <input type="file" id="uploadFile" accept=".xlsx, .csv, .xls" style="display:none;" onchange="importTrucksFromFile(event)">
+            </label>
+            <span id="fileNameDisplay" class="file-name"></span>
+        </div>
         <input type="text" class="search-box" id="truckSearch" placeholder="🔍 بحث..." onkeyup="renderTrucksGrid()">
         <div class="trucks-grid" id="trucksGrid"></div>
     </div>
@@ -90,11 +97,6 @@
         async function loadSettings() {
             const data = await apiCall('/settings');
             trucks = data.trucks || [];
-            if (trucks.length === 0) {
-                document.getElementById('warningMessage').style.display = 'block';
-            } else {
-                document.getElementById('warningMessage').style.display = 'none';
-            }
         }
 
         async function loadTodayDistribution() {
@@ -107,12 +109,6 @@
             const currentSettings = await apiCall('/settings');
             const settings = { factories: currentSettings.factories, materials: currentSettings.materials, trucks };
             await apiCall('/settings', 'PUT', settings);
-            // تحديث التحذير
-            if (trucks.length === 0) {
-                document.getElementById('warningMessage').style.display = 'block';
-            } else {
-                document.getElementById('warningMessage').style.display = 'none';
-            }
         }
 
         function getRoadStats() {
@@ -124,9 +120,7 @@
                 }
             });
             const stats = {};
-            for (let [road, trucksSet] of roadTrucks.entries()) {
-                stats[road] = trucksSet.size;
-            }
+            for (let [road, trucksSet] of roadTrucks.entries()) stats[road] = trucksSet.size;
             const usedTrucks = new Set();
             distribution.forEach(d => { if (d.truck) usedTrucks.add(d.truck.number); });
             const available = trucks.length - usedTrucks.size;
@@ -197,6 +191,74 @@
                         </div>`;
             }).join('');
             renderStatsGrid();
+        }
+
+        // استيراد السيارات من ملف Excel/CSV
+        async function importTrucksFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const fileNameSpan = document.getElementById('fileNameDisplay');
+            fileNameSpan.textContent = file.name;
+            
+            showLoading(true);
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+                    if (!rows || rows.length < 2) {
+                        showToast('الملف فارغ أو لا يحتوي على بيانات', 'error');
+                        showLoading(false);
+                        return;
+                    }
+                    // محاولة تحديد أسماء الأعمدة (الصف الأول)
+                    const headers = rows[0].map(cell => String(cell || '').trim().toLowerCase());
+                    let numberColIdx = -1, driverColIdx = -1;
+                    for (let i = 0; i < headers.length; i++) {
+                        const h = headers[i];
+                        if (h.includes('رقم') || h === 'number' || h === 'num' || h === 'id') numberColIdx = i;
+                        if (h.includes('سائق') || h === 'driver' || h === 'name') driverColIdx = i;
+                    }
+                    // إذا لم نجد العناوين، نفترض أن العمود الأول رقم والثاني سائق
+                    if (numberColIdx === -1) numberColIdx = 0;
+                    if (driverColIdx === -1) driverColIdx = 1;
+                    
+                    let addedCount = 0;
+                    let duplicateCount = 0;
+                    for (let i = 1; i < rows.length; i++) {
+                        const row = rows[i];
+                        if (!row || row.length < 2) continue;
+                        let number = row[numberColIdx] ? String(row[numberColIdx]).trim() : '';
+                        let driver = row[driverColIdx] ? String(row[driverColIdx]).trim() : '';
+                        if (number === '' || driver === '') continue;
+                        // التحقق من التكرار
+                        const existing = trucks.find(t => t.number === number);
+                        if (existing) {
+                            duplicateCount++;
+                            continue;
+                        }
+                        trucks.push({ number, driver });
+                        addedCount++;
+                    }
+                    if (addedCount > 0) {
+                        await saveSettings();
+                        await renderTrucksGrid();
+                        showToast(`✅ تم إضافة ${addedCount} سيارة جديدة (تم تخطي ${duplicateCount} مكررة)`, 'success');
+                    } else {
+                        showToast(`لم يتم إضافة أي سيارات جديدة (كلها مكررة أو غير صالحة)`, 'info');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    showToast('خطأ في قراءة الملف: ' + err.message, 'error');
+                } finally {
+                    showLoading(false);
+                    event.target.value = '';
+                    setTimeout(() => { fileNameSpan.textContent = ''; }, 3000);
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         function openAddTruckModal() {
