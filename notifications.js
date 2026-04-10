@@ -14,7 +14,6 @@ const notifications = {
         this.getCurrentUserRole();
     },
 
-    // جلب دور المستخدم الحالي
     async getCurrentUserRole() {
         try {
             const res = await fetch('/api/me', { credentials: 'include' });
@@ -26,14 +25,13 @@ const notifications = {
         } catch(e) {}
     },
 
-    // التحقق مما إذا كان المستخدم يستحق الإشعارات (مدير أو مستخدم عادي، وليس عميل)
     shouldNotify() {
         return this.currentUserRole === 'admin' || this.currentUserRole === 'user';
     },
 
     playBeep: function() {
         if (!this.audioEnabled) return;
-        if (!this.shouldNotify()) return; // لا صوت للعملاء
+        if (!this.shouldNotify()) return;
         
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -54,22 +52,22 @@ const notifications = {
         } catch(e) {}
     },
 
-    // إضافة إشعار طلب جديد مع التوزيع
     addOrderWithDistribution: function(order, distributionResult) {
-        // لا نضيف إشعارات للعملاء
         if (!this.shouldNotify()) return null;
         
         const existing = this.items.find(n => !n.read && n.factory === order.factory && n.material === order.material);
         let notification;
         
         const distributionInfo = distributionResult ? 
-            `✅ تم التوزيع: ${distributionResult.totalDistributed} طلب على ${distributionResult.trucksUsed} سيارة (آخر رود ${distributionResult.lastRoad})` : 
+            `✅ تم التوزيع: ${distributionResult.totalDistributed} طلب` : 
             '⚠️ لم يتم التوزيع بعد';
         
         if (existing) {
             existing.count++;
             existing.distributionInfo = distributionInfo;
             existing.timestamp = new Date().toLocaleTimeString('ar-SA');
+            existing.factory = order.factory;
+            existing.material = order.material;
             notification = existing;
         } else {
             notification = {
@@ -94,7 +92,6 @@ const notifications = {
         return notification;
     },
     
-    // إضافة إشعار توزيع عام
     addDistributionNotification: function(result) {
         if (!this.shouldNotify()) return null;
         
@@ -103,7 +100,9 @@ const notifications = {
             type: 'distribution',
             title: '🔄 توزيع تلقائي',
             message: `تم توزيع ${result.totalOrders} طلب على ${result.trucksUsed} سيارة (الرود ${result.lastRoad})`,
-            details: result.details,
+            totalOrders: result.totalOrders,
+            trucksUsed: result.trucksUsed,
+            lastRoad: result.lastRoad,
             timestamp: new Date().toLocaleTimeString('ar-SA'),
             read: false
         };
@@ -127,7 +126,7 @@ const notifications = {
         }
         
         const distText = distributionResult ? 
-            `<div style="font-size:0.75em;color:#38ef7d;margin-top:5px;">✅ توزيع: ${distributionResult.totalDistributed} طلب على ${distributionResult.trucksUsed} سيارة</div>` : '';
+            `<div style="font-size:0.75em;color:#38ef7d;margin-top:5px;">✅ توزيع: ${distributionResult.totalDistributed} طلب</div>` : '';
         
         container.innerHTML = `
             <div style="display:flex;align-items:center;gap:12px">
