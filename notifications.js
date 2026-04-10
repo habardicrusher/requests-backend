@@ -1,7 +1,8 @@
-// notifications.js - نظام الإشعارات
+// notifications.js - نظام الإشعارات (للمدير والمستخدمين الداخليين فقط)
 const notifications = {
     items: [],
     audioEnabled: true,
+    currentUserRole: null,
 
     init: function() {
         const saved = localStorage.getItem('gravel_notifications');
@@ -10,10 +11,30 @@ const notifications = {
         }
         this.updateBadge();
         this.startPolling();
+        this.getCurrentUserRole();
+    },
+
+    // جلب دور المستخدم الحالي
+    async getCurrentUserRole() {
+        try {
+            const res = await fetch('/api/me', { credentials: 'include' });
+            const data = await res.json();
+            if (data.user) {
+                this.currentUserRole = data.user.role;
+                console.log('User role:', this.currentUserRole);
+            }
+        } catch(e) {}
+    },
+
+    // التحقق مما إذا كان المستخدم يستحق الإشعارات (مدير أو مستخدم عادي، وليس عميل)
+    shouldNotify() {
+        return this.currentUserRole === 'admin' || this.currentUserRole === 'user';
     },
 
     playBeep: function() {
         if (!this.audioEnabled) return;
+        if (!this.shouldNotify()) return; // لا صوت للعملاء
+        
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) {
@@ -26,8 +47,8 @@ const notifications = {
                 osc.frequency.value = 880;
                 gain.gain.value = 0.2;
                 osc.start();
-                gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
-                osc.stop(ctx.currentTime + 0.8);
+                gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+                osc.stop(ctx.currentTime + 0.5);
                 setTimeout(() => ctx.close(), 600);
             }
         } catch(e) {}
@@ -35,6 +56,9 @@ const notifications = {
 
     // إضافة إشعار طلب جديد مع التوزيع
     addOrderWithDistribution: function(order, distributionResult) {
+        // لا نضيف إشعارات للعملاء
+        if (!this.shouldNotify()) return null;
+        
         const existing = this.items.find(n => !n.read && n.factory === order.factory && n.material === order.material);
         let notification;
         
@@ -72,6 +96,8 @@ const notifications = {
     
     // إضافة إشعار توزيع عام
     addDistributionNotification: function(result) {
+        if (!this.shouldNotify()) return null;
+        
         const notification = {
             id: Date.now(),
             type: 'distribution',
@@ -90,6 +116,8 @@ const notifications = {
     },
 
     showPopup: function(order, distributionResult) {
+        if (!this.shouldNotify()) return;
+        
         let container = document.getElementById('notifyPopup');
         if (!container) {
             container = document.createElement('div');
@@ -119,6 +147,8 @@ const notifications = {
     },
     
     showDistributionPopup: function(result) {
+        if (!this.shouldNotify()) return;
+        
         let container = document.getElementById('notifyPopup');
         if (!container) {
             container = document.createElement('div');
@@ -158,7 +188,6 @@ const notifications = {
                 const orders = data.orders || [];
                 if (orders.length > 0 && orders[0].id !== lastNotifiedId) {
                     const newOrder = orders[0];
-                    // جلب التوزيع الحالي
                     const distRes = await fetch(`/api/day/${today}`, { credentials: 'include' });
                     const distData = await distRes.json();
                     const distribution = distData.distribution || [];
