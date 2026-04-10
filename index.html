@@ -252,4 +252,56 @@
         });
     </script>
 </body>
+    <!-- لوحة الإشعارات -->
+<div style="background:rgba(255,255,255,0.05);border-radius:15px;padding:20px;margin-top:25px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+        <h3 style="color:#667eea">🔔 الإشعارات <span id="notifCount" style="background:#f5576c;border-radius:20px;padding:2px 8px;font-size:0.7em">0</span></h3>
+        <div>
+            <button id="soundBtn" onclick="toggleSound()" style="background:#4facfe;border:none;padding:5px 12px;border-radius:8px;color:#fff;cursor:pointer;margin-left:10px">🔊 الصوت مفعل</button>
+            <button onclick="markAllRead()" style="background:#f093fb;border:none;padding:5px 12px;border-radius:8px;color:#fff;cursor:pointer">✅ تحديد الكل كمقروء</button>
+        </div>
+    </div>
+    <div id="notificationsList" style="max-height:300px;overflow-y:auto"></div>
+</div>
+
+<script>
+    function renderNotifications() {
+        const container = document.getElementById('notificationsList');
+        const countSpan = document.getElementById('notifCount');
+        const unread = notifications.getUnread();
+        if (countSpan) countSpan.textContent = unread.length;
+        if (!notifications.items.length) {
+            container.innerHTML = '<p style="text-align:center;color:#a8b2d1;padding:20px">لا توجد إشعارات</p>';
+            return;
+        }
+        container.innerHTML = notifications.items.map(n => `
+            <div style="background:${n.read ? 'rgba(255,255,255,0.03)' : 'rgba(102,126,234,0.2)'};border-right:3px solid ${n.read ? '#4facfe' : '#38ef7d'};padding:12px;margin-bottom:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <div style="font-weight:bold">📋 ${n.factory} - ${n.material} ${n.count > 1 ? `(${n.count} طلبات)` : ''}</div>
+                    <div style="font-size:0.75em;color:#a8b2d1">🕐 ${n.timestamp}</div>
+                </div>
+                <div>
+                    ${!n.read ? `<button onclick="notifications.markAsRead(${n.id});renderNotifications()" style="background:#4facfe;border:none;padding:5px 10px;border-radius:6px;color:#fff;cursor:pointer;margin-left:5px">قرأت</button>` : ''}
+                    <button onclick="notifications.delete(${n.id});renderNotifications()" style="background:#eb3349;border:none;padding:5px 10px;border-radius:6px;color:#fff;cursor:pointer">حذف</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    function toggleSound() {
+        const enabled = notifications.toggleSound();
+        document.getElementById('soundBtn').innerHTML = enabled ? '🔊 الصوت مفعل' : '🔇 الصوت معطل';
+    }
+    
+    function markAllRead() {
+        notifications.markAllAsRead();
+        renderNotifications();
+    }
+    
+    window.renderNotifications = renderNotifications;
+    const soundEnabled = localStorage.getItem('soundEnabled');
+    if (soundEnabled !== null) notifications.audioEnabled = soundEnabled === 'true';
+    document.getElementById('soundBtn').innerHTML = notifications.audioEnabled ? '🔊 الصوت مفعل' : '🔇 الصوت معطل';
+    renderNotifications();
+</script>
 </html>
