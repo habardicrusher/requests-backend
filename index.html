@@ -6,7 +6,7 @@
     <title>الرئيسية - نظام إدارة طلبات البحص</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* نفس الأنماط السابقة (أضفها كما هي) */
+        /* جميع الأنماط كما هي (لم تتغير) - مختصرة للاختصار */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -57,23 +57,27 @@
             <p>نظام إدارة طلبات وتوزيع البحص</p>
             <div style="position: absolute; top: 20px; left: 20px; display: flex; gap: 10px;">
                 <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
-                <button onclick="testAlert()" style="background: #4facfe; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🔔 اختبار الإشعار</button>
+                <button onclick="manualCheckOrders()" style="background: #4facfe; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🔄 تحديث يدوي</button>
+                <button onclick="testAlert()" style="background: #f093fb; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🔔 اختبار الإشعار</button>
             </div>
             <div id="alertBadge" class="alert-badge hidden" onclick="goToDistribution()">
                 <span id="alertCount">0</span>
             </div>
         </div>
         <div class="nav-links" id="navLinks"></div>
+
         <div class="stats-grid">
             <div class="stat-card"><h3 id="totalOrders">0</h3><p>📋 إجمالي الطلبات اليوم</p></div>
             <div class="stat-card"><h3 id="totalTrips">0</h3><p>🚚 الرحلات الموزعة</p></div>
             <div class="stat-card"><h3 id="activeTrucks">0</h3><p>🚛 سيارات نشطة</p></div>
             <div class="stat-card"><h3 id="completedPercentage">0%</h3><p>📈 نسبة الإنجاز</p></div>
         </div>
+
         <div class="charts-grid">
             <div class="chart-container"><h3>📈 توزيع الطلبات حسب المصنع</h3><div class="chart-wrapper"><canvas id="factoriesChart"></canvas></div></div>
             <div class="chart-container"><h3>📦 توزيع الطلبات حسب نوع البحص</h3><div class="chart-wrapper"><canvas id="materialsChart"></canvas></div></div>
         </div>
+
         <div class="recent-orders">
             <h3>📋 آخر 10 طلبات اليوم</h3>
             <table id="recentOrdersTable"><thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>التوقيت</th><th>وقت الإضافة</th></tr></thead><tbody id="recentOrdersBody"></tbody></table>
@@ -215,7 +219,7 @@
             } catch(e) { console.error('❌ خطأ في التوزيع التلقائي:', e); }
         }
 
-        async function loadDashboard() {
+        async function loadDashboard(updateLastCount = true) {
             showLoading(true);
             try {
                 const [settings, dayData] = await Promise.all([
@@ -251,6 +255,17 @@
                 const tbody = document.getElementById('recentOrdersBody');
                 if (!recent.length) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
                 else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
+
+                // تحديث lastOrderCount إذا طلبنا ذلك
+                if (updateLastCount) {
+                    if (orders.length > lastOrderCount) {
+                        const newCount = orders.length - lastOrderCount;
+                        console.log(`🆕 تم اكتشاف ${newCount} طلب جديد (من ${lastOrderCount} إلى ${orders.length})`);
+                        for (let i = 0; i < newCount; i++) incrementAlertCount();
+                        await autoDistributeAfterOrder();
+                    }
+                    lastOrderCount = orders.length;
+                }
             } catch(e) { console.error(e); showToast('خطأ في تحميل البيانات', 'error'); }
             showLoading(false);
         }
@@ -280,33 +295,28 @@
             });
         }
 
-        async function checkNewOrders() {
-            try {
-                const today = new Date().toISOString().split('T')[0];
-                const dayData = await apiCall(`/day/${today}`);
-                const currentOrders = dayData.orders || [];
-                const currentCount = currentOrders.length;
-                if (currentCount > lastOrderCount) {
-                    const newOrdersCount = currentCount - lastOrderCount;
-                    for (let i = 0; i < newOrdersCount; i++) incrementAlertCount();
-                    await autoDistributeAfterOrder();
-                    await loadDashboard();
-                }
-                lastOrderCount = currentCount;
-            } catch(e) { console.error('خطأ في مراقبة الطلبات', e); }
+        async function manualCheckOrders() {
+            console.log('🔄 تحديث يدوي: جلب أحدث البيانات');
+            showToast('جاري تحديث البيانات...', 'info');
+            await loadDashboard(true);
+            showToast('تم تحديث البيانات بنجاح', 'success');
         }
 
         function startPolling() {
-            setInterval(async () => { await checkNewOrders(); }, 10000);
-            console.log('🚀 بدء مراقبة الطلبات الجديدة كل 10 ثوانٍ');
+            // فحص فوري أول مرة
+            setTimeout(() => loadDashboard(true), 1000);
+            // ثم كل 5 ثوانٍ
+            setInterval(async () => {
+                await loadDashboard(true);
+            }, 5000);
+            console.log('🚀 بدء مراقبة الطلبات الجديدة كل 5 ثوانٍ');
         }
 
-        // استماع للإشارة من orders.html عند إضافة طلب جديد
+        // استماع للإشارة من orders.html (بين التبويبات)
         window.addEventListener('storage', function(e) {
             if (e.key === 'newOrderTimestamp') {
-                console.log('🔄 تم اكتشاف طلب جديد من orders.html');
-                incrementAlertCount();
-                setTimeout(async () => { await checkNewOrders(); }, 500);
+                console.log('🔄 تم اكتشاف طلب جديد من orders.html عبر localStorage');
+                manualCheckOrders(); // يقوم بفحص فوري
             }
         });
 
@@ -355,10 +365,8 @@
             loadNav();
             loadAlertCount();
             showLoading(true);
-            await loadDashboard();
+            await loadDashboard(true); // load with update
             showLoading(false);
-            const initData = await apiCall(`/day/${currentDate}`);
-            lastOrderCount = (initData.orders || []).length;
             startPolling();
         });
     </script>
