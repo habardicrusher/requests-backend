@@ -1,4 +1,4 @@
-// notifications.js - نظام الإشعارات
+// notifications.js - نظام الإشعارات (للمدير والمستخدمين الداخليين فقط)
 const notifications = {
     items: [],
     audioEnabled: true,
@@ -23,8 +23,6 @@ const notifications = {
                 this.currentUserRole = data.user.role;
                 this.userChecked = true;
                 console.log('✅ User role loaded:', this.currentUserRole);
-            } else {
-                console.log('⚠️ No user found');
             }
         } catch(e) {
             console.error('Error getting user role:', e);
@@ -32,12 +30,8 @@ const notifications = {
     },
 
     shouldNotify() {
-        // إذا لم نتحقق من المستخدم بعد، نرجع true مؤقتاً (حتى لا نفوت الإشعارات)
         if (!this.userChecked) return true;
-        // الإشعارات فقط للمدير والمستخدمين العاديين (وليس العملاء)
-        const result = this.currentUserRole === 'admin' || this.currentUserRole === 'user';
-        console.log('shouldNotify:', result, 'role:', this.currentUserRole);
-        return result;
+        return this.currentUserRole === 'admin' || this.currentUserRole === 'user';
     },
 
     playBeep: function() {
@@ -64,7 +58,6 @@ const notifications = {
     },
 
     addOrderNotification: function(order) {
-        console.log('Adding order notification:', order);
         if (!this.shouldNotify()) return null;
         
         const notification = {
@@ -88,8 +81,8 @@ const notifications = {
     },
     
     addDistributionNotification: function(result) {
-        console.log('Adding distribution notification:', result);
         if (!this.shouldNotify()) return null;
+        if (this.currentUserRole !== 'admin') return null; // فقط للمدير
         
         const notification = {
             id: Date.now(),
@@ -139,6 +132,7 @@ const notifications = {
     
     showDistributionPopup: function(result) {
         if (!this.shouldNotify()) return;
+        if (this.currentUserRole !== 'admin') return;
         
         let container = document.getElementById('notifyPopup');
         if (!container) {
@@ -173,7 +167,6 @@ const notifications = {
         let lastOrderCount = 0;
         setInterval(async () => {
             try {
-                // تأكد من أن المستخدم مدير أو مستخدم عادي
                 if (!this.shouldNotify()) return;
                 
                 const today = new Date().toISOString().split('T')[0];
@@ -181,9 +174,8 @@ const notifications = {
                 const data = await res.json();
                 const orders = data.orders || [];
                 
-                // إذا زاد عدد الطلبات، أضف إشعاراً
                 if (orders.length > lastOrderCount && lastOrderCount > 0) {
-                    const newOrders = orders.slice(0, orders.length - lastOrderCount);
+                    const newOrders = orders.slice(lastOrderCount);
                     for (let i = 0; i < newOrders.length; i++) {
                         this.addOrderNotification(newOrders[i]);
                     }
@@ -224,7 +216,6 @@ const notifications = {
     }
 };
 
-// بدء التهيئة
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => notifications.init());
 } else {
