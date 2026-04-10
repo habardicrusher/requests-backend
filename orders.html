@@ -6,7 +6,6 @@
     <title>الطلبات - نظام إدارة طلبات البحص</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* نفس الأنماط السابقة - مختصرة للاختصار */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -26,6 +25,7 @@
         .btn-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: #fff; }
         .btn-danger { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: #fff; }
         .btn-info { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #fff; }
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
         .btn-sm { padding: 8px 15px; font-size: 0.9em; }
         .quick-add-section { margin-top: 20px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; }
         .quick-add-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-top: 10px; }
@@ -65,7 +65,10 @@
         <div class="nav-links" id="navLinks"></div>
         <div class="date-section">
             <div><label>📅 تاريخ العمل: </label><input type="date" id="orderDate" onchange="loadDayData()"></div>
-            <div><button class="btn btn-info" onclick="exportOrdersToExcel()">📥 تصدير Excel</button></div>
+            <div>
+                <button class="btn btn-info" onclick="exportOrdersToExcel()">📥 تصدير Excel</button>
+                <button class="btn btn-primary" onclick="manualDistribute()">🔄 توزيع يدوي</button>
+            </div>
         </div>
 
         <h2>➕ إضافة طلب جديد</h2>
@@ -88,6 +91,7 @@
 
     <div class="modal" id="editOrderModal"><div class="modal-content"><div class="modal-header"><h3>✏️ تعديل الطلب</h3><button class="close-modal" onclick="closeModal('editOrderModal')">&times;</button></div><div class="modal-body"><input type="hidden" id="editOrderId"><div class="form-group"><label>🏭 المصنع</label><select id="editOrderFactory"></select></div><div class="form-group"><label>📦 نوع البحص</label><select id="editOrderMaterial"></select></div><div class="form-group"><label>⏰ التوقيت</label><input type="text" id="editOrderTime" placeholder="اختياري"></div></div><div class="modal-footer"><button class="btn btn-danger" onclick="closeModal('editOrderModal')">إلغاء</button><button class="btn btn-success" onclick="saveOrderEdit()">حفظ</button></div></div></div>
 
+    <script src="notifications.js"></script>
     <script>
         const API_BASE = '/api';
         let factories = [], materials = [], orders = [], currentDate = '';
@@ -158,6 +162,96 @@
             } catch(e) { showToast('خطأ في حفظ البيانات: '+e.message, 'error'); return false; }
         }
 
+        // ==================== التوزيع التلقائي ====================
+        async function autoDistributeAfterOrder() {
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const settings = await apiCall('/settings');
+                const trucks = settings.trucks || [];
+                
+                if (trucks.length === 0) {
+                    console.log('لا توجد سيارات للتوزيع');
+                    return;
+                }
+                
+                const dayData = await apiCall(`/day/${today}`);
+                const orders = dayData.orders || [];
+                let distribution = dayData.distribution || [];
+                
+                if (orders.length === 0) return;
+                
+                let lastFactoryForTruck = {};
+                trucks.forEach(t => { lastFactoryForTruck[t.number] = null; });
+                let availableTrucks = [...trucks];
+                let newDistribution = [];
+                
+                for (let i = 0; i < orders.length; i++) {
+                    const order = orders[i];
+                    const requiredFactory = order.factory;
+                    let selectedTruck = null, candidateIndex = -1;
+                    
+                    for (let j = 0; j < availableTrucks.length; j++) {
+                        if (lastFactoryForTruck[availableTrucks[j].number] !== requiredFactory) {
+                            selectedTruck = availableTrucks[j];
+                            candidateIndex = j;
+                            break;
+                        }
+                    }
+                    if (!selectedTruck && availableTrucks.length) {
+                        selectedTruck = availableTrucks[0];
+                        candidateIndex = 0;
+                    }
+                    if (!selectedTruck) break;
+                    
+                    availableTrucks.splice(candidateIndex, 1);
+                    lastFactoryForTruck[selectedTruck.number] = requiredFactory;
+                    const currentRoad = Math.floor(i / trucks.length) + 1;
+                    
+                    newDistribution.push({
+                        orderId: order.id,
+                        orderIndex: i + 1,
+                        truck: selectedTruck,
+                        factory: order.factory,
+                        material: order.material,
+                        time: order.time || '',
+                        road: currentRoad
+                    });
+                    
+                    if (availableTrucks.length === 0) availableTrucks = [...trucks];
+                }
+                
+                if (newDistribution.length) {
+                    await apiCall(`/day/${today}`, 'PUT', { orders, distribution: newDistribution });
+                    
+                    const trucksUsed = new Set(newDistribution.map(d => d.truck?.number)).size;
+                    const lastRoad = newDistribution.length ? Math.max(...newDistribution.map(d => d.road)) : 1;
+                    
+                    if (typeof notifications !== 'undefined') {
+                        notifications.addDistributionNotification({
+                            totalOrders: orders.length,
+                            trucksUsed: trucksUsed,
+                            lastRoad: lastRoad,
+                            details: `تم توزيع ${orders.length} طلب على ${trucksUsed} سيارة`
+                        });
+                    }
+                    
+                    showToast(`✅ تم توزيع ${orders.length} طلب تلقائياً على ${trucksUsed} سيارة (الرود ${lastRoad})`, 'success');
+                }
+            } catch(e) {
+                console.error('خطأ في التوزيع التلقائي:', e);
+            }
+        }
+
+        // دالة التوزيع اليدوي
+        async function manualDistribute() {
+            showLoading(true);
+            await autoDistributeAfterOrder();
+            await loadDayData();
+            showLoading(false);
+            showToast('✅ تم إعادة توزيع الطلبات', 'success');
+        }
+
+        // ==================== دوال الطلبات ====================
         async function addOrder() {
             const factory = document.getElementById('factorySelect').value;
             const material = document.getElementById('materialType').value;
@@ -171,7 +265,7 @@
             showLoading(true);
             for (let i = 0; i < count; i++) {
                 orders.push({
-                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i,
                     factory,
                     material,
                     time: time,
@@ -183,6 +277,10 @@
                 document.getElementById('orderCount').value = '1';
                 document.getElementById('orderTime').value = '';
                 showToast(`✅ تم إضافة ${count} طلب`, 'success');
+                
+                // التوزيع التلقائي بعد إضافة الطلب
+                await autoDistributeAfterOrder();
+                await loadDayData();
             }
             showLoading(false);
         }
@@ -198,7 +296,7 @@
             showLoading(true);
             for (let i = 0; i < count; i++) {
                 orders.push({
-                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                    id: Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '_' + i,
                     factory,
                     material,
                     time: time,
@@ -208,6 +306,10 @@
             if (await saveData()) {
                 renderOrders();
                 showToast(`✅ تم إضافة ${count} طلب ${material}`, 'success');
+                
+                // التوزيع التلقائي بعد إضافة الطلب
+                await autoDistributeAfterOrder();
+                await loadDayData();
             }
             showLoading(false);
         }
@@ -215,7 +317,11 @@
         async function deleteOrder(id) {
             if (confirm('حذف الطلب؟')) {
                 orders = orders.filter(o => o.id !== id);
-                if (await saveData()) renderOrders();
+                if (await saveData()) {
+                    renderOrders();
+                    await autoDistributeAfterOrder();
+                    await loadDayData();
+                }
             }
         }
 
@@ -243,6 +349,8 @@
                     renderOrders();
                     closeModal('editOrderModal');
                     showToast('✅ تم التعديل', 'success');
+                    await autoDistributeAfterOrder();
+                    await loadDayData();
                 }
             }
         }
@@ -332,105 +440,25 @@
             await loadSettings(); 
             await loadDayData(); 
             showLoading(false); 
+            
+            // قراءة معامل الفلتر من الرابط
+            const urlParams = new URLSearchParams(window.location.search);
+            const filterFactory = urlParams.get('filter');
+            if (filterFactory) {
+                setTimeout(() => {
+                    const factorySelect = document.getElementById('factorySelect');
+                    if (factorySelect) {
+                        for(let i = 0; i < factorySelect.options.length; i++) {
+                            if(factorySelect.options[i].value === filterFactory) {
+                                factorySelect.selectedIndex = i;
+                                break;
+                            }
+                        }
+                        showToast(`تم التحديد تلقائياً: ${filterFactory}`, 'info');
+                    }
+                }, 500);
+            }
         });
     </script>
 </body>
-// التوزيع التلقائي بعد إضافة الطلب
-async function autoDistributeAfterOrder() {
-    try {
-        const today = new Date().toISOString().split('T')[0];
-        
-        // جلب السيارات والإعدادات
-        const settings = await apiCall('/settings');
-        const trucks = settings.trucks || [];
-        
-        if (trucks.length === 0) {
-            console.log('لا توجد سيارات للتوزيع');
-            return;
-        }
-        
-        // جلب الطلبات والتوزيع الحالي
-        const dayData = await apiCall(`/day/${today}`);
-        const orders = dayData.orders || [];
-        let distribution = dayData.distribution || [];
-        
-        if (orders.length === 0) return;
-        
-        // إعادة بناء التوزيع بالكامل (توزيع ذكي)
-        let lastFactoryForTruck = {};
-        trucks.forEach(t => { lastFactoryForTruck[t.number] = null; });
-        let availableTrucks = [...trucks];
-        let newDistribution = [];
-        
-        for (let i = 0; i < orders.length; i++) {
-            const order = orders[i];
-            const requiredFactory = order.factory;
-            let selectedTruck = null, candidateIndex = -1;
-            
-            for (let j = 0; j < availableTrucks.length; j++) {
-                if (lastFactoryForTruck[availableTrucks[j].number] !== requiredFactory) {
-                    selectedTruck = availableTrucks[j];
-                    candidateIndex = j;
-                    break;
-                }
-            }
-            if (!selectedTruck && availableTrucks.length) {
-                selectedTruck = availableTrucks[0];
-                candidateIndex = 0;
-            }
-            if (!selectedTruck) break;
-            
-            availableTrucks.splice(candidateIndex, 1);
-            lastFactoryForTruck[selectedTruck.number] = requiredFactory;
-            const currentRoad = Math.floor(i / trucks.length) + 1;
-            
-            newDistribution.push({
-                orderId: order.id,
-                orderIndex: i + 1,
-                truck: selectedTruck,
-                factory: order.factory,
-                material: order.material,
-                time: order.time || '',
-                road: currentRoad
-            });
-            
-            if (availableTrucks.length === 0) availableTrucks = [...trucks];
-        }
-        
-        // حفظ التوزيع الجديد
-        if (newDistribution.length) {
-            await apiCall(`/day/${today}`, 'PUT', { orders, distribution: newDistribution });
-            
-            // إرسال إشعار بالتوزيع
-            const trucksUsed = new Set(newDistribution.map(d => d.truck?.number)).size;
-            const lastRoad = newDistribution.length ? Math.max(...newDistribution.map(d => d.road)) : 1;
-            
-            if (typeof notifications !== 'undefined') {
-                notifications.addDistributionNotification({
-                    totalOrders: orders.length,
-                    trucksUsed: trucksUsed,
-                    lastRoad: lastRoad,
-                    details: `تم توزيع ${orders.length} طلب على ${trucksUsed} سيارة`
-                });
-            }
-            
-            showToast(`✅ تم توزيع ${orders.length} طلب تلقائياً على ${trucksUsed} سيارة (الرود ${lastRoad})`, 'success');
-        }
-    } catch(e) {
-        console.error('خطأ في التوزيع التلقائي:', e);
-    }
-}
-
-// تعديل دالة addOrder لتشمل التوزيع التلقائي
-const originalAddOrder = addOrder;
-addOrder = async function() {
-    await originalAddOrder();
-    await autoDistributeAfterOrder();
-};
-
-// تعديل دالة quickAdd لتشمل التوزيع التلقائي
-const originalQuickAdd = quickAdd;
-quickAdd = async function(material, count) {
-    await originalQuickAdd(material, count);
-    await autoDistributeAfterOrder();
-};</html>
+</html>
