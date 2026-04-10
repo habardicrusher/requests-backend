@@ -125,7 +125,7 @@ function getUserPermissions() {
     };
 }
 
-// ==================== قائمة عملاء المصانع (12 مستخدم) ====================
+// ==================== قائمة عملاء المصانع ====================
 const clientUsers = [
     { username: 'scccl_client', password: 'SCCCL@2025', factory: 'SCCCL' },
     { username: 'alharith_client', password: 'ALHarith@2025', factory: 'الحارث للمنتجات الاسمنيه' },
@@ -141,7 +141,7 @@ const clientUsers = [
     { username: 'alfahad', password: 'Fahad@2025', factory: 'الفهد للبلوك والخرسانة' }
 ];
 
-// ==================== قائمة المستخدمين الإضافيين (hassan, GM, إلخ) ====================
+// ==================== قائمة المستخدمين الإضافيين ====================
 const extraUsers = [
     { username: 'hassan', password: '305075', role: 'user' },
     { username: 'Abu Naji', password: '987654', role: 'user' },
@@ -155,7 +155,6 @@ function initializeData() {
     let users = readJSON('users.json') || [];
     let updated = false;
 
-    // 1. مستخدم Admin
     if (!users.find(u => u.username === 'Admin')) {
         const hashedPassword = bcrypt.hashSync('Live#5050', 10);
         users.push({
@@ -172,7 +171,6 @@ function initializeData() {
         console.log('✅ Admin created: Admin / Live#5050');
     }
 
-    // 2. المستخدمين الإضافيين (hassan, GM, إلخ)
     for (const extra of extraUsers) {
         if (!users.find(u => u.username === extra.username)) {
             const hashedPassword = bcrypt.hashSync(extra.password, 10);
@@ -190,7 +188,6 @@ function initializeData() {
         }
     }
 
-    // 3. عملاء المصانع (12 مستخدم)
     for (const client of clientUsers) {
         if (!users.find(u => u.username === client.username)) {
             const hashedPassword = bcrypt.hashSync(client.password, 10);
@@ -210,7 +207,6 @@ function initializeData() {
 
     if (updated) writeJSON('users.json', users);
 
-    // إعدادات المصانع والمواد والمركبات
     let settings = readJSON('settings.json');
     if (!settings) {
         writeJSON('settings.json', defaultSettings);
@@ -267,7 +263,6 @@ app.get('/api/check-session', (req, res) => {
     }
 });
 
-// تعديل إعدادات API لتعيد فقط المصنع الخاص بالمستخدم إذا كان عميلاً
 app.get('/api/settings', requireAuth, (req, res) => {
     let settings = readJSON('settings.json') || defaultSettings;
     settings = migrateFactories(settings);
@@ -292,9 +287,26 @@ app.put('/api/settings', requireAuth, (req, res) => {
     res.json({ success: true });
 });
 
+// ==================== التعديل المهم هنا ====================
 app.get('/api/day/:date', requireAuth, (req, res) => {
-    res.json(readDayData(req.params.date));
+    const dayData = readDayData(req.params.date);
+    
+    // إذا كان المستخدم مدير أو مستخدم عادي (ليس عميل)، نرسل جميع البيانات
+    if (req.session.user.role !== 'client') {
+        res.json(dayData);
+        return;
+    }
+    
+    // إذا كان عميلاً، نرسل فقط طلبات مصنعه
+    const userFactory = req.session.user.factory;
+    if (userFactory) {
+        const filteredOrders = (dayData.orders || []).filter(order => order.factory === userFactory);
+        res.json({ orders: filteredOrders, distribution: [] });
+    } else {
+        res.json({ orders: [], distribution: [] });
+    }
 });
+// ====================================================
 
 app.put('/api/day/:date', requireAuth, (req, res) => {
     let { orders, distribution } = req.body;
@@ -502,7 +514,6 @@ app.get('/', (req, res) => {
     }
 });
 
-// الصفحات المتاحة للمستخدم العادي (فقط orders.html)
 const publicPages = ['orders.html'];
 const adminOnlyPages = ['index.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html'];
 
