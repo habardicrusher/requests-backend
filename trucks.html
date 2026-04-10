@@ -6,7 +6,6 @@
     <title>السيارات - نظام إدارة طلبات كسارة الحبردي</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* نفس الأنماط السابقة مع إضافة زر مسح الكل */
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:linear-gradient(135deg,#1a1a2e,#16213e); color:#fff; }
         .container { max-width:1400px; margin:0 auto; padding:20px; }
@@ -270,16 +269,19 @@
             reader.readAsArrayBuffer(file);
         }
 
-        // مسح جميع السيارات
+        // مسح جميع السيارات (مع إصلاح مشكلة اللف)
         async function clearAllTrucks() {
             if (!confirm('⚠️ تحذير: هذا الإجراء سيمسح جميع السيارات الحالية. لا يمكن التراجع. هل أنت متأكد؟')) return;
             showLoading(true);
             try {
                 trucks = [];
                 await saveSettings();
+                // إعادة تحميل التوزيعات (لإزالة أي مراجع لسيارات قديمة)
+                await loadTodayDistribution();
                 await renderTrucksGrid();
-                showToast('✅ تم مسح جميع السيارات', 'success');
+                showToast('✅ تم مسح جميع السيارات بنجاح', 'success');
             } catch (err) {
+                console.error(err);
                 showToast('خطأ في المسح: ' + err.message, 'error');
             } finally {
                 showLoading(false);
@@ -334,11 +336,17 @@
 
         document.addEventListener('DOMContentLoaded', async ()=>{
             showLoading(true);
-            await loadSettings();
-            await loadTodayDistribution();
-            await renderTrucksGrid();
-            console.log('عدد السيارات الحالية:', trucks.length);
-            showLoading(false);
+            try {
+                await loadSettings();
+                await loadTodayDistribution();
+                await renderTrucksGrid();
+                console.log('عدد السيارات الحالية:', trucks.length);
+            } catch (err) {
+                console.error('خطأ في تحميل الصفحة:', err);
+                showToast('حدث خطأ في تحميل البيانات', 'error');
+            } finally {
+                showLoading(false);
+            }
         });
     </script>
 </body>
