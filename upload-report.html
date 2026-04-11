@@ -3,28 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monthly Report Upload | نظام التقارير الشهرية</title>
+  <title>التقارير الشهرية - البحص والكسارة</title>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box;}
-    body{background:#f0f4fa;font-family:'Segoe UI',Tahoma,sans-serif;padding:30px 20px;color:#1e2f3e;}
-    .container{max-width:1400px;margin:0 auto;}
-    .hero{background:linear-gradient(105deg,#0a2f44,#144d6e);border-radius:32px;padding:28px 32px;margin-bottom:28px;color:white;}
-    .hero h1{font-size:2rem;margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap;}
-    .badge{background:#ffb347;color:#2c3e2f;padding:6px 16px;border-radius:60px;font-size:0.85rem;font-weight:bold;}
-    .btn-primary{background:#1f6392;border:none;padding:14px 32px;border-radius:40px;font-weight:700;color:white;cursor:pointer;transition:0.2s;box-shadow:0 4px 8px rgba(0,0,0,0.05);}
-    .btn-primary:hover{background:#0e4b6e;transform:translateY(-2px);}
-    .btn-secondary{background:#e9f0f6;border:none;padding:12px 24px;border-radius:28px;font-weight:600;color:#1f4e78;cursor:pointer;}
-    .report-section{background:white;border-radius:32px;padding:28px 30px;margin:28px 0;box-shadow:0 8px 24px rgba(0,0,0,0.05);border:1px solid #e2edf7;display:none;}
-    .report-section.active{display:block;animation:fadeSlide 0.3s ease;}
-    @keyframes fadeSlide{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:translateY(0);}}
-    .upload-box{display:flex;flex-wrap:wrap;gap:20px;margin-bottom:24px;align-items:flex-end;}
+    body{background:#eef3f8;font-family:'Segoe UI',Tahoma,sans-serif;}
+    
+    /* شريط التنقل (مطابق للرئيسية) */
+    .navbar{background:#1f4e78;padding:12px 24px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+    .logo{color:white;font-size:1.6rem;font-weight:bold;}
+    .nav-links{display:flex;flex-wrap:wrap;gap:12px;}
+    .nav-links a{color:white;text-decoration:none;padding:8px 16px;border-radius:28px;font-size:0.9rem;font-weight:500;transition:0.2s;display:inline-flex;align-items:center;gap:6px;}
+    .nav-links a:hover,.nav-links a.active{background:#ffb347;color:#1f4e78;}
+    
+    .container{max-width:1400px;margin:30px auto;padding:0 20px;}
+    .hero{background:linear-gradient(135deg,#1f4e78,#16324f);border-radius:32px;padding:28px 32px;margin-bottom:28px;color:white;}
+    .hero h1{font-size:1.8rem;margin-bottom:10px;}
+    .badge{background:#ffb347;color:#2c3e2f;padding:6px 16px;border-radius:60px;font-size:0.85rem;font-weight:bold;display:inline-block;margin-top:8px;}
+    .card{background:white;border-radius:28px;padding:28px;margin-bottom:28px;box-shadow:0 8px 24px rgba(0,0,0,0.05);border:1px solid #e2edf7;}
+    .upload-row{display:flex;flex-wrap:wrap;gap:20px;margin-bottom:20px;align-items:flex-end;}
     .upload-field{flex:1;min-width:200px;}
     .upload-field label{display:block;font-weight:700;margin-bottom:8px;color:#1f4e78;}
     .upload-field input{width:100%;padding:12px 14px;border:1px solid #cbdde9;border-radius:16px;}
-    .status-msg{background:#f4f8fc;padding:14px 18px;border-radius:20px;margin:16px 0;font-weight:500;color:#1f4e78;}
-    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin:24px 0;}
+    .btn-primary{background:#1f6392;border:none;padding:12px 28px;border-radius:40px;font-weight:700;color:white;cursor:pointer;transition:0.2s;}
+    .btn-primary:hover{background:#0e4b6e;transform:translateY(-2px);}
+    .btn-secondary{background:#e9f0f6;border:none;padding:12px 24px;border-radius:28px;font-weight:600;color:#1f4e78;cursor:pointer;}
+    .status{background:#f4f8fc;padding:14px 18px;border-radius:20px;margin:16px 0;font-weight:500;color:#1f4e78;}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin:24px 0;}
     .stat-card{background:#f8fbff;border-radius:20px;padding:16px;border:1px solid #e2edf7;}
     .stat-label{font-size:0.8rem;color:#5c7287;margin-bottom:6px;}
     .stat-value{font-size:26px;font-weight:800;color:#1f4e78;}
@@ -40,51 +46,78 @@
   </style>
 </head>
 <body>
-<div class="container">
-  <div class="hero">
-    <h1>📊 Monthly Report Upload & Analysis <span class="badge">Smart Filter</span></h1>
-    <p>Upload Excel daily report → Auto‑filter our trips (based on truck numbers + excluded names) → Driver stats & material charts → Download enhanced Excel + live dashboard.</p>
-  </div>
-  <div style="margin-bottom:20px;">
-    <button class="btn-primary" id="toggleReportBtn">📂 Upload New Monthly Report</button>
-  </div>
-  <div id="reportSection" class="report-section">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <h2 style="color:#1f4e78;">🚛 Report Processor</h2>
-      <button class="btn-secondary" id="closeReportBtn">✖ Close</button>
-    </div>
-    <div class="upload-box">
-      <div class="upload-field"><label>📁 Excel File (.xlsx, .xlsm)</label><input type="file" id="excelFileInput" accept=".xlsx,.xlsm,.xls"></div>
-      <div class="upload-field"><label>📄 Output File Name</label><input type="text" id="outputFileName" value="Monthly_Trips_Report.xlsx"></div>
-      <div><button class="btn-primary" id="processFileBtn" style="background:#548235;">▶ Process</button>
-      <button class="btn-secondary" id="downloadExcludedBtn">📋 Download Excluded List</button></div>
-    </div>
-    <div id="statusMsg" class="status-msg">✅ Ready – upload an Excel file to start.</div>
-    <div id="metricsGrid" class="stats-grid" style="display:none;"></div>
-    <div id="chartsArea" style="display:none;">
-      <div class="charts-row">
-        <div class="chart-card"><div class="chart-title">📦 Total Weight by Material Code</div><div class="chart-wrap"><canvas id="materialWeightChart"></canvas></div></div>
-        <div class="chart-card"><div class="chart-title">🏆 Top 10 Drivers (by trips)</div><div class="chart-wrap"><canvas id="topDriversChart"></canvas></div></div>
-      </div>
-      <div class="driver-table"><div class="chart-title">🚛 Monthly trips per driver (our trips only)</div>
-        <table id="driverSummaryTable"><thead><tr><th>Driver Name</th><th>Trip Count</th><th>Total Net Weight (kg)</th></tr></thead><tbody></tbody></table>
-      </div>
-    </div>
-    <div class="footer-note">* Filtering: first exclude rows containing forbidden names, then validate truck number against allowed list. Final Excel includes "Summary Trips", "Not our trips", and "Trips Dashboard".</div>
-  </div>
-  <div style="background:white;border-radius:24px;padding:24px;margin-top:20px;border:1px solid #e2edf7;">
-    <h3 style="color:#1f4e78;">📌 Instructions</h3>
-    <ul style="margin-top:12px;line-height:1.8;padding-right:20px;">
-      <li>Upload the daily weight report (must contain columns: Driver name, Truck number, Material code, Net weight).</li>
-      <li>The system automatically separates <strong>Our trips</strong> vs <strong>Not our trips</strong> using predefined truck numbers and excluded names.</li>
-      <li>After processing, you can download an enhanced Excel file with summary sheets and a dashboard.</li>
-      <li>Charts and driver tables are displayed instantly on this page.</li>
-    </ul>
+
+<div class="navbar">
+  <div class="logo">📊 نظام التقارير</div>
+  <div class="nav-links">
+    <a href="index.html">📊 الرئيسية</a>
+    <a href="orders.html">📝 الطلبات</a>
+    <a href="distribution.html">🚚 التوزيع</a>
+    <a href="vehicles.html">🚛 السيارات</a>
+    <a href="aggregate_types.html">📦 أنواع البحص</a>
+    <a href="factories.html">🏭 المصانع</a>
+    <a href="daily_orders_report.html">📊 تقارير الطلبات اليومية</a>
+    <a href="reports_monthly.html" class="active">📅 تقارير الميزان الشهرية</a>
+    <a href="settings.html">⚙️ الإعدادات</a>
+    <a href="blocking.html">⛔ الحظر</a>
+    <a href="users.html">👥 المستخدمين</a>
+    <a href="logs.html">📜 السجلات</a>
   </div>
 </div>
+
+<div class="container">
+  <div class="hero">
+    <h1>🚛 تقارير الميزان الشهرية – البحص والكسارة</h1>
+    <p>رفع ملف Excel اليومي، تصفية الرحلات التابعة لنا (بناءً على أرقام الشاحنات وقائمة الاستبعاد)، تحليل الأوزان حسب كود المادة، إحصائيات السائقين، وتصدير تقرير محدث.</p>
+    <div class="badge">✓ يعتمد على أرقام الشاحنات المسموحة + الأسماء المستثناة</div>
+  </div>
+
+  <div class="card">
+    <div class="upload-row">
+      <div class="upload-field">
+        <label>📂 اختر ملف Excel (تقرير الوزن اليومي)</label>
+        <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls">
+      </div>
+      <div class="upload-field">
+        <label>📄 اسم الملف الناتج</label>
+        <input type="text" id="outputName" value="Monthly_Trips_Report.xlsx">
+      </div>
+      <div>
+        <button class="btn-primary" id="processBtn">▶ بدء المعالجة</button>
+        <button class="btn-secondary" id="excludedListBtn">📋 تنزيل قائمة الاستثناءات</button>
+      </div>
+    </div>
+
+    <div id="statusMsg" class="status">✅ انتظار رفع ملف Excel...</div>
+
+    <div id="metricsGrid" class="stats-grid" style="display:none;"></div>
+
+    <div id="chartsArea" style="display:none;">
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">📦 إجمالي الأوزان حسب كود مادة التحميل (بحص)</div>
+          <div class="chart-wrap"><canvas id="materialChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">🏆 أعلى 10 سائقين بعدد الرحلات</div>
+          <div class="chart-wrap"><canvas id="topDriversChart"></canvas></div>
+        </div>
+      </div>
+      <div class="driver-table">
+        <div class="chart-title">🚛 إجمالي رحلات الشهر لكل سائق (رحلاتنا فقط)</div>
+        <table id="driverTable">
+          <thead><tr><th>اسم السائق</th><th>عدد الرحلات</th><th>مجموع الوزن (كجم)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="footer-note">* يتم التصفية: استبعاد الأسماء المحظورة أولاً، ثم التحقق من رقم الشاحنة. يتم إنشاء ملف Excel يحتوي على ملخص الرحلات والرحلات غير التابعة ولوحة تحكم.</div>
+  </div>
+</div>
+
 <script>
-  // ---------- CONSTANTS (same as previous VBA logic) ----------
-  const VALID_TRIP_NUMBERS = new Set([
+  // -------------------- الثوابت --------------------
+  const VALID_TRUCK_NUMBERS = new Set([
     "1091","2757","2758","2759","2760","2762","2818","2927","2928","2929",
     "3321","3322","3324","3325","3326","3461","3462","3963","4445","5324",
     "5367","5520","5521","5522","5523","5524","5525","5526","5527","5528",
@@ -94,12 +127,14 @@
     "7750","7837","7926","7927","7928","7929","7930","7974","7980","9103",
     "9492","9493","9495","9496"
   ]);
+
   const EXCLUDED_NAMES = new Set([
     "eisam خ","eisam ح","عادل خ","عادل ح","mamoon","zeshan","برهان","ابراهيم"
   ]);
+
   const SHEETS_TO_DELETE = new Set(["summary","Summary","cdsDailyReportReadOnly","Summary Trips","Not our trips","Trips Dashboard"]);
 
-  let materialChart = null, driversChart = null;
+  let materialChart = null, topDriversChart = null;
 
   function normalizeText(v){ return String(v??"").trim().normalize("NFKC").replace(/\s+/g," ").toLowerCase(); }
   function keepDigitsOnly(v){
@@ -110,54 +145,55 @@
   }
   function hasExcludedName(row){ return row.some(c=>EXCLUDED_NAMES.has(normalizeText(c))); }
 
-  function processDataAdvanced(rows){
+  function processData(rows){
     const headers = rows[0] || [];
-    const summaryRows = [headers.slice()];
-    const notOursRows = [headers.slice()];
+    const ourTripsRows = [headers.slice()];
+    const notOurRows = [headers.slice()];
     let matched=0, notMatched=0, total=0;
-    const drivers = new Map(); // name -> {trips, weight}
-    const materials = new Map(); // code -> totalWeight
+    const driverStats = new Map();
+    const materialStats = new Map();
+
     for(let i=1;i<rows.length;i++){
       let row = (rows[i]||[]).slice();
       if(!row.some(v=>v!==null&&v!==undefined&&v!=="")) continue;
       total++;
       let cleanedTruck = keepDigitsOnly(row[4]??"");
       if(row.length>=5) row[4]=cleanedTruck;
-      if(hasExcludedName(row)){ notOursRows.push(row); notMatched++; continue; }
-      if(VALID_TRIP_NUMBERS.has(cleanedTruck)){
-        summaryRows.push(row);
+      if(hasExcludedName(row)){ notOurRows.push(row); notMatched++; continue; }
+      if(VALID_TRUCK_NUMBERS.has(cleanedTruck)){
+        ourTripsRows.push(row);
         matched++;
         let driver = String(row[3]??"").trim();
         let weight = parseFloat(row[11]) || 0;
         let matCode = String(row[5]??"").trim();
         if(driver){
-          if(!drivers.has(driver)) drivers.set(driver,{trips:0,weight:0});
-          let d = drivers.get(driver);
+          if(!driverStats.has(driver)) driverStats.set(driver,{trips:0,weight:0});
+          let d = driverStats.get(driver);
           d.trips++; d.weight+=weight;
         }
-        if(matCode) materials.set(matCode, (materials.get(matCode)||0) + weight);
-      } else { notOursRows.push(row); notMatched++; }
+        if(matCode) materialStats.set(matCode, (materialStats.get(matCode)||0) + weight);
+      } else { notOurRows.push(row); notMatched++; }
     }
-    const driversArr = Array.from(drivers.entries()).map(([n,d])=>({name:n, trips:d.trips, totalWeight:d.weight}));
+    const driversArr = Array.from(driverStats.entries()).map(([n,d])=>({name:n, trips:d.trips, totalWeight:d.weight}));
     driversArr.sort((a,b)=>b.trips-a.trips);
-    const materialsArr = Array.from(materials.entries()).map(([c,w])=>({code:c, weight:w}));
+    const materialsArr = Array.from(materialStats.entries()).map(([c,w])=>({code:c, weight:w}));
     materialsArr.sort((a,b)=>b.weight-a.weight);
     const totalWeight = materialsArr.reduce((s,m)=>s+m.weight,0);
-    return { headers, summaryRows, notOursRows, matchedCount:matched, notMatchedCount:notMatched, totalRows:total,
+    return { headers, ourTripsRows, notOurRows, matchedCount:matched, notMatchedCount:notMatched, totalRows:total,
              driversStats:driversArr, top10Drivers:driversArr.slice(0,10), materialsStats:materialsArr, totalWeightAll:totalWeight };
   }
 
   function displayUI(res){
     document.getElementById("metricsGrid").style.display="grid";
     document.getElementById("metricsGrid").innerHTML = `
-      <div class="stat-card"><div class="stat-label">Total Rows</div><div class="stat-value">${res.totalRows}</div></div>
-      <div class="stat-card"><div class="stat-label">Our Trips</div><div class="stat-value">${res.matchedCount}</div></div>
-      <div class="stat-card"><div class="stat-label">Not Our Trips</div><div class="stat-value">${res.notMatchedCount}</div></div>
-      <div class="stat-card"><div class="stat-label">Achievement Rate</div><div class="stat-value">${res.totalRows?((res.matchedCount/res.totalRows)*100).toFixed(2):0}%</div></div>
-      <div class="stat-card"><div class="stat-label">Unique Drivers</div><div class="stat-value">${res.driversStats.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Total Weight (tons)</div><div class="stat-value">${(res.totalWeightAll/1000).toFixed(1)} t</div></div>
+      <div class="stat-card"><div class="stat-label">إجمالي الصفوف</div><div class="stat-value">${res.totalRows}</div></div>
+      <div class="stat-card"><div class="stat-label">رحلاتنا (المحققة)</div><div class="stat-value">${res.matchedCount}</div></div>
+      <div class="stat-card"><div class="stat-label">رحلات غير تابعة</div><div class="stat-value">${res.notMatchedCount}</div></div>
+      <div class="stat-card"><div class="stat-label">نسبة الإنجاز</div><div class="stat-value">${res.totalRows?((res.matchedCount/res.totalRows)*100).toFixed(2):0}%</div></div>
+      <div class="stat-card"><div class="stat-label">عدد السائقين المميزين</div><div class="stat-value">${res.driversStats.length}</div></div>
+      <div class="stat-card"><div class="stat-label">إجمالي الوزن (طن)</div><div class="stat-value">${(res.totalWeightAll/1000).toFixed(1)} طن</div></div>
     `;
-    const tbody = document.querySelector("#driverSummaryTable tbody");
+    const tbody = document.querySelector("#driverTable tbody");
     tbody.innerHTML = "";
     for(let d of res.driversStats){
       let tr = tbody.insertRow();
@@ -165,17 +201,17 @@
       tr.insertCell(1).textContent = d.trips;
       tr.insertCell(2).textContent = d.totalWeight.toLocaleString();
     }
-    let topMats = res.materialsStats.slice(0,10);
+    const topMats = res.materialsStats.slice(0,10);
     if(materialChart) materialChart.destroy();
-    let ctxMat = document.getElementById("materialWeightChart").getContext("2d");
-    materialChart = new Chart(ctxMat, { type:"bar", data:{ labels:topMats.map(m=>m.code), datasets:[{ label:"Total Weight (tons)", data:topMats.map(m=>m.weight/1000), backgroundColor:"#1f4e78", borderRadius:8 }] }, options:{ responsive:true, maintainAspectRatio:false } });
-    if(driversChart) driversChart.destroy();
-    let ctxDrv = document.getElementById("topDriversChart").getContext("2d");
-    driversChart = new Chart(ctxDrv, { type:"bar", data:{ labels:res.top10Drivers.map(d=>d.name), datasets:[{ label:"Trip Count", data:res.top10Drivers.map(d=>d.trips), backgroundColor:"#548235", borderRadius:8 }] }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y' } });
+    const ctxMat = document.getElementById("materialChart").getContext("2d");
+    materialChart = new Chart(ctxMat, { type:"bar", data:{ labels:topMats.map(m=>m.code), datasets:[{ label:"الوزن الإجمالي (طن)", data:topMats.map(m=>m.weight/1000), backgroundColor:"#1f4e78", borderRadius:8 }] }, options:{ responsive:true, maintainAspectRatio:false } });
+    if(topDriversChart) topDriversChart.destroy();
+    const ctxDrv = document.getElementById("topDriversChart").getContext("2d");
+    topDriversChart = new Chart(ctxDrv, { type:"bar", data:{ labels:res.top10Drivers.map(d=>d.name), datasets:[{ label:"عدد الرحلات", data:res.top10Drivers.map(d=>d.trips), backgroundColor:"#548235", borderRadius:8 }] }, options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y' } });
     document.getElementById("chartsArea").style.display = "block";
   }
 
-  async function buildWorkbook(result, originalWb){
+  async function buildOutputWorkbook(result, originalWb){
     const outWb = new ExcelJS.Workbook();
     outWb.creator = "Monthly Report System";
     for(let ws of originalWb.worksheets){
@@ -186,28 +222,30 @@
       }
     }
     const addSheet = (name, data, green)=>{ let ws = outWb.addWorksheet(name); data.forEach(r=>ws.addRow(r)); ws.views=[{state:'frozen',ySplit:1}]; let w = data[0]?data[0].map((_,i)=>Math.min(40,Math.max(12,(data.reduce((m,r)=>Math.max(m,String(r[i]??"").length),12)+2)))):[12]; w.forEach((w,i)=>ws.getColumn(i+1).width=w); let hr=ws.getRow(1); hr.eachCell(c=>{ c.font={bold:true,color:{argb:"FFFFFFFF"}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}}; c.alignment={horizontal:"center"}; }); for(let r=2;r<=ws.rowCount;r++){ ws.getRow(r).eachCell(c=>{ c.alignment={horizontal:"center"}; if(green){ c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFC6EFCE"}}; c.font={color:{argb:"FF006100"}}; } }); } };
-    addSheet("Summary Trips", result.summaryRows, true);
-    addSheet("Not our trips", result.notOursRows, false);
+    addSheet("Summary Trips", result.ourTripsRows, true);
+    addSheet("Not our trips", result.notOurRows, false);
     let dash = outWb.addWorksheet("Trips Dashboard");
     dash.columns=[{width:28},{width:18},{width:18},{width:18}];
-    dash.mergeCells("A1:D1"); dash.getCell("A1").value="📊 Monthly Report Dashboard"; dash.getCell("A1").font={size:14,bold:true,color:{argb:"FFFFFFFF"}}; dash.getCell("A1").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
-    dash.getCell("A3").value="Metric"; dash.getCell("B3").value="Value";
+    dash.mergeCells("A1:D1"); dash.getCell("A1").value="📊 التقرير الشهري - لوحة التحكم"; dash.getCell("A1").font={size:14,bold:true,color:{argb:"FFFFFFFF"}}; dash.getCell("A1").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
+    dash.getCell("A3").value="المؤشر"; dash.getCell("B3").value="القيمة";
     let r=4;
-    [[ "Total Rows", result.totalRows ],[ "Our Trips", result.matchedCount ],[ "Not Our Trips", result.notMatchedCount ],[ "Achievement Rate", result.totalRows?result.matchedCount/result.totalRows:0 ],[ "Unique Drivers", result.driversStats.length ],[ "Total Weight (kg)", result.totalWeightAll ],[ "Total Weight (tons)", (result.totalWeightAll/1000).toFixed(2) ]].forEach(([l,v])=>{ dash.getCell(`A${r}`).value=l; dash.getCell(`B${r}`).value=v; if(l.includes("Rate")) dash.getCell(`B${r}`).numFmt="0.00%"; r++; });
-    let drRow = r+2; dash.getCell(`A${drRow}`).value="Monthly Trips per Driver"; dash.mergeCells(`A${drRow}:C${drRow}`); dash.getCell(`A${drRow+1}`).value="Driver Name"; dash.getCell(`B${drRow+1}`).value="Trips"; dash.getCell(`C${drRow+1}`).value="Total Weight (kg)";
+    [[ "إجمالي الصفوف", result.totalRows ],[ "رحلاتنا (المحققة)", result.matchedCount ],[ "رحلات غير تابعة", result.notMatchedCount ],[ "نسبة الإنجاز", result.totalRows?result.matchedCount/result.totalRows:0 ],[ "عدد السائقين", result.driversStats.length ],[ "إجمالي الوزن (كجم)", result.totalWeightAll ],[ "إجمالي الوزن (طن)", (result.totalWeightAll/1000).toFixed(2) ]].forEach(([l,v])=>{ dash.getCell(`A${r}`).value=l; dash.getCell(`B${r}`).value=v; if(l.includes("نسبة")) dash.getCell(`B${r}`).numFmt="0.00%"; r++; });
+    let drRow = r+2; dash.getCell(`A${drRow}`).value="إجمالي رحلات الشهر لكل سائق"; dash.mergeCells(`A${drRow}:C${drRow}`); dash.getCell(`A${drRow+1}`).value="اسم السائق"; dash.getCell(`B${drRow+1}`).value="عدد الرحلات"; dash.getCell(`C${drRow+1}`).value="مجموع الوزن (كجم)";
     let drIdx = drRow+2; for(let d of result.driversStats){ dash.getCell(`A${drIdx}`).value=d.name; dash.getCell(`B${drIdx}`).value=d.trips; dash.getCell(`C${drIdx}`).value=d.totalWeight; drIdx++; }
+    let matRow = drIdx+2; dash.getCell(`A${matRow}`).value="إجمالي الأوزان حسب كود المادة"; dash.mergeCells(`A${matRow}:B${matRow}`); dash.getCell(`A${matRow+1}`).value="كود المادة"; dash.getCell(`B${matRow+1}`).value="الوزن الإجمالي (كجم)";
+    let mIdx = matRow+2; for(let m of result.materialsStats){ dash.getCell(`A${mIdx}`).value=m.code; dash.getCell(`B${mIdx}`).value=m.weight; mIdx++; }
     return outWb;
   }
 
-  async function processFile(file, outName){
+  async function processExcelFile(file, outName){
     let buf = await file.arrayBuffer();
     let wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
     let sheet = wb.worksheets[0];
     let rows = [];
     sheet.eachRow({includeEmpty:true}, (row)=>{ let vals = row.values.slice(1).map(v=>v??""); rows.push(vals); });
-    let res = processDataAdvanced(rows);
-    let outWb = await buildWorkbook(res, wb);
+    let res = processData(rows);
+    let outWb = await buildOutputWorkbook(res, wb);
     let outBuf = await outWb.xlsx.writeBuffer();
     let blob = new Blob([outBuf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
     let a = document.createElement("a");
@@ -218,21 +256,19 @@
     return res;
   }
 
-  document.getElementById("toggleReportBtn").onclick = ()=>document.getElementById("reportSection").classList.add("active");
-  document.getElementById("closeReportBtn").onclick = ()=>document.getElementById("reportSection").classList.remove("active");
-  document.getElementById("processFileBtn").onclick = async ()=>{
-    let inp = document.getElementById("excelFileInput");
-    let outName = document.getElementById("outputFileName").value.trim() || "Monthly_Trips_Report.xlsx";
-    if(!inp.files.length){ document.getElementById("statusMsg").innerHTML="⚠️ Please select an Excel file first."; return; }
-    document.getElementById("statusMsg").innerHTML="⏳ Processing...";
+  document.getElementById("processBtn").onclick = async ()=>{
+    let inp = document.getElementById("fileInput");
+    let outName = document.getElementById("outputName").value.trim() || "Monthly_Trips_Report.xlsx";
+    if(!inp.files.length){ document.getElementById("statusMsg").innerHTML="⚠️ يرجى اختيار ملف Excel أولاً."; return; }
+    document.getElementById("statusMsg").innerHTML="⏳ جاري المعالجة...";
     try{
-      let result = await processFile(inp.files[0], outName);
+      let result = await processExcelFile(inp.files[0], outName);
       displayUI(result);
-      document.getElementById("statusMsg").innerHTML="✅ Processing completed. Download started. Charts and tables updated.";
-    }catch(e){ console.error(e); document.getElementById("statusMsg").innerHTML="❌ Error: "+e.message; }
+      document.getElementById("statusMsg").innerHTML="✅ تمت المعالجة بنجاح. تم تحميل الملف الناتج وعرض الإحصائيات.";
+    }catch(e){ console.error(e); document.getElementById("statusMsg").innerHTML="❌ خطأ: "+e.message; }
   };
-  document.getElementById("downloadExcludedBtn").onclick = ()=>{
-    let content = "Excluded names (not our trips):\nEISAM خ\nEISAM ح\nعادل خ\nعادل ح\nMAMOON\nzeshan\nبرهان\nابراهيم";
+  document.getElementById("excludedListBtn").onclick = ()=>{
+    let content = "قائمة الأسماء المستثناة:\nEISAM خ\nEISAM ح\nعادل خ\nعادل ح\nMAMOON\nzeshan\nبرهان\nابراهيم";
     let blob = new Blob([content], {type:"text/plain;charset=utf-8"});
     let a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
