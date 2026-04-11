@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>رفع تقرير - نظام إدارة طلبات كسارة الحبردي</title>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; position: relative; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
+    .nav-link { padding: 12px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; text-decoration: none; color: #fff; font-weight: 600; transition: all 0.3s; }
+    .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transform: translateY(-2px); }
+    .card {
+      background: rgba(255,255,255,0.08);
+      backdrop-filter: blur(8px);
+      border-radius: 24px;
+      padding: 28px;
+      margin-top: 20px;
+      border: 1px solid rgba(255,255,255,0.15);
+    }
+    label { display: block; font-weight: 600; margin-bottom: 10px; color: #a8b2d1; }
+    input[type="file"], input[type="text"] {
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 15px;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .btns { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+    button {
+      border: none;
+      border-radius: 14px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-primary { background: linear-gradient(135deg, #11998e, #38ef7d); color: #1a1a2e; }
+    .btn-secondary { background: #4facfe; color: #fff; }
+    .status {
+      margin-top: 20px;
+      padding: 14px;
+      background: rgba(0,0,0,0.3);
+      border-radius: 14px;
+      color: #38ef7d;
+      font-weight: 600;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 20px;
+    }
+    .metric {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+    }
+    .metric .t { color: #a8b2d1; font-size: 13px; margin-bottom: 8px; }
+    .metric .v { font-size: 28px; font-weight: 800; color: #38ef7d; }
+    .chart-card {
+      margin-top: 20px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 20px;
+      padding: 20px;
+      display: none;
+    }
+    .chart-title { font-weight: 800; margin-bottom: 15px; color: #667eea; }
+    .chart-wrap { height: 320px; }
+    @media (max-width: 768px) { .row, .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📊 رفع تقرير رحلات</h1>
+      <p>تحليل ملف Excel وحفظ النتائج في قاعدة البيانات</p>
+      <div style="position: absolute; top: 20px; left: 20px;">
+        <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
+      </div>
+    </div>
+    <div class="nav-links" id="navLinks"></div>
+
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>📂 اختر ملف Excel</label>
+          <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls" />
+        </div>
+        <div>
+          <label>📝 اسم التقرير</label>
+          <input type="text" id="reportName" placeholder="مثال: تقرير أبريل 2026" />
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn-primary" onclick="processAndUpload()">🚀 معالجة ورفع التقرير</button>
+        <button class="btn-secondary" onclick="downloadExcludedList()">📄 تنزيل قائمة الاستثناءات</button>
+      </div>
+      <div class="status" id="status">✅ جاهز للمعالجة</div>
+      <div class="grid" id="metrics" style="display:none">
+        <div class="metric"><div class="t">إجمالي الصفوف</div><div class="v" id="mTotal">0</div></div>
+        <div class="metric"><div class="t">رحلات محققة</div><div class="v" id="mMatched">0</div></div>
+        <div class="metric"><div class="t">غير تابعة</div><div class="v" id="mNotMatched">0</div></div>
+        <div class="metric"><div class="t">نسبة الإنجاز</div><div class="v" id="mRate">0%</div></div>
+      </div>
+      <div class="chart-card" id="chartCard">
+        <div class="chart-title">📈 ملخص الرحلات</div>
+        <div class="chart-wrap"><canvas id="dashboardChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api';
+    const VALID_TRIP_NUMBERS = new Set([
+      "1091","2757","2758","2759","2760","2762","2818","2927","2928","2929",
+      "3321","3322","3324","3325","3326","3461","3462","3963","4445","5324",
+      "5367","5520","5521","5522","5523","5524","5525","5526","5527","5528",
+      "5658","5796","5797","5800","6398","6428","6429","6430","6432","6612",
+      "6613","6614","6615","6616","6617","6618","6619","6620","6621","6622",
+      "6623","6624","6626","6629","6935","6939","7042","7043","7332","7682",
+      "7750","7837","7926","7927","7928","7929","7930","7974","7980","9103",
+      "9492","9493","9495","9496"
+    ]);
+    const EXCLUDED_NAMES = new Set([
+      "eisam خ","eisam ح","عادل خ","عادل ح","mamoon","zeshan","برهان","ابراهيم"
+    ]);
+
+    let currentChart = null;
+
+    async function apiCall(endpoint, method = 'GET', data = null) {
+      const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
+      if (data) options.body = JSON.stringify(data);
+      const res = await fetch(`${API_BASE}${endpoint}`, options);
+      if (res.status === 401) { window.location.href = '/login.html'; throw new Error('غير مصرح'); }
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    function normalizeText(value) {
+      return String(value ?? "").trim().normalize("NFKC").replace(/\s+/g, " ").toLowerCase();
+    }
+    function keepDigitsOnly(value) {
+      const arabicDigits = {"٠":"0","١":"1","٢":"2","٣":"3","٤":"4","٥":"5","٦":"6","٧":"7","٨":"8","٩":"9"};
+      const txt = String(value ?? "").replace(/[٠-٩]/g, d => arabicDigits[d]);
+      const m = txt.match(/\d+/g);
+      return m ? m.join("") : "";
+    }
+    function rowHasExcludedName(row) {
+      return row.some(v => EXCLUDED_NAMES.has(normalizeText(v)));
+    }
+
+    function processData(rows) {
+      const headers = rows[0] || [];
+      let matched_count = 0, not_matched_count = 0, total_rows = 0;
+      const summaryRows = [headers.slice()];
+      const notOursRows = [headers.slice()];
+      const seenValidNumbers = new Set();
+
+      for (let r = 1; r < rows.length; r++) {
+        const row = (rows[r] || []).slice();
+        if (!row.some(v => v !== null && v !== undefined && v !== "")) continue;
+        total_rows++;
+        const cleanedE = keepDigitsOnly(row[4] ?? "");
+        if (row.length >= 5) row[4] = cleanedE;
+
+        if (rowHasExcludedName(row)) {
+          notOursRows.push(row);
+          not_matched_count++;
+          continue;
+        }
+        if (VALID_TRIP_NUMBERS.has(cleanedE)) {
+          summaryRows.push(row);
+          matched_count++;
+          seenValidNumbers.add(cleanedE);
+        } else {
+          notOursRows.push(row);
+          not_matched_count++;
+        }
+      }
+      const missingNumbers = [...VALID_TRIP_NUMBERS].filter(x => !seenValidNumbers.has(x)).sort((a,b)=>Number(a)-Number(b));
+      return { summaryRows, notOursRows, matched_count, not_matched_count, total_rows, missingNumbers };
+    }
+
+    function setMetrics(result) {
+      document.getElementById("metrics").style.display = "grid";
+      document.getElementById("mTotal").textContent = result.total_rows;
+      document.getElementById("mMatched").textContent = result.matched_count;
+      document.getElementById("mNotMatched").textContent = result.not_matched_count;
+      const rate = result.total_rows ? ((result.matched_count / result.total_rows) * 100).toFixed(2) : 0;
+      document.getElementById("mRate").textContent = rate + "%";
+    }
+
+    function renderChart(result) {
+      document.getElementById("chartCard").style.display = "block";
+      const ctx = document.getElementById("dashboardChart");
+      if (currentChart) currentChart.destroy();
+      currentChart = new Chart(ctx, {
+        type: "bar",
+        data: { labels: ["رحلات محققة", "غير تابعة"], datasets: [{ label: "العدد", data: [result.matched_count, result.not_matched_count], backgroundColor: ["#38ef7d", "#f5576c"], borderRadius: 8 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: "#fff" } } }, scales: { y: { ticks: { color: "#a8b2d1", precision: 0 }, beginAtZero: true }, x: { ticks: { color: "#a8b2d1" } } } }
+      });
+    }
+
+    async function processAndUpload() {
+      const fileInput = document.getElementById("fileInput");
+      const reportName = document.getElementById("reportName").value.trim() || `تقرير_${new Date().toISOString().slice(0,19)}`;
+      if (!fileInput.files.length) { setStatus("❌ اختر ملف Excel أولاً", "error"); return; }
+      setStatus("⏳ جاري معالجة الملف...", "info");
+      try {
+        const file = fileInput.files[0];
+        const buffer = await file.arrayBuffer();
+        const ExcelJS = window.ExcelJS;
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const firstSheet = workbook.worksheets[0];
+        const rows = [];
+        firstSheet.eachRow({ includeEmpty: true }, (row) => {
+          const vals = row.values.slice(1).map(v => v ?? "");
+          rows.push(vals);
+        });
+        const result = processData(rows);
+        setMetrics(result);
+        renderChart(result);
+
+        const reportData = {
+          report_date: new Date().toISOString().split('T')[0],
+          filename: reportName,
+          total_rows: result.total_rows,
+          matched_count: result.matched_count,
+          not_matched_count: result.not_matched_count,
+          achievement_rate: result.total_rows ? (result.matched_count / result.total_rows) : 0,
+          details: {
+            summaryRows: result.summaryRows.slice(0, 1000),
+            notOursRows: result.notOursRows.slice(0, 1000),
+            missingNumbers: result.missingNumbers
+          }
+        };
+        await apiCall('/upload-report', 'POST', reportData);
+        setStatus("✅ تمت المعالجة ورفع التقرير بنجاح إلى قاعدة البيانات!", "success");
+      } catch (err) {
+        console.error(err);
+        setStatus("❌ خطأ: " + err.message, "error");
+      }
+    }
+
+    function downloadExcludedList() {
+      const content = ["قائمة الأسماء المستثناة:", ...Array.from(EXCLUDED_NAMES)].join("\n");
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "excluded_names.txt";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function setStatus(msg, type = "info") {
+      const el = document.getElementById("status");
+      el.textContent = msg;
+      el.style.color = type === "error" ? "#f5576c" : (type === "success" ? "#38ef7d" : "#a8b2d1");
+    }
+
+    function logout() {
+      if (confirm("تسجيل الخروج؟")) fetch('/api/logout', { method: 'POST', credentials: 'include' }).then(() => window.location.href = '/login.html');
+    }
+
+    function loadNav() {
+      fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(data => {
+        if (data.user) {
+          document.getElementById('navLinks').innerHTML = `
+            <a href="index.html" class="nav-link">📊 الرئيسية</a>
+            <a href="orders.html" class="nav-link">📝 الطلبات</a>
+            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+            <a href="factories.html" class="nav-link">🏭 المصانع</a>
+            <a href="reports.html" class="nav-link">📊 التقارير</a>
+            <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+            <a href="upload-report.html" class="nav-link active">📤 رفع تقرير</a>
+            <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+            <a href="users.html" class="nav-link">👥 المستخدمين</a>
+            <a href="logs.html" class="nav-link">📜 السجلات</a>
+          `;
+        } else window.location.href = '/login.html';
+      }).catch(() => window.location.href = '/login.html');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => loadNav());
+  </script>
+</body>
+</html>
