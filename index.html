@@ -7,7 +7,12 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         .header { text-align: center; padding: 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 20px; margin-bottom: 30px; position: relative; }
         .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
@@ -41,12 +46,87 @@
         .loading.active { display: flex; }
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* أيقونة التنبيه المحسنة مع ظرف */
         .alert-badge {
-            position: absolute; top: 15px; right: 20px; background: #eb3349; color: white; border-radius: 50%; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.4em; cursor: pointer; box-shadow: 0 0 10px rgba(235,51,73,0.5); transition: all 0.3s ease; z-index: 100; animation: pulse 1s infinite;
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: #eb3349;
+            color: white;
+            border-radius: 50%;
+            width: 55px;
+            height: 55px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.4em;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(235,51,73,0.8);
+            transition: all 0.3s ease;
+            z-index: 100;
+            animation: pulse 1s infinite, shake 0.5s infinite;
         }
-        .alert-badge:hover { transform: scale(1.1); }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(235,51,73,0.7); } 70% { box-shadow: 0 0 0 15px rgba(235,51,73,0); } 100% { box-shadow: 0 0 0 0 rgba(235,51,73,0); } }
+        .alert-badge:hover {
+            transform: scale(1.15);
+            box-shadow: 0 0 25px rgba(235,51,73,1);
+        }
+        /* حركة اهتزاز */
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            50% { transform: translateX(3px); }
+            75% { transform: translateX(-2px); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(235,51,73,0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(235,51,73,0); }
+            100% { box-shadow: 0 0 0 0 rgba(235,51,73,0); }
+        }
         .alert-badge.hidden { display: none; }
+        
+        /* شريط التنبيه العلوي */
+        .alert-bar {
+            background: linear-gradient(135deg, #f093fb, #f5576c);
+            padding: 10px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            animation: slideDown 0.5s ease;
+        }
+        .alert-bar.hidden { display: none; }
+        @keyframes slideDown {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .alert-bar .message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1em;
+        }
+        .alert-bar .message span {
+            font-size: 1.5em;
+        }
+        .alert-bar button {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 6px 15px;
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .alert-bar button:hover {
+            background: rgba(255,255,255,0.4);
+        }
+        
         @media (max-width:768px){ .charts-grid { grid-template-columns:1fr; } .chart-wrapper { height:250px; } }
     </style>
 </head>
@@ -60,11 +140,23 @@
             <div style="position: absolute; top: 20px; left: 20px;">
                 <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
                 <button onclick="manualCheckOrders()" style="background: #4facfe; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer; margin-right: 10px;">🔄 تحديث يدوي</button>
+                <button onclick="goToDistribution()" style="background: #f093fb; border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer; margin-right: 10px;">⚡ توزيع الطلبات</button>
             </div>
-            <div id="alertBadge" class="alert-badge hidden" onclick="goToDistribution()">
-                <span id="alertCount">0</span>
+            <!-- أيقونة التنبيه (ظرف + رقم) -->
+            <div id="alertBadge" class="alert-badge hidden" onclick="goToDistribution()" title="طلبات جديدة غير موزعة - اضغط للتوزيع">
+                <span id="alertCount">0</span>📬
             </div>
         </div>
+        
+        <!-- شريط التنبيه العلوي -->
+        <div id="alertBar" class="alert-bar hidden">
+            <div class="message">
+                <span>📬</span>
+                <span id="alertBarMessage">يوجد طلبات جديدة غير موزعة!</span>
+            </div>
+            <button onclick="goToDistribution()">الذهاب للتوزيع</button>
+        </div>
+        
         <div class="nav-links" id="navLinks"></div>
 
         <div class="stats-grid">
@@ -103,13 +195,20 @@
 
         function updateAlertBadge() {
             const badge = document.getElementById('alertBadge');
+            const alertBar = document.getElementById('alertBar');
             const countSpan = document.getElementById('alertCount');
+            const barMessage = document.getElementById('alertBarMessage');
+            
             if (!badge) return;
+            
             if ((currentUserRole === 'admin' || currentUserRole === 'user') && pendingOrdersCount > 0) {
                 badge.classList.remove('hidden');
+                alertBar.classList.remove('hidden');
                 countSpan.textContent = pendingOrdersCount;
+                barMessage.innerHTML = `📬 يوجد ${pendingOrdersCount} طلب جديد غير موزع! اضغط للانتقال للتوزيع.`;
             } else {
                 badge.classList.add('hidden');
+                alertBar.classList.add('hidden');
             }
         }
 
@@ -119,7 +218,7 @@
             updateAlertBadge();
             playBeep();
             localStorage.setItem('pendingOrdersCount', pendingOrdersCount);
-            showToast('🔔 تم استلام طلب جديد! اذهب إلى صفحة التوزيع لتوزيعه (يدوي أو تلقائي).', 'warning');
+            showToast('🔔 تم استلام طلب جديد! اضغط على الظرف الأحمر أو شريط التنبيه للتوزيع.', 'warning');
         }
 
         function resetAlertCount() {
@@ -194,7 +293,7 @@
                     timestamp: order.timestamp || '—'
                 }));
                 const tbody = document.getElementById('recentOrdersBody');
-                if (!recent.length) tbody.innerHTML = '<table><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
+                if (!recent.length) tbody.innerHTML = '</table><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
                 else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
 
                 if (currentUserRole === 'admin' || currentUserRole === 'user') {
