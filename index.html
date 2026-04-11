@@ -47,7 +47,6 @@
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         
-        /* أيقونة التنبيه */
         .alert-badge {
             position: absolute;
             top: 15px;
@@ -73,7 +72,6 @@
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(235,51,73,0.7); } 70% { box-shadow: 0 0 0 20px rgba(235,51,73,0); } 100% { box-shadow: 0 0 0 0 rgba(235,51,73,0); } }
         .alert-badge.hidden { display: none; }
         
-        /* شريط التنبيه العلوي */
         .alert-bar {
             background: linear-gradient(135deg, #f093fb, #f5576c);
             padding: 10px 20px;
@@ -148,6 +146,7 @@
         let pendingOrdersCount = 0;
         let currentUserRole = null;
         let lastOrderCount = 0;
+        let pollingInterval = null;
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
@@ -165,7 +164,6 @@
             const barMessage = document.getElementById('alertBarMessage');
             if (!badge) return;
             
-            // حساب الطلبات غير الموزعة: إجمالي الطلبات - عدد التوزيعات الفريدة
             const totalOrdersElem = document.getElementById('totalOrders');
             const totalTripsElem = document.getElementById('totalTrips');
             const totalOrders = parseInt(totalOrdersElem?.textContent) || 0;
@@ -208,8 +206,8 @@
             window.location.href = 'distribution.html';
         }
 
-        async function loadDashboard() {
-            showLoading(true);
+        // تحديث البيانات في الخلفية (بدون تأثير على واجهة المستخدم)
+        async function silentUpdate() {
             try {
                 const [settings, dayData] = await Promise.all([
                     apiCall('/settings'),
@@ -219,18 +217,23 @@
                 const distribution = dayData.distribution || [];
                 const trucks = settings.trucks || [];
 
-                // حساب التوزيعات الفريدة (كل طلب يوزع مرة واحدة فقط)
-                const uniqueDistributedOrders = new Set(distribution.map(d => d.orderId));
-                const distributedCount = uniqueDistributedOrders.size;
-
-                document.getElementById('totalOrders').textContent = orders.length;
-                document.getElementById('totalTrips').textContent = distributedCount;
-                const activeTrucks = new Set(distribution.map(d => d.truck?.number).filter(Boolean)).size;
-                document.getElementById('activeTrucks').textContent = activeTrucks;
+                // حساب التوزيعات الفريدة
+                const distributedMap = new Map();
+                distribution.forEach(d => { if (!distributedMap.has(d.orderId)) distributedMap.set(d.orderId, d); });
+                const uniqueDistributions = Array.from(distributedMap.values());
+                const distributedCount = uniqueDistributions.length;
+                const activeTrucksSet = new Set(uniqueDistributions.map(d => d.truck?.number).filter(Boolean));
+                const activeTrucksCount = activeTrucksSet.size;
                 const target = trucks.length * 2;
                 const percentage = target > 0 ? Math.min(100, Math.round((distributedCount / target) * 100)) : 0;
+
+                // تحديث العناصر في الصفحة
+                document.getElementById('totalOrders').textContent = orders.length;
+                document.getElementById('totalTrips').textContent = distributedCount;
+                document.getElementById('activeTrucks').textContent = activeTrucksCount;
                 document.getElementById('completedPercentage').textContent = percentage + '%';
 
+                // إحصائيات للرسوم البيانية
                 const factoryStats = {};
                 orders.forEach(order => { const f = order.factory || 'غير محدد'; factoryStats[f] = (factoryStats[f] || 0) + 1; });
                 const materialStats = {};
@@ -249,19 +252,35 @@
                 if (!recent.length) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
                 else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
 
-                // تحديث الإشعارات
-                updateAlertBadge();
-                
-                // التحقق من الطلبات الجديدة
+                // التحقق من الطلبات الجديدة (لإظهار الإشعارات)
                 if (orders.length > lastOrderCount && lastOrderCount > 0) {
                     const newOrdersCount = orders.length - lastOrderCount;
                     playBeep();
                     showToast(`🔔 تم استلام ${newOrdersCount} طلب جديد! اضغط على الظرف الأحمر للتوزيع.`, 'warning');
                 }
                 lastOrderCount = orders.length;
+                updateAlertBadge();
                 
-            } catch(e) { console.error(e); showToast('خطأ في تحميل البيانات', 'error'); }
-            showLoading(false);
+            } catch(e) { console.error('خطأ في التحديث الخلفي:', e); }
+        }
+
+        // التحديث اليدوي (يظهر رسالة)
+        async function manualCheckOrders() {
+            showToast('جاري تحديث البيانات...', 'info');
+            await silentUpdate();
+            showToast('تم تحديث البيانات بنجاح', 'success');
+        }
+
+        // بدء التحديث التلقائي في الخلفية (بدون إزعاج)
+        function startBackgroundPolling() {
+            if (pollingInterval) clearInterval(pollingInterval);
+            // تحديث فوري أول مرة
+            setTimeout(() => silentUpdate(), 1000);
+            // ثم كل 10 ثوانٍ في الخلفية
+            pollingInterval = setInterval(() => {
+                silentUpdate();
+            }, 10000);
+            console.log('🚀 بدء التحديث التلقائي في الخلفية (كل 10 ثوانٍ)');
         }
 
         function renderFactoriesChart(stats) {
@@ -289,13 +308,6 @@
             });
         }
 
-        async function manualCheckOrders() {
-            showToast('جاري تحديث البيانات...', 'info');
-            await loadDashboard();
-            showToast('تم تحديث البيانات بنجاح', 'success');
-        }
-
-        // الاستماع للإشارات من orders.html
         window.addEventListener('storage', function(e) {
             if (e.key === 'newOrderTimestamp') {
                 console.log('🔄 تم اكتشاف طلب جديد، جارٍ التحديث');
@@ -325,6 +337,7 @@
                 logoutBtn.style.opacity = '0.5';
                 logoutBtn.innerText = '⏳ جاري...';
             }
+            if (pollingInterval) clearInterval(pollingInterval);
             fetch('/api/logout', { method: 'POST', credentials: 'include' })
                 .then(() => { localStorage.clear(); window.location.href = '/login.html'; })
                 .catch(() => { localStorage.clear(); window.location.href = '/login.html'; });
@@ -367,13 +380,9 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadNav();
             showLoading(true);
-            await loadDashboard();
+            await silentUpdate(); // التحميل الأولي
             showLoading(false);
-            
-            // تحديث الإشعارات كل 10 ثوانٍ
-            setInterval(async () => {
-                await loadDashboard();
-            }, 10000);
+            startBackgroundPolling(); // بدء التحديث الخلفي
         });
     </script>
 </body>
