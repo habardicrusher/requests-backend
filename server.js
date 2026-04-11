@@ -3,7 +3,7 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const path = require('path');
-const { pool, addLog, getLogs, getLogsCount } = require('./db');
+const { pool, addLog, getLogs, getLogsCount, saveReport, getReports } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,7 +35,7 @@ async function logAction(req, action, details, location) {
     await addLog(username, action, details || null, location || null);
 }
 
-// ==================== دوال قاعدة البيانات ====================
+// ==================== دوال قاعدة البيانات الأساسية ====================
 async function getDayData(date) {
     const res = await pool.query('SELECT orders, distribution FROM daily_data WHERE date = $1', [date]);
     if (res.rows.length === 0) return { orders: [], distribution: [] };
@@ -163,7 +163,7 @@ app.put('/api/settings', requireAuth, async (req, res) => {
     if (req.session.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const { factories, materials, trucks } = req.body;
     await saveSettings(factories, materials, trucks);
-    await logAction(req, 'تحديث الإعدادات', `تم تحديث الإعدادات: ${factories.length} مصنع, ${materials.length} نوع بحص, ${trucks.length} سيارة`, null);
+    await logAction(req, 'تحديث الإعدادات', `المصانع: ${factories.length}, المواد: ${materials.length}, السيارات: ${trucks.length}`, null);
     res.json({ success: true });
 });
 
@@ -188,14 +188,14 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
     const existing = await getUserByUsername(username);
     if (existing) return res.status(400).json({ error: 'اسم المستخدم موجود' });
     await createUser(username, password, role, factory, permissions);
-    await logAction(req, 'إضافة مستخدم', `تم إضافة المستخدم: ${username}, الدور: ${role}, المصنع: ${factory || 'لا يوجد'}`, null);
+    await logAction(req, 'إضافة مستخدم', `المستخدم: ${username}, الدور: ${role}, المصنع: ${factory || 'لا يوجد'}`, null);
     res.json({ success: true });
 });
 app.put('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const { username, role, factory, permissions, password } = req.body;
     await updateUser(id, username, role, factory, permissions, password);
-    await logAction(req, 'تعديل مستخدم', `تم تعديل المستخدم: ${username}, الدور: ${role}`, null);
+    await logAction(req, 'تعديل مستخدم', `المستخدم: ${username}, الدور: ${role}`, null);
     res.json({ success: true });
 });
 app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
@@ -203,7 +203,7 @@ app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     const user = (await getUsers()).find(u => u.id === id);
     if (user?.username === 'Admin') return res.status(400).json({ error: 'لا يمكن حذف المدير الرئيسي' });
     await deleteUser(id);
-    await logAction(req, 'حذف مستخدم', `تم حذف المستخدم: ${user?.username}`, null);
+    await logAction(req, 'حذف مستخدم', `المستخدم: ${user?.username}`, null);
     res.json({ success: true });
 });
 
@@ -235,7 +235,7 @@ app.delete('/api/restrictions/:id', requireAuth, async (req, res) => {
     res.json({ success: true });
 });
 
-// Reports
+// Reports (original)
 app.get('/api/reports', requireAuth, async (req, res) => {
     const { startDate, endDate } = req.query;
     const start = new Date(startDate);
@@ -275,7 +275,7 @@ app.get('/api/backup', requireAuth, requireAdmin, async (req, res) => {
     const settings = await getSettings();
     const users = await getUsers();
     const restrictions = await getRestrictions();
-    await logAction(req, 'تصدير نسخة احتياطية', 'تم تصدير نسخة احتياطية كاملة للنظام', null);
+    await logAction(req, 'تصدير نسخة احتياطية', null, null);
     res.json({ settings, users, restrictions, exportDate: new Date().toISOString() });
 });
 app.post('/api/restore', requireAuth, requireAdmin, async (req, res) => {
@@ -287,7 +287,7 @@ app.post('/api/restore', requireAuth, requireAdmin, async (req, res) => {
             await addRestriction(r.truck_number, r.driver_name, r.restricted_factories, r.reason, r.created_by);
         }
     }
-    await logAction(req, 'استعادة نسخة احتياطية', 'تم استعادة نسخة احتياطية سابقة', null);
+    await logAction(req, 'استعادة نسخة احتياطية', null, null);
     res.json({ success: true });
 });
 
@@ -295,54 +295,74 @@ app.post('/api/restore', requireAuth, requireAdmin, async (req, res) => {
 app.delete('/api/clear-all', requireAuth, requireAdmin, async (req, res) => {
     await pool.query('DELETE FROM daily_data');
     await pool.query('DELETE FROM restrictions');
-    await logAction(req, 'مسح جميع البيانات', 'تم مسح جميع بيانات النظام (الطلبات والتوزيعات والقيود)', null);
+    await logAction(req, 'مسح جميع البيانات', null, null);
     res.json({ success: true });
 });
 
-// ==================== سجلات النظام (Logs) ====================
+// Logs endpoints
 app.get('/api/logs', requireAuth, async (req, res) => {
-    try {
-        if (req.session.user.role !== 'admin') {
-            return res.status(403).json({ error: 'غير مصرح' });
-        }
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 50;
-        const offset = (page - 1) * limit;
-        const logs = await getLogs(limit, offset);
-        const total = await getLogsCount();
-        res.json({
-            logs: logs || [],
-            currentPage: page,
-            totalPages: Math.ceil(total / limit),
-            total: total || 0
-        });
-    } catch (err) {
-        console.error('خطأ في /api/logs:', err);
-        res.status(500).json({ error: 'فشل في تحميل السجلات' });
-    }
+    if (req.session.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    const logs = await getLogs(limit, offset);
+    const total = await getLogsCount();
+    res.json({ logs: logs || [], currentPage: page, totalPages: Math.ceil(total / limit), total: total || 0 });
 });
-
 app.get('/api/logs/all', requireAuth, async (req, res) => {
+    if (req.session.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    const logs = await getLogs(10000, 0);
+    res.json(logs || []);
+});
+app.delete('/api/logs/clear', requireAuth, requireAdmin, async (req, res) => {
+    await pool.query('DELETE FROM logs');
+    await addLog(req.session.user.username, 'مسح السجلات', 'قام بحذف جميع سجلات النظام', null);
+    res.json({ success: true });
+});
+
+// ==================== تقارير التحليل (Trip Summary) ====================
+app.post('/api/upload-report', requireAuth, async (req, res) => {
     try {
         if (req.session.user.role !== 'admin') {
             return res.status(403).json({ error: 'غير مصرح' });
         }
-        const logs = await getLogs(10000, 0);
-        res.json(logs || []);
+        const reportData = req.body;
+        if (!reportData.report_date || !reportData.filename) {
+            return res.status(400).json({ error: 'بيانات ناقصة' });
+        }
+        const saved = await saveReport(reportData);
+        await addLog(req.session.user.username, 'رفع تقرير', `تم رفع تقرير ${reportData.filename}`, null);
+        res.json({ success: true, id: saved.id });
     } catch (err) {
-        console.error('خطأ في /api/logs/all:', err);
-        res.status(500).json({ error: 'فشل في تحميل السجلات' });
+        console.error(err);
+        res.status(500).json({ error: 'فشل في حفظ التقرير' });
     }
 });
 
-app.delete('/api/logs/clear', requireAuth, requireAdmin, async (req, res) => {
+app.get('/api/reports-list', requireAuth, async (req, res) => {
     try {
-        await pool.query('DELETE FROM logs');
-        await addLog(req.session.user.username, 'مسح السجلات', 'قام بحذف جميع سجلات النظام', null);
-        res.json({ success: true });
+        const { startDate, endDate, filename } = req.query;
+        const filters = {};
+        if (startDate) filters.startDate = startDate;
+        if (endDate) filters.endDate = endDate;
+        if (filename) filters.filename = filename;
+        const reports = await getReports(filters);
+        res.json(reports);
     } catch (err) {
-        console.error('خطأ في /api/logs/clear:', err);
-        res.status(500).json({ error: 'فشل في مسح السجلات' });
+        console.error(err);
+        res.status(500).json({ error: 'فشل في جلب التقارير' });
+    }
+});
+
+app.get('/api/reports/:id', requireAuth, async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const result = await pool.query('SELECT * FROM reports WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'تقرير غير موجود' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'فشل في جلب التقرير' });
     }
 });
 
@@ -359,7 +379,7 @@ app.get('/', (req, res) => {
     }
 });
 
-const allProtectedPages = ['index.html', 'orders.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html'];
+const allProtectedPages = ['index.html', 'orders.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html', 'upload-report.html'];
 allProtectedPages.forEach(page => {
     app.get(`/${page}`, (req, res) => {
         if (!req.session || !req.session.user) return res.redirect('/login.html');
