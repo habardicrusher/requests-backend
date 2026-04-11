@@ -13,7 +13,7 @@ pool.connect((err, client, release) => {
     release();
 });
 
-// إنشاء جدول الإعدادات (factories, materials, trucks)
+// إنشاء جدول الإعدادات
 async function initSettingsTable() {
     try {
         await pool.query(`
@@ -27,7 +27,14 @@ async function initSettingsTable() {
         `);
         const res = await pool.query('SELECT * FROM app_settings WHERE id = 1');
         if (res.rows.length === 0) {
-            const defaultFactories = [ /* ... (كما هو سابقاً) */ ];
+            const defaultFactories = [
+                { name: 'SCCCL', location: 'الدمام' }, { name: 'الحارث للمنتجات الاسمنيه', location: 'الدمام' },
+                { name: 'الحارثي القديم', location: 'الدمام' }, { name: 'المعجل لمنتجات الاسمنت', location: 'الدمام' },
+                { name: 'الحارث العزيزية', location: 'الدمام' }, { name: 'سارمكس النظيم', location: 'الرياض' },
+                { name: 'عبر الخليج', location: 'الرياض' }, { name: 'الكفاح للخرسانة الجاهزة', location: 'الدمام' },
+                { name: 'القيشان 3', location: 'الدمام' }, { name: 'القيشان 2 - الأحجار الشرقية', location: 'الدمام' },
+                { name: 'القيشان 1', location: 'الدمام' }, { name: 'الفهد للبلوك والخرسانة', location: 'الرياض' }
+            ];
             const defaultMaterials = ['3/4', '3/8', '3/16'];
             await pool.query(
                 'INSERT INTO app_settings (id, factories, materials, trucks) VALUES (1, $1, $2, $3)',
@@ -40,7 +47,7 @@ async function initSettingsTable() {
     }
 }
 
-// إنشاء جدول السجلات (logs)
+// إنشاء جدول السجلات (بدون IP و User-Agent)
 async function initLogsTable() {
     try {
         await pool.query(`
@@ -49,8 +56,7 @@ async function initLogsTable() {
                 username VARCHAR(100),
                 action VARCHAR(255),
                 details TEXT,
-                ip VARCHAR(50),
-                user_agent TEXT,
+                location VARCHAR(100),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
@@ -60,14 +66,12 @@ async function initLogsTable() {
     }
 }
 
-// دوال للسجلات
-async function addLog(username, action, details = null, req = null) {
+// دالة إضافة سجل (بدون IP وبدون user-agent، مع إضافة location)
+async function addLog(username, action, details = null, location = null) {
     try {
-        const ip = req ? req.headers['x-forwarded-for'] || req.socket.remoteAddress : null;
-        const userAgent = req ? req.headers['user-agent'] : null;
         await pool.query(
-            'INSERT INTO logs (username, action, details, ip, user_agent) VALUES ($1, $2, $3, $4, $5)',
-            [username, action, details, ip, userAgent]
+            'INSERT INTO logs (username, action, details, location) VALUES ($1, $2, $3, $4)',
+            [username, action, details, location]
         );
     } catch (err) {
         console.error('خطأ في حفظ السجل:', err);
