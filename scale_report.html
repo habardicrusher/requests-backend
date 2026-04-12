@@ -299,7 +299,6 @@
     function hasExcludedName(row){ return row.some(c=>EXCLUDED_NAMES.has(normalizeText(c))); }
 
     function processData(rows){
-      const headers = rows[0] || [];
       let matched=0, notMatched=0, total=0;
       const driverStats = new Map();
       const materialStats = new Map();
@@ -373,9 +372,8 @@
       return processData(rows);
     }
 
-    // وظيفة تصدير Excel (صفحة واحدة فقط مع رسوم بيانية)
+    // وظيفة تصدير Excel (بدون رسوم بيانية، فقط جداول)
     async function exportToExcel(res, filename){
-      const ExcelJS = window.ExcelJS;
       const workbook = new ExcelJS.Workbook();
       const ws = workbook.addWorksheet("Trips Dashboard", { views: [{ rightToLeft: true }] });
 
@@ -449,42 +447,6 @@
         ws.getCell(`A${rowIdx}`).value = m.name;
         ws.getCell(`B${rowIdx}`).value = m.weight;
         rowIdx++;
-      }
-
-      // إضافة رسوم بيانية (باستخدام ExcelJS Chart API)
-      // الرسم البياني للأوزان حسب المواد
-      const materialDataStartRow = rowIdx - res.materialsStats.length;
-      const materialDataEndRow = rowIdx - 1;
-      if (res.materialsStats.length > 0) {
-        ws.addChart(ExcelJS.ChartType.Bar, {
-          name: "Chart_Materials",
-          title: "إجمالي الأوزان حسب نوع البحص (طن)",
-          xAxis: { label: "نوع البحص" },
-          yAxis: { label: "الوزن (طن)" },
-          data: {
-            labels: `A${materialDataStartRow+1}:A${materialDataEndRow+1}`,
-            datasets: [{ data: `B${materialDataStartRow+1}:B${materialDataEndRow+1}`, label: "الوزن (طن)" }]
-          },
-          position: { x: 500, y: 200 }
-        });
-      }
-
-      // الرسم البياني لأعلى 10 سائقين
-      const topDrivers = res.top10Drivers;
-      const driversStartRow = rowIdx - res.driversStats.length;
-      const driversEndRow = rowIdx - 1;
-      if (topDrivers.length > 0) {
-        ws.addChart(ExcelJS.ChartType.Bar, {
-          name: "Chart_Drivers",
-          title: "أعلى 10 سائقين بعدد الرحلات",
-          xAxis: { label: "السائق" },
-          yAxis: { label: "عدد الرحلات" },
-          data: {
-            labels: `A${driversStartRow+1}:A${driversStartRow+topDrivers.length}`,
-            datasets: [{ data: `B${driversStartRow+1}:B${driversStartRow+topDrivers.length}`, label: "عدد الرحلات" }]
-          },
-          position: { x: 500, y: 500 }
-        });
       }
 
       // حفظ الملف
