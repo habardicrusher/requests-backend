@@ -13,11 +13,7 @@
       background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
       color: #fff;
     }
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 20px;
-    }
+    .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
     .header {
       text-align: center;
       padding: 30px;
@@ -54,27 +50,6 @@
       margin-bottom: 28px;
       border: 1px solid rgba(255,255,255,0.15);
     }
-    .hero {
-      background: linear-gradient(135deg, #1f4e78, #16324f);
-      border-radius: 32px;
-      padding: 28px 32px;
-      margin-bottom: 28px;
-      color: white;
-    }
-    .hero h1 {
-      font-size: 1.8rem;
-      margin-bottom: 10px;
-    }
-    .badge {
-      background: #ffb347;
-      color: #2c3e2f;
-      padding: 6px 16px;
-      border-radius: 60px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      display: inline-block;
-      margin-top: 8px;
-    }
     .upload-row {
       display: flex;
       flex-wrap: wrap;
@@ -109,10 +84,7 @@
       color: #1a1a2e;
       cursor: pointer;
       transition: 0.2s;
-    }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      filter: brightness(1.05);
+      margin-left: 10px;
     }
     .btn-secondary {
       background: #4facfe;
@@ -122,7 +94,6 @@
       font-weight: 600;
       color: #fff;
       cursor: pointer;
-      margin-right: 10px;
     }
     .status {
       background: rgba(0,0,0,0.3);
@@ -195,12 +166,6 @@
       background: rgba(102,126,234,0.3);
       color: white;
     }
-    .footer-note {
-      font-size: 0.75rem;
-      color: #a8b2d1;
-      margin-top: 20px;
-      text-align: center;
-    }
     .toast-container {
       position: fixed;
       top: 20px;
@@ -257,25 +222,19 @@
     </div>
     <div class="nav-links" id="navLinks"></div>
 
-    <div class="hero">
-      <h1>🚛 تقارير الميزان الشهرية – البحص والكسارة</h1>
-      <p>رفع ملف Excel اليومي، تصفية الرحلات التابعة لنا (بناءً على أرقام الشاحنات وقائمة الاستبعاد)، تحليل الأوزان حسب كود المادة، إحصائيات السائقين، وتصدير تقرير محدث.</p>
-      <div class="badge">✓ يعتمد على أرقام الشاحنات المسموحة + الأسماء المستثناة</div>
-    </div>
-
     <div class="card">
       <div class="upload-row">
         <div class="upload-field">
-          <label>📂 اختر ملف Excel (تقرير الوزن اليومي)</label>
+          <label>📂 اختر ملف Excel</label>
           <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls">
         </div>
         <div class="upload-field">
           <label>📄 اسم الملف الناتج</label>
-          <input type="text" id="outputName" value="Monthly_Trips_Report.xlsx">
+          <input type="text" id="outputName" value="Monthly_Report.xlsx">
         </div>
         <div>
-          <button class="btn-primary" id="processBtn">▶ بدء المعالجة</button>
-          <button class="btn-secondary" id="excludedListBtn">📋 تنزيل قائمة الاستثناءات</button>
+          <button class="btn-primary" id="showResultsBtn">📊 عرض النتائج</button>
+          <button class="btn-secondary" id="exportExcelBtn">📥 تصدير الاكسيل</button>
         </div>
       </div>
 
@@ -302,7 +261,6 @@
           </table>
         </div>
       </div>
-      <div class="footer-note">* يتم التصفية: استبعاد الأسماء المحظورة أولاً، ثم التحقق من رقم الشاحنة. يتم إنشاء ملف Excel يحتوي على ملخص الرحلات والرحلات غير التابعة ولوحة تحكم.</div>
     </div>
   </div>
 
@@ -323,14 +281,13 @@
       "eisam خ","eisam ح","عادل خ","عادل ح","mamoon","zeshan","برهان","ابراهيم"
     ]);
 
-    const SHEETS_TO_DELETE = new Set(["summary","Summary","cdsDailyReportReadOnly","Summary Trips","Not our trips","Trips Dashboard"]);
-
     function mapMaterialCode(code) {
       const mapping = { "46089": "3/8", "46085": "3/4", "46097": "3/16" };
       return mapping[code] || code;
     }
 
     let materialChart = null, topDriversChart = null;
+    let currentResult = null; // تخزين النتيجة لعرضها وتصديرها
 
     function normalizeText(v){ return String(v??"").trim().normalize("NFKC").replace(/\s+/g," ").toLowerCase(); }
     function keepDigitsOnly(v){
@@ -343,8 +300,6 @@
 
     function processData(rows){
       const headers = rows[0] || [];
-      const ourTripsRows = [headers.slice()];
-      const notOurRows = [headers.slice()];
       let matched=0, notMatched=0, total=0;
       const driverStats = new Map();
       const materialStats = new Map();
@@ -354,10 +309,8 @@
         if(!row.some(v=>v!==null&&v!==undefined&&v!=="")) continue;
         total++;
         let cleanedTruck = keepDigitsOnly(row[4]??"");
-        if(row.length>=5) row[4]=cleanedTruck;
-        if(hasExcludedName(row)){ notOurRows.push(row); notMatched++; continue; }
+        if(hasExcludedName(row)){ notMatched++; continue; }
         if(VALID_TRUCK_NUMBERS.has(cleanedTruck)){
-          ourTripsRows.push(row);
           matched++;
           let driver = String(row[3]??"").trim();
           let weight = parseFloat(row[11]) || 0;
@@ -371,14 +324,14 @@
           if(materialName){
             materialStats.set(materialName, (materialStats.get(materialName)||0) + weight);
           }
-        } else { notOurRows.push(row); notMatched++; }
+        } else { notMatched++; }
       }
       const driversArr = Array.from(driverStats.entries()).map(([n,d])=>({name:n, trips:d.trips, totalWeight:d.weight}));
       driversArr.sort((a,b)=>b.trips-a.trips);
       const materialsArr = Array.from(materialStats.entries()).map(([name, w])=>({name, weight:w}));
       materialsArr.sort((a,b)=>b.weight-a.weight);
       const totalWeight = materialsArr.reduce((s,m)=>s+m.weight,0);
-      return { headers, ourTripsRows, notOurRows, matchedCount:matched, notMatchedCount:notMatched, totalRows:total,
+      return { matchedCount:matched, notMatchedCount:notMatched, totalRows:total,
                driversStats:driversArr, top10Drivers:driversArr.slice(0,10), materialsStats:materialsArr, totalWeightAll:totalWeight };
     }
 
@@ -410,86 +363,174 @@
       document.getElementById("chartsArea").style.display = "block";
     }
 
-    async function buildOutputWorkbook(result, originalWb){
-      const ExcelJS = window.ExcelJS;
-      const outWb = new ExcelJS.Workbook();
-      outWb.creator = "Monthly Report System";
-      for(let ws of originalWb.worksheets){
-        if(!SHEETS_TO_DELETE.has(ws.name)){
-          let cloned = outWb.addWorksheet(ws.name, {views:[{rightToLeft:false}]});
-          ws.eachRow({includeEmpty:true}, (row, rn)=>{ let vals=[]; row.eachCell({includeEmpty:true},(cell,cn)=>{ vals[cn]=cell.value; }); cloned.addRow(vals); });
-          ws.columns.forEach((col,i)=>{ cloned.getColumn(i+1).width = col.width||15; });
-        }
-      }
-      const addSheet = (name, data, green)=>{ 
-        let ws = outWb.addWorksheet(name); 
-        data.forEach(r=>ws.addRow(r)); 
-        ws.views=[{state:'frozen',ySplit:1}]; 
-        let w = data[0]?data[0].map((_,i)=>Math.min(40,Math.max(12,(data.reduce((m,r)=>Math.max(m,String(r[i]??"").length),12)+2)))):[12]; 
-        w.forEach((w,i)=>ws.getColumn(i+1).width=w); 
-        let hr=ws.getRow(1); 
-        hr.eachCell(c=>{ c.font={bold:true,color:{argb:"FFFFFFFF"}}; c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}}; c.alignment={horizontal:"center"}; }); 
-        for(let r=2;r<=ws.rowCount;r++){ 
-          ws.getRow(r).eachCell(c=>{ c.alignment={horizontal:"center"}; if(green){ c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFC6EFCE"}}; c.font={color:{argb:"FF006100"}}; } }); 
-        } 
-      };
-      addSheet("Summary Trips", result.ourTripsRows, true);
-      addSheet("Not our trips", result.notOurRows, false);
-      
-      let dash = outWb.addWorksheet("Trips Dashboard");
-      dash.columns=[{width:28},{width:18},{width:18},{width:18}];
-      dash.mergeCells("A1:D1"); dash.getCell("A1").value="📊 التقرير الشهري - لوحة التحكم"; dash.getCell("A1").font={size:14,bold:true,color:{argb:"FFFFFFFF"}}; dash.getCell("A1").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
-      dash.getCell("A3").value="المؤشر"; dash.getCell("B3").value="القيمة";
-      let r=4;
-      [[ "إجمالي الصفوف", result.totalRows ],[ "رحلاتنا (المحققة)", result.matchedCount ],[ "رحلات غير تابعة", result.notMatchedCount ],[ "نسبة الإنجاز", result.totalRows?result.matchedCount/result.totalRows:0 ],[ "عدد السائقين", result.driversStats.length ],[ "إجمالي الوزن (كجم)", result.totalWeightAll ],[ "إجمالي الوزن (طن)", (result.totalWeightAll/1000).toFixed(2) ]].forEach(([l,v])=>{ dash.getCell(`A${r}`).value=l; dash.getCell(`B${r}`).value=v; if(l.includes("نسبة")) dash.getCell(`B${r}`).numFmt="0.00%"; r++; });
-      let drRow = r+2; dash.getCell(`A${drRow}`).value="إجمالي رحلات الشهر لكل سائق"; dash.mergeCells(`A${drRow}:C${drRow}`); dash.getCell(`A${drRow+1}`).value="اسم السائق"; dash.getCell(`B${drRow+1}`).value="عدد الرحلات"; dash.getCell(`C${drRow+1}`).value="مجموع الوزن (كجم)";
-      let drIdx = drRow+2; for(let d of result.driversStats){ dash.getCell(`A${drIdx}`).value=d.name; dash.getCell(`B${drIdx}`).value=d.trips; dash.getCell(`C${drIdx}`).value=d.totalWeight; drIdx++; }
-      let matRow = drIdx+2; dash.getCell(`A${matRow}`).value="إجمالي الأوزان حسب نوع البحص"; dash.mergeCells(`A${matRow}:B${matRow}`); dash.getCell(`A${matRow+1}`).value="نوع البحص"; dash.getCell(`B${matRow+1}`).value="الوزن الإجمالي (كجم)";
-      let mIdx = matRow+2; for(let m of result.materialsStats){ dash.getCell(`A${mIdx}`).value=m.name; dash.getCell(`B${mIdx}`).value=m.weight; mIdx++; }
-      return outWb;
-    }
-
-    async function processExcelFile(file, outName){
+    async function processExcelFile(file){
       let buf = await file.arrayBuffer();
       let wb = new ExcelJS.Workbook();
       await wb.xlsx.load(buf);
       let sheet = wb.worksheets[0];
       let rows = [];
       sheet.eachRow({includeEmpty:true}, (row)=>{ let vals = row.values.slice(1).map(v=>v??""); rows.push(vals); });
-      let res = processData(rows);
-      let outWb = await buildOutputWorkbook(res, wb);
-      let outBuf = await outWb.xlsx.writeBuffer();
-      let blob = new Blob([outBuf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-      let a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = outName.endsWith(".xlsx") ? outName : outName+".xlsx";
-      a.click();
-      URL.revokeObjectURL(a.href);
-      return res;
+      return processData(rows);
     }
 
-    document.getElementById("processBtn").onclick = async ()=>{
-      let inp = document.getElementById("fileInput");
-      let outName = document.getElementById("outputName").value.trim() || "Monthly_Trips_Report.xlsx";
-      if(!inp.files.length){ document.getElementById("statusMsg").innerHTML="⚠️ يرجى اختيار ملف Excel أولاً."; return; }
-      document.getElementById("statusMsg").innerHTML="⏳ جاري المعالجة...";
-      try{
-        let result = await processExcelFile(inp.files[0], outName);
-        displayUI(result);
-        document.getElementById("statusMsg").innerHTML="✅ تمت المعالجة بنجاح. تم تحميل الملف الناتج وعرض الإحصائيات.";
-      }catch(e){ console.error(e); document.getElementById("statusMsg").innerHTML="❌ خطأ: "+e.message; }
-    };
-    document.getElementById("excludedListBtn").onclick = ()=>{
-      let content = "قائمة الأسماء المستثناة:\nEISAM خ\nEISAM ح\nعادل خ\nعادل ح\nMAMOON\nzeshan\nبرهان\nابراهيم";
-      let blob = new Blob([content], {type:"text/plain;charset=utf-8"});
-      let a = document.createElement("a");
+    // وظيفة تصدير Excel (صفحة واحدة فقط مع رسوم بيانية)
+    async function exportToExcel(res, filename){
+      const ExcelJS = window.ExcelJS;
+      const workbook = new ExcelJS.Workbook();
+      const ws = workbook.addWorksheet("Trips Dashboard", { views: [{ rightToLeft: true }] });
+
+      // إعداد الأعمدة
+      ws.columns = [
+        { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 },
+        { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }
+      ];
+
+      // العنوان الرئيسي
+      ws.mergeCells("A1:H1");
+      ws.getCell("A1").value = "📊 التقرير الشهري - لوحة التحكم";
+      ws.getCell("A1").font = { size: 16, bold: true, color: { argb: "FFFFFFFF" } };
+      ws.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F4E78" } };
+      ws.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+      ws.getRow(1).height = 30;
+
+      // ملخص المؤشرات
+      ws.getCell("A3").value = "المؤشر";
+      ws.getCell("B3").value = "القيمة";
+      ws.getRow(3).font = { bold: true };
+      ws.getRow(3).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+      let rowIdx = 4;
+      const metrics = [
+        ["إجمالي الصفوف", res.totalRows],
+        ["رحلاتنا (المحققة)", res.matchedCount],
+        ["رحلات غير تابعة", res.notMatchedCount],
+        ["نسبة الإنجاز", res.totalRows ? (res.matchedCount / res.totalRows) : 0],
+        ["عدد السائقين", res.driversStats.length],
+        ["إجمالي الوزن (كجم)", res.totalWeightAll],
+        ["إجمالي الوزن (طن)", (res.totalWeightAll / 1000).toFixed(2)]
+      ];
+      metrics.forEach(([label, val]) => {
+        ws.getCell(`A${rowIdx}`).value = label;
+        ws.getCell(`B${rowIdx}`).value = val;
+        if (label.includes("نسبة")) ws.getCell(`B${rowIdx}`).numFmt = "0.00%";
+        rowIdx++;
+      });
+
+      // جدول السائقين
+      rowIdx += 2;
+      ws.getCell(`A${rowIdx}`).value = "إجمالي رحلات الشهر لكل سائق";
+      ws.mergeCells(`A${rowIdx}:C${rowIdx}`);
+      ws.getCell(`A${rowIdx}`).font = { bold: true, size: 12 };
+      rowIdx++;
+      ws.getCell(`A${rowIdx}`).value = "اسم السائق";
+      ws.getCell(`B${rowIdx}`).value = "عدد الرحلات";
+      ws.getCell(`C${rowIdx}`).value = "مجموع الوزن (كجم)";
+      ws.getRow(rowIdx).font = { bold: true };
+      ws.getRow(rowIdx).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+      rowIdx++;
+      for (let d of res.driversStats) {
+        ws.getCell(`A${rowIdx}`).value = d.name;
+        ws.getCell(`B${rowIdx}`).value = d.trips;
+        ws.getCell(`C${rowIdx}`).value = d.totalWeight;
+        rowIdx++;
+      }
+
+      // جدول المواد
+      rowIdx += 2;
+      ws.getCell(`A${rowIdx}`).value = "إجمالي الأوزان حسب نوع البحص";
+      ws.mergeCells(`A${rowIdx}:B${rowIdx}`);
+      ws.getCell(`A${rowIdx}`).font = { bold: true, size: 12 };
+      rowIdx++;
+      ws.getCell(`A${rowIdx}`).value = "نوع البحص";
+      ws.getCell(`B${rowIdx}`).value = "الوزن الإجمالي (كجم)";
+      ws.getRow(rowIdx).font = { bold: true };
+      ws.getRow(rowIdx).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9EAF7" } };
+      rowIdx++;
+      for (let m of res.materialsStats) {
+        ws.getCell(`A${rowIdx}`).value = m.name;
+        ws.getCell(`B${rowIdx}`).value = m.weight;
+        rowIdx++;
+      }
+
+      // إضافة رسوم بيانية (باستخدام ExcelJS Chart API)
+      // الرسم البياني للأوزان حسب المواد
+      const materialDataStartRow = rowIdx - res.materialsStats.length;
+      const materialDataEndRow = rowIdx - 1;
+      if (res.materialsStats.length > 0) {
+        ws.addChart(ExcelJS.ChartType.Bar, {
+          name: "Chart_Materials",
+          title: "إجمالي الأوزان حسب نوع البحص (طن)",
+          xAxis: { label: "نوع البحص" },
+          yAxis: { label: "الوزن (طن)" },
+          data: {
+            labels: `A${materialDataStartRow+1}:A${materialDataEndRow+1}`,
+            datasets: [{ data: `B${materialDataStartRow+1}:B${materialDataEndRow+1}`, label: "الوزن (طن)" }]
+          },
+          position: { x: 500, y: 200 }
+        });
+      }
+
+      // الرسم البياني لأعلى 10 سائقين
+      const topDrivers = res.top10Drivers;
+      const driversStartRow = rowIdx - res.driversStats.length;
+      const driversEndRow = rowIdx - 1;
+      if (topDrivers.length > 0) {
+        ws.addChart(ExcelJS.ChartType.Bar, {
+          name: "Chart_Drivers",
+          title: "أعلى 10 سائقين بعدد الرحلات",
+          xAxis: { label: "السائق" },
+          yAxis: { label: "عدد الرحلات" },
+          data: {
+            labels: `A${driversStartRow+1}:A${driversStartRow+topDrivers.length}`,
+            datasets: [{ data: `B${driversStartRow+1}:B${driversStartRow+topDrivers.length}`, label: "عدد الرحلات" }]
+          },
+          position: { x: 500, y: 500 }
+        });
+      }
+
+      // حفظ الملف
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "excluded_names.txt";
+      a.download = filename.endsWith(".xlsx") ? filename : filename + ".xlsx";
       a.click();
       URL.revokeObjectURL(a.href);
+    }
+
+    // ربط الأزرار
+    document.getElementById("showResultsBtn").onclick = async () => {
+      const fileInput = document.getElementById("fileInput");
+      if (!fileInput.files.length) {
+        document.getElementById("statusMsg").innerHTML = "⚠️ يرجى اختيار ملف Excel أولاً.";
+        return;
+      }
+      document.getElementById("statusMsg").innerHTML = "⏳ جاري المعالجة...";
+      try {
+        const result = await processExcelFile(fileInput.files[0]);
+        currentResult = result;
+        displayUI(result);
+        document.getElementById("statusMsg").innerHTML = "✅ تمت المعالجة وعرض النتائج. يمكنك الآن تصدير التقرير.";
+      } catch (e) {
+        console.error(e);
+        document.getElementById("statusMsg").innerHTML = "❌ خطأ: " + e.message;
+      }
     };
 
-    // Toast and loading functions
+    document.getElementById("exportExcelBtn").onclick = async () => {
+      if (!currentResult) {
+        document.getElementById("statusMsg").innerHTML = "⚠️ يرجى عرض النتائج أولاً (اضغط على 'عرض النتائج').";
+        return;
+      }
+      const outName = document.getElementById("outputName").value.trim() || "Monthly_Report.xlsx";
+      try {
+        await exportToExcel(currentResult, outName);
+        document.getElementById("statusMsg").innerHTML = "✅ تم تصدير التقرير بنجاح.";
+      } catch (e) {
+        console.error(e);
+        document.getElementById("statusMsg").innerHTML = "❌ خطأ في التصدير: " + e.message;
+      }
+    };
+
     function showToast(msg, type) {
       const container = document.getElementById('toastContainer');
       const toast = document.createElement('div');
