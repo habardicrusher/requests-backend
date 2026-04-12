@@ -1,9 +1,10 @@
 // navbar.js - شريط التنقل الموحد
 (function() {
-    // Keep-alive
+    // Keep-alive: كل 4 دقائق للحفاظ على الجلسة
     setInterval(async () => {
         try {
             await fetch('/api/me', { credentials: 'include' });
+            console.log('navbar keep-alive');
         } catch(e) {}
     }, 4 * 60 * 1000);
 
@@ -34,7 +35,7 @@
                 }
             }
 
-            // الروابط الكاملة لجميع الصفحات
+            // ========== الروابط الكاملة (تمت إضافة صفحة تقارير الميزان) ==========
             const allLinks = [
                 { href: 'index.html', text: '📊 الرئيسية' },
                 { href: 'orders.html', text: '📝 الطلبات' },
@@ -42,8 +43,8 @@
                 { href: 'trucks.html', text: '🚛 السيارات' },
                 { href: 'products.html', text: '📦 أنواع البحص' },
                 { href: 'factories.html', text: '🏭 المصانع' },
-                { href: 'reports.html', text: '📊 التقارير' },
-                { href: 'scale_report.html', text: '📊 التقارير الشهرية' },
+                { href: 'reports.html', text: '📊 تقارير الكسارة' },
+                { href: 'scale_report.html', text: '⚖️ تقارير الميزان الشهرية' },  // ✅ الصفحة الجديدة
                 { href: 'settings.html', text: '⚙️ الإعدادات' },
                 { href: 'restrictions.html', text: '⛔ الحظر' },
                 { href: 'users.html', text: '👥 المستخدمين' },
@@ -64,7 +65,7 @@
                 <a href="${link.href}" class="nav-link ${currentPage === link.href ? 'active' : ''}">${link.text}</a>
             `).join('');
 
-            // إضافة زر تسجيل الخروج
+            // إضافة زر تسجيل الخروج (مرة واحدة فقط)
             if (!document.getElementById('logout-btn-container')) {
                 const logoutDiv = document.createElement('div');
                 logoutDiv.id = 'logout-btn-container';
@@ -99,6 +100,7 @@
                 }
             }
         } catch(e) {
+            console.error('خطأ في renderNavbar:', e);
             window.location.href = '/login.html';
         }
     }
