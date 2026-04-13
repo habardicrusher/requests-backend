@@ -84,23 +84,22 @@
             display: flex;
             align-items: center;
             gap: 8px;
-            position: relative;
         }
         .password-wrapper input {
             flex: 1;
         }
         .toggle-password {
-            background: none;
+            background: #2d3e50;
             border: none;
-            color: #a8b2d1;
+            color: white;
             cursor: pointer;
             font-size: 1.2rem;
-            padding: 0 8px;
+            padding: 8px 12px;
+            border-radius: 8px;
             transition: 0.2s;
         }
         .toggle-password:hover {
-            color: #667eea;
-            transform: scale(1.05);
+            background: #667eea;
         }
         .permissions-grid {
             display: grid;
@@ -217,7 +216,7 @@
                     <label>كلمة المرور</label>
                     <div class="password-wrapper">
                         <input type="password" id="newPassword">
-                        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newPassword', this)">👁️</button>
+                        <button type="button" class="toggle-password" id="toggleNewPassword" onclick="togglePasswordVisibility('newPassword', this)">👁️ إظهار</button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -270,7 +269,7 @@
             <label>كلمة مرور جديدة (اختياري)</label>
             <div class="password-wrapper">
                 <input type="password" id="editPassword">
-                <button type="button" class="toggle-password" onclick="togglePasswordVisibility('editPassword', this)">👁️</button>
+                <button type="button" class="toggle-password" id="toggleEditPassword" onclick="togglePasswordVisibility('editPassword', this)">👁️ إظهار</button>
             </div>
         </div>
         <div id="editPermissionsGrid"></div>
@@ -294,9 +293,9 @@
         }
         const input = document.getElementById(inputId);
         if (!input) return;
-        const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
-        input.setAttribute('type', type);
-        btnElement.textContent = type === 'password' ? '👁️' : '🙈';
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        btnElement.textContent = isPassword ? '🙈 إخفاء' : '👁️ إظهار';
     }
 
     async function apiCall(endpoint, method='GET', data=null) {
@@ -433,10 +432,11 @@
             document.getElementById('newUsername').value = '';
             document.getElementById('newPassword').value = '';
             // إعادة زر الإظهار إلى وضعه الطبيعي
-            const toggleBtn = document.querySelector('#newPassword').parentElement.querySelector('.toggle-password');
-            if (toggleBtn && document.getElementById('newPassword').type !== 'password') {
-                document.getElementById('newPassword').type = 'password';
-                toggleBtn.textContent = '👁️';
+            const toggleBtn = document.getElementById('toggleNewPassword');
+            const passInput = document.getElementById('newPassword');
+            if (passInput.type !== 'password') {
+                passInput.type = 'password';
+                if (toggleBtn) toggleBtn.textContent = '👁️ إظهار';
             }
         } catch(e) { showToast('خطأ: '+e.message, 'error'); }
         showLoading(false);
@@ -468,10 +468,10 @@
         document.getElementById('editPassword').value = '';
         // إعادة زر الإظهار في المودال
         const editPassInput = document.getElementById('editPassword');
-        const toggleBtn = editPassInput.parentElement.querySelector('.toggle-password');
+        const toggleBtn = document.getElementById('toggleEditPassword');
         if (editPassInput.type !== 'password') {
             editPassInput.type = 'password';
-            if (toggleBtn) toggleBtn.textContent = '👁️';
+            if (toggleBtn) toggleBtn.textContent = '👁️ إظهار';
         }
         const container = document.getElementById('editPermissionsGrid');
         const perms = user.permissions || {};
@@ -539,6 +539,5 @@
 
     document.addEventListener('DOMContentLoaded', () => { loadNav(); loadUsers(); });
 </script>
-<script src="navbar.js"></script>
 </body>
 </html>
