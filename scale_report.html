@@ -334,7 +334,7 @@
       <div class="merged-chart-card"><div class="chart-title">📅 الرحلات والوزن لكل تقرير</div><div class="chart-wrap"><canvas id="mergedReportsLine"></canvas></div></div></div>
       <div class="charts-row"><div class="merged-chart-card"><div class="chart-title">⚖️ أعلى 10 سائقين بالوزن</div><div class="chart-wrap"><canvas id="mergedDriversWeightBar"></canvas></div></div></div>
       <div class="merged-card"><h3>🚛 جدول السائقين المجمّع (مع نسبة إنجاز كل سائق)</h3><div class="merged-table"><table id="mergedDriverTable"><thead><tr><th>#</th><th>اسم السائق</th><th>إجمالي الرحلات</th><th>الوزن (كجم)</th><th>الوزن (طن)</th><th>نسبة الإنجاز %</th></tr></thead><tbody></tbody></table></div></div>
-      <div class="merged-card"><h3>📦 جدول المواد المجمّع</h3><div class="merged-table"><table id="mergedMaterialTable"><thead><tr><th>#</th><th>نوع البحص</th><th>الوزن (كجم)</th><th>الوزن (طن)</th><th>النسبة</th></tr></thead><tbody></tbody></td></div></div>
+      <div class="merged-card"><h3>📦 جدول المواد المجمّع</h3><div class="merged-table"><table id="mergedMaterialTable"><thead><tr><th>#</th><th>نوع البحص</th><th>الوزن (كجم)</th><th>الوزن (طن)</th><th>النسبة</th></tr></thead><tbody></tbody></tr></div></div>
     </div>
   </div>
 </div>
@@ -458,63 +458,131 @@ async function processExcelFile(file){
   return processData(rows);
 }
 
-async function saveReportToDB() {
-  if (!currentResult) { showToast('⚠️ لا توجد بيانات للحفظ', 'error'); return; }
-  const reportName = document.getElementById('reportName').value.trim();
-  const reportDate = document.getElementById('reportDate').value;
-  if (!reportName) { showToast('⚠️ أدخل اسم التقرير', 'error'); return; }
-  showLoading(true);
-  try {
-    const response = await fetch(`${API_BASE}/scale-reports`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({
-        reportName, reportDate: reportDate || new Date().toISOString().split('T')[0],
-        data: currentResult,
-        totalDays: currentTotalDays,
-        holidaysCount: currentHolidaysCount,
-        workingDays: currentWorkingDays,
-        maxTripsPerDriver: currentMaxTripsPerDriver
-      })
-    });
-    if (response.status === 401) { window.location.href = '/login.html'; return; }
-    if (!response.ok) throw new Error(await response.text());
-    showToast('✅ تم حفظ التقرير', 'success');
-    document.getElementById('statusMsg').innerHTML = `✅ تم حفظ التقرير "${reportName}"`;
-    await loadSavedReports();
-  } catch(e) { showToast('❌ خطأ في الحفظ: '+e.message, 'error'); }
-  showLoading(false);
+// ========== تحسين الاتصال بالخادم ومعالجة الأخطاء ==========
+const MAX_DRIVERS_TO_SAVE = 200;  // حد أقصى للسائقين المحفوظين
+const MAX_RETRIES = 1;            // عدد محاولات إعادة الإرسال
+
+function sanitizeDataForSave(data) {
+    if (!data) return data;
+    return {
+        matchedCount: data.matchedCount,
+        notMatchedCount: data.notMatchedCount,
+        totalRows: data.totalRows,
+        totalWeightAll: data.totalWeightAll,
+        driversStats: (data.driversStats || []).slice(0, MAX_DRIVERS_TO_SAVE).map(d => ({
+            name: d.name,
+            trips: d.trips,
+            totalWeight: d.totalWeight
+        })),
+        top10Drivers: (data.top10Drivers || []).slice(0, 10),
+        materialsStats: (data.materialsStats || []).slice(0, 50)
+    };
 }
+
+async function fetchWithAuth(url, options = {}) {
+    try {
+        const response = await fetch(url, { ...options, credentials: 'include' });
+        if (response.status === 401) {
+            showToast('⚠️ انتهت صلاحية الجلسة. سيتم إعادة التوجيه إلى صفحة تسجيل الدخول.', 'error');
+            setTimeout(() => { window.location.href = '/login.html'; }, 2000);
+            throw new Error('Unauthorized');
+        }
+        if (response.status >= 500 && response.status <= 599) {
+            let errorText = await response.text();
+            throw new Error(`Server error ${response.status}: ${errorText.substring(0, 150)}`);
+        }
+        return response;
+    } catch (e) {
+        if (e.message === 'Unauthorized') throw e;
+        throw new Error(`Network error: ${e.message}`);
+    }
+}
+
+async function saveReportToDB(retryCount = 0) {
+    if (!currentResult) { showToast('⚠️ لا توجد بيانات للحفظ', 'error'); return; }
+    const reportName = document.getElementById('reportName').value.trim();
+    const reportDate = document.getElementById('reportDate').value;
+    if (!reportName) { showToast('⚠️ أدخل اسم التقرير', 'error'); return; }
+    
+    showLoading(true);
+    const dataToSend = sanitizeDataForSave(currentResult);
+    
+    try {
+        const response = await fetchWithAuth(`${API_BASE}/scale-reports`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                reportName,
+                reportDate: reportDate || new Date().toISOString().split('T')[0],
+                data: dataToSend,
+                totalDays: currentTotalDays,
+                holidaysCount: currentHolidaysCount,
+                workingDays: currentWorkingDays,
+                maxTripsPerDriver: currentMaxTripsPerDriver
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+        
+        const result = await response.json();
+        showToast('✅ تم حفظ التقرير بنجاح', 'success');
+        document.getElementById('statusMsg').innerHTML = `✅ تم حفظ التقرير "${reportName}" (ID: ${result.id})`;
+        await loadSavedReports();
+        
+    } catch (e) {
+        console.error('Save error:', e);
+        if (retryCount < MAX_RETRIES && (e.message.includes('520') || e.message.includes('5') || e.message.includes('Network error'))) {
+            showToast(`⚠️ فشل الحفظ، جاري إعادة المحاولة (${retryCount + 1}/${MAX_RETRIES})...`, 'info');
+            setTimeout(() => saveReportToDB(retryCount + 1), 2000);
+            return;
+        }
+        let userMessage = 'حدث خطأ في الاتصال بالخادم. ';
+        if (e.message.includes('520')) userMessage += 'الخادم لا يستجيب حالياً (خطأ 520). يرجى المحاولة لاحقاً.';
+        else if (e.message.includes('Network error')) userMessage += 'فشل الاتصال بالخادم. تحقق من اتصال الإنترنت.';
+        else userMessage += e.message;
+        showToast(`❌ ${userMessage}`, 'error');
+        document.getElementById('statusMsg').innerHTML = `❌ فشل حفظ التقرير: ${userMessage}<br>يمكنك تصدير التقرير إلى Excel كنسخة احتياطية.`;
+    }
+    showLoading(false);
+}
+
+// باقي الدوال (loadSavedReports, loadSavedReport, deleteSavedReport, mergeAllReports, renderMergedUI, exportAdvancedExcel)
+// يتم الاحتفاظ بها كما هي مع استخدام fetchWithAuth عند الحاجة (نفس التعديلات السابقة)
 
 async function loadSavedReports() {
   const container = document.getElementById('savedReportsContainer');
   container.innerHTML = '<div class="no-reports">⏳ جاري التحميل...</div>';
   try {
-    const response = await fetch(`${API_BASE}/scale-reports`, { credentials: 'include' });
-    if (response.status === 401) { window.location.href = '/login.html'; return; }
+    const response = await fetchWithAuth(`${API_BASE}/scale-reports`);
     if (!response.ok) throw new Error(await response.text());
     const reports = await response.json();
-    if (!reports.length) { container.innerHTML = '<div class="no-reports">📭 لا توجد تقارير محفوظة</div>'; return; }
+    if (!reports.length) {
+      container.innerHTML = '<div class="no-reports">📭 لا توجد تقارير محفوظة بعد.</div>';
+      return;
+    }
     let html = `<table class="saved-reports-table"><thead><tr><th>#</th><th>التقرير</th><th>التاريخ</th><th>الرحلات</th><th>الوزن (طن)</th><th>أيام العمل</th><th>إجراءات</th></tr></thead><tbody>`;
     reports.forEach((r,i)=>{
       html += `<tr>
-        <td>${i+1}</td>
-        <td><strong>${r.reportName}</strong></td>
-        <td>${r.reportDate||'—'}</td>
-        <td>${r.data?.matchedCount||0}</td>
-        <td>${(r.data?.totalWeightAll/1000||0).toFixed(1)}</td>
+        <td>${i+1}</td><td><strong>${r.reportName}</strong></td><td>${r.reportDate||'—'}</td>
+        <td>${r.data?.matchedCount||0}</td><td>${(r.data?.totalWeightAll/1000||0).toFixed(1)}</td>
         <td>${r.workingDays || '?'}</td>
         <td><div class="actions"><button class="btn-load" onclick="loadSavedReport('${r.id}')">📊 عرض</button><button class="btn-danger" onclick="deleteSavedReport('${r.id}','${r.reportName.replace(/'/g,"\\'")}')">🗑️ حذف</button></div></td>
       </tr>`;
     });
     html += '</tbody></table>';
     container.innerHTML = html;
-  } catch(e) { container.innerHTML = `<div class="no-reports">❌ خطأ: ${e.message}</div>`; }
+  } catch(e) {
+    if (!e.message.includes('Unauthorized')) container.innerHTML = `<div class="no-reports">❌ خطأ: ${e.message}</div>`;
+  }
 }
 
 async function loadSavedReport(id) {
   showLoading(true);
   try {
-    const response = await fetch(`${API_BASE}/scale-reports/${id}`, { credentials: 'include' });
+    const response = await fetchWithAuth(`${API_BASE}/scale-reports/${id}`);
     if (!response.ok) throw new Error(await response.text());
     const report = await response.json();
     currentResult = report.data;
@@ -531,44 +599,49 @@ async function loadSavedReport(id) {
     document.getElementById('reportName').value = report.reportName;
     document.getElementById('reportDate').value = report.reportDate;
     showToast(`✅ تم تحميل التقرير: ${report.reportName}`, 'success');
-  } catch(e) { showToast('❌ خطأ في التحميل: '+e.message, 'error'); }
+  } catch(e) {
+    if (!e.message.includes('Unauthorized')) showToast('❌ خطأ في التحميل: ' + e.message, 'error');
+  }
   showLoading(false);
 }
 
 async function deleteSavedReport(id, name) {
-  if(!confirm(`حذف "${name}"؟`)) return;
+  if (!confirm(`حذف "${name}"؟`)) return;
   showLoading(true);
   try {
-    const res = await fetch(`${API_BASE}/scale-reports/${id}`, { method:'DELETE', credentials:'include' });
-    if(!res.ok) throw new Error();
-    showToast('✅ تم الحذف', 'success');
+    const response = await fetchWithAuth(`${API_BASE}/scale-reports/${id}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error(await response.text());
+    showToast(`✅ تم حذف التقرير "${name}"`, 'success');
     await loadSavedReports();
-  } catch(e) { showToast('❌ فشل الحذف', 'error'); }
+  } catch(e) {
+    if (!e.message.includes('Unauthorized')) showToast('❌ خطأ في الحذف: ' + e.message, 'error');
+  }
   showLoading(false);
 }
 
-// تجميع التقارير
 async function mergeAllReports() {
   showLoading(true);
   try {
-    const resp = await fetch(`${API_BASE}/scale-reports`, { credentials:'include' });
-    const reportsMeta = await resp.json();
-    if(!reportsMeta.length) { showToast('لا توجد تقارير', 'error'); showLoading(false); return; }
+    const response = await fetchWithAuth(`${API_BASE}/scale-reports`);
+    const reportsMeta = await response.json();
+    if (!reportsMeta.length) { showToast('⚠️ لا توجد تقارير', 'error'); showLoading(false); return; }
     const reportsData = [];
-    for(let r of reportsMeta){
-      const full = await fetch(`${API_BASE}/scale-reports/${r.id}`, { credentials:'include' }).then(res=>res.json());
+    for (let r of reportsMeta) {
+      const fullRes = await fetchWithAuth(`${API_BASE}/scale-reports/${r.id}`);
+      const full = await fullRes.json();
       reportsData.push({ meta: r, data: full.data, workingDays: full.workingDays, maxTripsPerDriver: full.maxTripsPerDriver });
     }
     const mergedDriverMap = new Map();
     const mergedMaterialMap = new Map();
     let totalRows=0, totalMatched=0, totalWeightAll=0;
-    for(let {data} of reportsData){
+    for (let {data} of reportsData) {
       totalRows += data.totalRows; totalMatched += data.matchedCount; totalWeightAll += data.totalWeightAll;
-      for(let d of (data.driversStats||[])){
-        if(!mergedDriverMap.has(d.name)) mergedDriverMap.set(d.name,{trips:0,weight:0});
-        let e=mergedDriverMap.get(d.name); e.trips+=d.trips; e.weight+=d.totalWeight;
+      for (let d of (data.driversStats||[])) {
+        if (!mergedDriverMap.has(d.name)) mergedDriverMap.set(d.name, {trips:0, weight:0});
+        let e = mergedDriverMap.get(d.name);
+        e.trips += d.trips; e.weight += d.totalWeight;
       }
-      for(let m of (data.materialsStats||[])) mergedMaterialMap.set(m.name, (mergedMaterialMap.get(m.name)||0)+m.weight);
+      for (let m of (data.materialsStats||[])) mergedMaterialMap.set(m.name, (mergedMaterialMap.get(m.name)||0) + m.weight);
     }
     const mergedDrivers = Array.from(mergedDriverMap.entries()).map(([n,v])=>({name:n, trips:v.trips, totalWeight:v.weight})).sort((a,b)=>b.trips-a.trips);
     const mergedMaterials = Array.from(mergedMaterialMap.entries()).map(([n,w])=>({name:n, weight:w})).sort((a,b)=>b.weight-a.weight);
@@ -577,11 +650,13 @@ async function mergeAllReports() {
     document.getElementById('mergedSection').classList.add('active');
     document.getElementById('exportMergedBtn').style.display = 'inline-block';
     showToast(`✅ تم تجميع ${reportsData.length} تقرير`, 'success');
-  } catch(e){ showToast('خطأ في التجميع', 'error'); }
+  } catch(e) {
+    if (!e.message.includes('Unauthorized')) showToast('❌ خطأ في التجميع: ' + e.message, 'error');
+  }
   showLoading(false);
 }
 
-function renderMergedUI(m, reportsMeta){
+function renderMergedUI(m, reportsMeta) {
   document.getElementById('mergedSources').innerHTML = `المصادر: ${reportsMeta.map(r=>r.reportName).join(', ')}`;
   document.getElementById('mergedStatsGrid').innerHTML = `
     <div class="stat-card"><div class="stat-label">إجمالي الصفوف</div><div class="stat-value">${m.totalRows}</div></div>
@@ -589,9 +664,8 @@ function renderMergedUI(m, reportsMeta){
     <div class="stat-card"><div class="stat-label">الوزن (طن)</div><div class="stat-value">${(m.totalWeightAll/1000).toFixed(1)}</div></div>
     <div class="stat-card"><div class="stat-label">عدد السائقين</div><div class="stat-value">${m.mergedDrivers.length}</div></div>
   `;
-  // رسم بياني للرحلات والوزن لكل تقرير (بدون نسبة إنجاز)
   const ctxLine = document.getElementById('mergedReportsLine').getContext('2d');
-  if(window.lineChart) window.lineChart.destroy();
+  if (window.lineChart) window.lineChart.destroy();
   const rLabels = m.reportsData.map(r => r.meta.reportName || r.meta.reportDate);
   window.lineChart = new Chart(ctxLine, {
     type: 'bar',
@@ -604,22 +678,21 @@ function renderMergedUI(m, reportsMeta){
     },
     options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#a8b2d1' } } }, scales:{ y:{ ticks:{color:'#4facfe'}, title:{display:true,text:'الرحلات',color:'#4facfe'} }, y1:{ position:'left', ticks:{color:'#38ef7d'}, title:{display:true,text:'الوزن (طن)',color:'#38ef7d'}, grid:{drawOnChartArea:false} }, x:{ ticks:{color:'#a8b2d1', maxRotation:30} } } }
   });
-  // جداول
   const dtbody = document.querySelector('#mergedDriverTable tbody');
   dtbody.innerHTML = '';
   m.mergedDrivers.slice(0,50).forEach((d,i)=>{
-    // لا يمكن حساب نسبة إنجاز دقيقة في التجميع لأن كل تقرير له أيام عمل مختلفة، نعرض "—"
     let tr = dtbody.insertRow();
     tr.innerHTML = `<td>${i+1}</td><td>${d.name}</td><td>${d.trips}</td><td>${d.totalWeight}</td><td>${(d.totalWeight/1000).toFixed(2)}</td><td>—</td>`;
   });
   const mtbody = document.querySelector('#mergedMaterialTable tbody');
   mtbody.innerHTML = '';
-  m.mergedMaterials.forEach((mat,i)=>{ mtbody.insertRow().innerHTML = `<td>${i+1}</td><td>${mat.name}</td><td>${mat.weight}</td><td>${(mat.weight/1000).toFixed(2)}</td><td>${((mat.weight/m.totalWeightAll)*100).toFixed(1)}%</td>`; });
+  m.mergedMaterials.forEach((mat,i)=>{
+    mtbody.insertRow().innerHTML = `<td>${i+1}</td><td>${mat.name}</td><td>${mat.weight}</td><td>${(mat.weight/1000).toFixed(2)}</td><td>${((mat.weight/m.totalWeightAll)*100).toFixed(1)}%</td>`;
+  });
 }
 
-// تصدير Excel متقدم (بدون نسبة إنجاز كلي)
 async function exportAdvancedExcel(res, filename) {
-  if(!res) return;
+  if (!res) return;
   showLoading(true);
   try {
     const wb = new ExcelJS.Workbook();
@@ -634,7 +707,7 @@ async function exportAdvancedExcel(res, filename) {
     wsDrv.mergeCells('A1:D1');
     wsDrv.getRow(2).values = ['اسم السائق', 'عدد الرحلات', 'الوزن (كجم)', 'نسبة الإنجاز %'];
     let rowIdx = 3;
-    for(let d of res.driversStats){
+    for (let d of res.driversStats) {
       let pct = currentMaxTripsPerDriver ? ((d.trips / currentMaxTripsPerDriver)*100).toFixed(2) : '0.00';
       wsDrv.getRow(rowIdx).values = [d.name, d.trips, d.totalWeight, pct+'%'];
       rowIdx++;
@@ -642,33 +715,33 @@ async function exportAdvancedExcel(res, filename) {
     const buffer = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), filename.replace('.xlsx','_driver_achievement.xlsx'));
     showToast('✅ تم التصدير مع نسبة إنجاز كل سائق', 'success');
-  } catch(e){ showToast('خطأ في التصدير', 'error'); }
+  } catch(e) {
+    showToast('❌ خطأ في التصدير: ' + e.message, 'error');
+  }
   showLoading(false);
 }
 
 // ربط الأحداث
 document.getElementById("showResultsBtn").onclick = async () => {
   const file = document.getElementById("fileInput").files[0];
-  if(!file){ showToast('اختر ملف أولاً', 'error'); return; }
+  if (!file) { showToast('⚠️ اختر ملف أولاً', 'error'); return; }
   showLoading(true);
   try {
     const result = await processExcelFile(file);
     currentResult = result;
     const { workingDays, maxTripsPerDriver, totalDays, holidaysCount } = updateExpectedInfo();
-    currentWorkingDays = workingDays;
-    currentMaxTripsPerDriver = maxTripsPerDriver;
-    currentTotalDays = totalDays;
-    currentHolidaysCount = holidaysCount;
+    currentWorkingDays = workingDays; currentMaxTripsPerDriver = maxTripsPerDriver;
+    currentTotalDays = totalDays; currentHolidaysCount = holidaysCount;
     displayUI(result);
     document.getElementById('reportName').value = file.name.replace(/\.[^/.]+$/, "");
     document.getElementById('reportDate').value = document.getElementById('reportDateCalc').value;
     document.getElementById("statusMsg").innerHTML = "✅ تم التحليل وعرض النتائج";
-  } catch(e){ showToast('خطأ: '+e.message, 'error'); }
+  } catch(e) { showToast('خطأ: '+e.message, 'error'); }
   showLoading(false);
 };
 document.getElementById("calcExpectedBtn").onclick = () => { updateExpectedInfo(); showToast('تم تحديث أيام العمل والحد الأقصى لكل سائق', 'info'); };
 document.getElementById("exportAdvancedBtn").onclick = async () => {
-  if(!currentResult) { showToast('لا توجد نتائج', 'error'); return; }
+  if (!currentResult) { showToast('⚠️ لا توجد نتائج', 'error'); return; }
   await exportAdvancedExcel(currentResult, document.getElementById("outputName").value.trim() || "Monthly_Report.xlsx");
 };
 document.getElementById('reportDateCalc').addEventListener('change', function() {
@@ -678,53 +751,63 @@ document.getElementById('reportDateCalc').addEventListener('change', function() 
 document.getElementById('totalDaysMonth').addEventListener('input', function() { updateExpectedInfo(); });
 document.getElementById('holidaysCount').addEventListener('input', function() { updateExpectedInfo(); });
 
-function switchTab(tab){ 
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); 
-  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); 
-  if(tab==='upload'){ 
-    document.querySelectorAll('.tab')[0].classList.add('active'); 
-    document.getElementById('tab-upload').classList.add('active'); 
-  } else { 
-    document.querySelectorAll('.tab')[1].classList.add('active'); 
-    document.getElementById('tab-saved').classList.add('active'); 
-    loadSavedReports(); 
-  } 
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  if (tab === 'upload') {
+    document.querySelectorAll('.tab')[0].classList.add('active');
+    document.getElementById('tab-upload').classList.add('active');
+  } else {
+    document.querySelectorAll('.tab')[1].classList.add('active');
+    document.getElementById('tab-saved').classList.add('active');
+    loadSavedReports();
+  }
 }
-function showToast(msg,type){ let t=document.createElement('div'); t.className=`toast toast-${type}`; t.textContent=msg; document.getElementById('toastContainer').appendChild(t); setTimeout(()=>t.remove(),4000); }
-function showLoading(show){ document.getElementById('loading').classList.toggle('active',show); }
-function logout(){ if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
+function showToast(msg, type) {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
+function logout() { if (confirm('تسجيل الخروج؟')) fetch('/api/logout', { method: 'POST', credentials: 'include' }).then(() => window.location.href = '/login.html'); }
 
 function loadNav() {
-    fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{
-        if(data.user) {
-            const currentPage = window.location.pathname.split('/').pop() || 'scale_report.html';
-            const navItems = [
-                { href: "index.html", icon: "📊", text: "الرئيسية" },
-                { href: "orders.html", icon: "📝", text: "الطلبات" },
-                { href: "distribution.html", icon: "🚚", text: "التوزيع" },
-                { href: "trucks.html", icon: "🚛", text: "السيارات" },
-                { href: "products.html", icon: "📦", text: "أنواع البحص" },
-                { href: "factories.html", icon: "🏭", text: "المصانع" },
-                { href: "reports.html", icon: "📊", text: "تقارير الكسارة" },
-                { href: "scale_report.html", icon: "⚖️", text: "تقارير الميزان الشهرية" },
-                { href: "settings.html", icon: "⚙️", text: "الإعدادات" },
-                { href: "restrictions.html", icon: "⛔", text: "الحظر" },
-                { href: "users.html", icon: "👥", text: "المستخدمين" },
-                { href: "logs.html", icon: "📜", text: "السجلات" }
-            ];
-            let navHtml = '';
-            for(let item of navItems) {
-                const activeClass = (currentPage === item.href) ? 'active' : '';
-                navHtml += `<a href="${item.href}" class="nav-link ${activeClass}">${item.icon} ${item.text}</a>`;
-            }
-            document.getElementById('navLinks').innerHTML = navHtml;
-        } else window.location.href='/login.html';
-    }).catch(()=>window.location.href='/login.html');
+  fetch('/api/me', { credentials: 'include' })
+    .then(r => { if (r.status === 401) throw new Error('Unauthorized'); return r.json(); })
+    .then(data => {
+      if (data.user) {
+        const currentPage = window.location.pathname.split('/').pop() || 'scale_report.html';
+        const navItems = [
+          { href: "index.html", icon: "📊", text: "الرئيسية" },
+          { href: "orders.html", icon: "📝", text: "الطلبات" },
+          { href: "distribution.html", icon: "🚚", text: "التوزيع" },
+          { href: "trucks.html", icon: "🚛", text: "السيارات" },
+          { href: "products.html", icon: "📦", text: "أنواع البحص" },
+          { href: "factories.html", icon: "🏭", text: "المصانع" },
+          { href: "reports.html", icon: "📊", text: "تقارير الكسارة" },
+          { href: "scale_report.html", icon: "⚖️", text: "تقارير الميزان الشهرية" },
+          { href: "settings.html", icon: "⚙️", text: "الإعدادات" },
+          { href: "restrictions.html", icon: "⛔", text: "الحظر" },
+          { href: "users.html", icon: "👥", text: "المستخدمين" },
+          { href: "logs.html", icon: "📜", text: "السجلات" }
+        ];
+        let navHtml = '';
+        for (let item of navItems) {
+          const activeClass = (currentPage === item.href) ? 'active' : '';
+          navHtml += `<a href="${item.href}" class="nav-link ${activeClass}">${item.icon} ${item.text}</a>`;
+        }
+        document.getElementById('navLinks').innerHTML = navHtml;
+      } else window.location.href = '/login.html';
+    })
+    .catch(() => window.location.href = '/login.html');
 }
 
-document.addEventListener('DOMContentLoaded', ()=>{ 
-  loadNav(); 
-  document.getElementById('reportDate').value = new Date().toISOString().split('T')[0]; 
+document.addEventListener('DOMContentLoaded', () => {
+  loadNav();
+  document.getElementById('reportDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('reportDateCalc').value = new Date().toISOString().split('T')[0];
   updateTotalDaysFromDate();
   updateExpectedInfo();
