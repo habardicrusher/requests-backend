@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تقارير الميزان - كسارة الحبردي (حساب الإنجاز بعدد أيام الإجازات)</title>
+  <title>تقارير الميزان - كسارة الحبردي (أيام الشهر 28-31)</title>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -62,7 +62,7 @@
     }
     .upload-field, .expected-field {
       flex: 1;
-      min-width: 200px;
+      min-width: 180px;
     }
     .upload-field label, .expected-field label {
       display: block;
@@ -264,7 +264,7 @@
 <div class="container">
   <div class="header">
     <h1>⚖️ تقارير الميزان الشهرية</h1>
-    <p>تحليل ملفات Excel مع حساب نسبة الإنجاز (2 رحلة يومياً - بإدخال عدد أيام الإجازات فقط)</p>
+    <p>تحليل ملفات Excel مع حساب نسبة الإنجاز (2 رحلة يومياً - يدعم أشهر 28-29-30-31 يوم)</p>
     <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
       <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
     </div>
@@ -287,13 +287,14 @@
         <button class="btn-advanced" id="exportAdvancedBtn">📊 تصدير متقدم (8 أوراق)</button></div>
       </div>
 
-      <!-- قسم حساب الإنتاج المتوقع (بإدخال عدد الإجازات) -->
+      <!-- قسم حساب الإنتاج المتوقع (أيام الشهر قابلة للتعديل) -->
       <div class="expected-row">
         <div class="expected-field"><label>📅 تاريخ التقرير (لتحديد الشهر)</label><input type="date" id="reportDateCalc" value="2026-04-01"></div>
-        <div class="expected-field"><label>🗓️ عدد أيام الإجازات في هذا الشهر</label><input type="number" id="holidaysCount" value="0" min="0" step="1" style="direction: ltr;"></div>
+        <div class="expected-field"><label>📆 إجمالي أيام الشهر</label><input type="number" id="totalDaysMonth" value="30" min="28" max="31" step="1" style="direction: ltr;"></div>
+        <div class="expected-field"><label>🗓️ عدد أيام الإجازات</label><input type="number" id="holidaysCount" value="0" min="0" step="1" style="direction: ltr;"></div>
         <div><button class="btn-primary" id="calcExpectedBtn" style="background:#f7971e;">🧮 حساب الرحلات المتوقعة</button></div>
       </div>
-      <div id="expectedInfo" class="status" style="background: rgba(247,151,30,0.2);">📊 لم يتم حساب الرحلات المتوقعة بعد. أدخل عدد الإجازات واضغط على الزر.</div>
+      <div id="expectedInfo" class="status" style="background: rgba(247,151,30,0.2);">📊 لم يتم حساب الرحلات المتوقعة بعد. أدخل البيانات واضغط على الزر.</div>
 
       <div id="statusMsg" class="status">✅ انتظار رفع ملف Excel...</div>
       <div class="save-section" id="saveSection"><h3>💾 حفظ التقرير في قاعدة البيانات</h3>
@@ -344,10 +345,11 @@ function keepDigitsOnly(v){ const ad={"٠":"0","١":"1","٢":"2","٣":"3","٤":"
 function hasExcludedName(row){ return row.some(c=>EXCLUDED_NAMES.has(normalizeText(c))); }
 
 let materialChart=null, topDriversChart=null, currentResult=null;
-let currentExpectedTrips=0, currentHolidaysCount=0, currentAchievementPercent=0;
+let currentTotalDays=30, currentHolidaysCount=0, currentExpectedTrips=0, currentAchievementPercent=0;
 
-// حساب أيام الشهر (بغض النظر عن الإجازات)
-function getTotalDaysInMonth(dateStr) {
+// حساب أيام الشهر بناءً على التاريخ الميلادي (لتعبئة الحقل تلقائيًا)
+function getTotalDaysFromDate(dateStr) {
+  if(!dateStr) return 30;
   const date = new Date(dateStr);
   const year = date.getFullYear();
   const month = date.getMonth();
@@ -355,25 +357,32 @@ function getTotalDaysInMonth(dateStr) {
   return lastDay.getDate();
 }
 
-// حساب الرحلات المتوقعة بناءً على عدد أيام الإجازات فقط
-function calculateExpectedTrips(reportDateStr, holidaysCount) {
-  if(!reportDateStr) return { totalDays:0, workingDays:0, expectedTrips:0 };
-  const totalDays = getTotalDaysInMonth(reportDateStr);
+// تحديث عدد أيام الشهر تلقائيًا عند تغيير التاريخ
+function updateTotalDaysFromDate() {
+  const date = document.getElementById('reportDateCalc').value;
+  if(date) {
+    const days = getTotalDaysFromDate(date);
+    document.getElementById('totalDaysMonth').value = days;
+  }
+}
+
+// حساب الرحلات المتوقعة بناءً على أيام الشهر والإجازات
+function calculateExpectedTrips(totalDays, holidaysCount) {
   let workingDays = totalDays - (parseInt(holidaysCount) || 0);
   if(workingDays < 0) workingDays = 0;
   const expectedTrips = workingDays * 2;
-  return { totalDays, workingDays, expectedTrips };
+  return { workingDays, expectedTrips };
 }
 
 function updateExpectedInfo() {
-  const reportDate = document.getElementById('reportDateCalc').value;
+  const totalDays = parseInt(document.getElementById('totalDaysMonth').value) || 30;
   const holidaysCount = parseInt(document.getElementById('holidaysCount').value) || 0;
-  const { totalDays, workingDays, expectedTrips } = calculateExpectedTrips(reportDate, holidaysCount);
+  const { workingDays, expectedTrips } = calculateExpectedTrips(totalDays, holidaysCount);
   document.getElementById('expectedInfo').innerHTML = `📅 أيام الشهر: ${totalDays} يوم | 🗓️ أيام الإجازات: ${holidaysCount} | 🚛 أيام العمل: ${workingDays} يوم | 🚚 الرحلات المتوقعة: ${expectedTrips} رحلة (2 رحلة/يوم)`;
-  return { workingDays, expectedTrips, holidaysCount };
+  return { totalDays, workingDays, expectedTrips, holidaysCount };
 }
 
-// معالجة بيانات Excel
+// معالجة بيانات Excel (نفس السابق)
 function processData(rows){
   let matched=0, notMatched=0, total=0;
   const driverStats = new Map();
@@ -460,7 +469,7 @@ async function processExcelFile(file){
   return processData(rows);
 }
 
-// حفظ التقرير مع البيانات الإضافية (عدد الإجازات بدلاً من قائمة التواريخ)
+// حفظ التقرير مع البيانات الإضافية (totalDays, holidaysCount, expectedTrips, achievementPercent)
 async function saveReportToDB() {
   if (!currentResult) { showToast('⚠️ لا توجد بيانات للحفظ', 'error'); return; }
   const reportName = document.getElementById('reportName').value.trim();
@@ -473,8 +482,9 @@ async function saveReportToDB() {
       body: JSON.stringify({
         reportName, reportDate: reportDate || new Date().toISOString().split('T')[0],
         data: currentResult,
-        expectedTrips: currentExpectedTrips,
+        totalDays: currentTotalDays,
         holidaysCount: currentHolidaysCount,
+        expectedTrips: currentExpectedTrips,
         achievementPercent: currentAchievementPercent
       })
     });
@@ -496,13 +506,21 @@ async function loadSavedReports() {
     if (!response.ok) throw new Error(await response.text());
     const reports = await response.json();
     if (!reports.length) { container.innerHTML = '<div class="no-reports">📭 لا توجد تقارير محفوظة</div>'; return; }
-    let html = `<table class="saved-reports-table"><thead><tr><th>#</th><th>التقرير</th><th>التاريخ</th><th>الرحلات</th><th>الوزن (طن)</th><th>نسبة الإنجاز %</th><th>إجراءات</th></tr></thead><tbody>`;
+    let html = `<table class="saved-reports-table"><thead><tr><th>#</th><th>التقرير</th><th>التاريخ</th><th>الرحلات</th><th>الوزن (طن)</th><th>أيام الشهر</th><th>نسبة الإنجاز %</th><th>إجراءات</th></tr></thead><tbody>`;
     reports.forEach((r,i)=>{
       let ach = '—';
       if(r.achievementPercent) ach = r.achievementPercent.toFixed(1)+'%';
       else if(r.expectedTrips && r.data?.matchedCount) ach = ((r.data.matchedCount / r.expectedTrips)*100).toFixed(1)+'%';
-      html += `<tr><td>${i+1}</td><td><strong>${r.reportName}</strong></td><td>${r.reportDate||'—'}</td><td>${r.data?.matchedCount||0}</td><td>${(r.data?.totalWeightAll/1000||0).toFixed(1)}</td><td>${ach}</td>
-      <td><div class="actions"><button class="btn-load" onclick="loadSavedReport('${r.id}')">📊 عرض</button><button class="btn-danger" onclick="deleteSavedReport('${r.id}','${r.reportName.replace(/'/g,"\\'")}')">🗑️ حذف</button></div></td></tr>`;
+      html += `<tr>
+        <td>${i+1}</td>
+        <td><strong>${r.reportName}</strong></td>
+        <td>${r.reportDate||'—'}</td>
+        <td>${r.data?.matchedCount||0}</td>
+        <td>${(r.data?.totalWeightAll/1000||0).toFixed(1)}</td>
+        <td>${r.totalDays || '?'}</td>
+        <td>${ach}</td>
+        <td><div class="actions"><button class="btn-load" onclick="loadSavedReport('${r.id}')">📊 عرض</button><button class="btn-danger" onclick="deleteSavedReport('${r.id}','${r.reportName.replace(/'/g,"\\'")}')">🗑️ حذف</button></div></td>
+      </tr>`;
     });
     html += '</tbody></table>';
     container.innerHTML = html;
@@ -516,14 +534,16 @@ async function loadSavedReport(id) {
     if (!response.ok) throw new Error(await response.text());
     const report = await response.json();
     currentResult = report.data;
-    currentExpectedTrips = report.expectedTrips || 0;
+    currentTotalDays = report.totalDays || 30;
     currentHolidaysCount = report.holidaysCount || 0;
+    currentExpectedTrips = report.expectedTrips || 0;
     currentAchievementPercent = report.achievementPercent || 0;
     document.getElementById('reportDateCalc').value = report.reportDate || new Date().toISOString().split('T')[0];
+    document.getElementById('totalDaysMonth').value = currentTotalDays;
     document.getElementById('holidaysCount').value = currentHolidaysCount;
     if(currentExpectedTrips>0) {
       const workingDays = currentExpectedTrips / 2;
-      document.getElementById('expectedInfo').innerHTML = `📅 أيام العمل: ${workingDays} يوم | الرحلات المتوقعة: ${currentExpectedTrips} | أيام الإجازات: ${currentHolidaysCount}`;
+      document.getElementById('expectedInfo').innerHTML = `📅 أيام الشهر: ${currentTotalDays} | أيام الإجازات: ${currentHolidaysCount} | أيام العمل: ${workingDays} | الرحلات المتوقعة: ${currentExpectedTrips}`;
     } else updateExpectedInfo();
     switchTab('upload');
     displayUI(currentResult);
@@ -546,7 +566,7 @@ async function deleteSavedReport(id, name) {
   showLoading(false);
 }
 
-// تجميع التقارير مع نسبة الإنجاز
+// تجميع التقارير
 async function mergeAllReports() {
   showLoading(true);
   try {
@@ -556,7 +576,7 @@ async function mergeAllReports() {
     const reportsData = [];
     for(let r of reportsMeta){
       const full = await fetch(`${API_BASE}/scale-reports/${r.id}`, { credentials:'include' }).then(res=>res.json());
-      reportsData.push({ meta: r, data: full.data, expectedTrips: full.expectedTrips, holidaysCount: full.holidaysCount, achievement: full.achievementPercent });
+      reportsData.push({ meta: r, data: full.data, totalDays: full.totalDays, holidaysCount: full.holidaysCount, expectedTrips: full.expectedTrips, achievement: full.achievementPercent });
     }
     const mergedDriverMap = new Map();
     const mergedMaterialMap = new Map();
@@ -608,7 +628,7 @@ function renderMergedUI(m, reportsMeta){
   m.mergedMaterials.forEach((mat,i)=>{ mtbody.insertRow().innerHTML = `<td>${i+1}</td><td>${mat.name}</td><td>${mat.weight}</td><td>${(mat.weight/1000).toFixed(2)}</td><td>${((mat.weight/m.totalWeightAll)*100).toFixed(1)}%</td>`; });
 }
 
-// تصدير متقدم مع نسبة الإنجاز (بسيط هنا ولكن يمكن توسيعه)
+// تصدير متقدم مع نسبة الإنجاز وأيام الشهر
 async function exportAdvancedExcel(res, filename) {
   if(!res) return;
   showLoading(true);
@@ -617,9 +637,10 @@ async function exportAdvancedExcel(res, filename) {
     const ws = wb.addWorksheet('ملخص التقرير', { views:[{ rightToLeft:true }] });
     ws.mergeCells('A1:B1'); ws.getCell('A1').value='📊 تقرير الميزان مع نسبة الإنجاز'; ws.getCell('A1').font={ bold:true, size:18 };
     ws.getRow(2).values = ['الرحلات المحققة', res.matchedCount];
-    ws.getRow(3).values = ['الرحلات المتوقعة (2 رحلة/يوم عمل)', currentExpectedTrips];
+    ws.getRow(3).values = ['إجمالي أيام الشهر', currentTotalDays];
     ws.getRow(4).values = ['عدد أيام الإجازات', currentHolidaysCount];
-    ws.getRow(5).values = ['نسبة الإنجاز %', currentExpectedTrips ? ((res.matchedCount/currentExpectedTrips)*100).toFixed(2)+'%' : 'غير محسوب'];
+    ws.getRow(5).values = ['الرحلات المتوقعة (2 رحلة/يوم عمل)', currentExpectedTrips];
+    ws.getRow(6).values = ['نسبة الإنجاز %', currentExpectedTrips ? ((res.matchedCount/currentExpectedTrips)*100).toFixed(2)+'%' : 'غير محسوب'];
     const buffer = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), filename.replace('.xlsx','_advanced_with_achievement.xlsx'));
     showToast('✅ تم التصدير مع نسبة الإنجاز', 'success');
@@ -635,9 +656,10 @@ document.getElementById("showResultsBtn").onclick = async () => {
   try {
     const result = await processExcelFile(file);
     currentResult = result;
-    const { expectedTrips, holidaysCount } = updateExpectedInfo();
-    currentExpectedTrips = expectedTrips;
+    const { totalDays, expectedTrips, holidaysCount } = updateExpectedInfo();
+    currentTotalDays = totalDays;
     currentHolidaysCount = holidaysCount;
+    currentExpectedTrips = expectedTrips;
     currentAchievementPercent = expectedTrips ? (result.matchedCount / expectedTrips * 100) : 0;
     displayUI(result);
     document.getElementById('reportName').value = file.name.replace(/\.[^/.]+$/, "");
@@ -651,6 +673,14 @@ document.getElementById("exportAdvancedBtn").onclick = async () => {
   if(!currentResult) { showToast('لا توجد نتائج', 'error'); return; }
   await exportAdvancedExcel(currentResult, document.getElementById("outputName").value.trim() || "Monthly_Report.xlsx");
 };
+// عند تغيير التاريخ، تحديث أيام الشهر تلقائيًا
+document.getElementById('reportDateCalc').addEventListener('change', function() {
+  updateTotalDaysFromDate();
+  updateExpectedInfo();
+});
+document.getElementById('totalDaysMonth').addEventListener('input', function() { updateExpectedInfo(); });
+document.getElementById('holidaysCount').addEventListener('input', function() { updateExpectedInfo(); });
+
 function switchTab(tab){ 
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); 
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); 
@@ -666,8 +696,42 @@ function switchTab(tab){
 function showToast(msg,type){ let t=document.createElement('div'); t.className=`toast toast-${type}`; t.textContent=msg; document.getElementById('toastContainer').appendChild(t); setTimeout(()=>t.remove(),4000); }
 function showLoading(show){ document.getElementById('loading').classList.toggle('active',show); }
 function logout(){ if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
-function loadNav(){ fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{ if(data.user){ const role=data.user.role; let html=''; if(role==='admin'||role==='user') html=`<a href="index.html" class="nav-link">📊 الرئيسية</a><a href="orders.html" class="nav-link">📝 الطلبات</a><a href="scale_report.html" class="nav-link active">⚖️ تقارير الميزان</a>`; document.getElementById('navLinks').innerHTML=html; } else window.location.href='/login.html'; }).catch(()=>window.location.href='/login.html'); }
-document.addEventListener('DOMContentLoaded', ()=>{ loadNav(); document.getElementById('reportDate').value = new Date().toISOString().split('T')[0]; document.getElementById('reportDateCalc').value = new Date().toISOString().split('T')[0]; updateExpectedInfo(); });
+
+function loadNav() {
+    fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{
+        if(data.user) {
+            const currentPage = window.location.pathname.split('/').pop() || 'scale_report.html';
+            const navItems = [
+                { href: "index.html", icon: "📊", text: "الرئيسية" },
+                { href: "orders.html", icon: "📝", text: "الطلبات" },
+                { href: "distribution.html", icon: "🚚", text: "التوزيع" },
+                { href: "trucks.html", icon: "🚛", text: "السيارات" },
+                { href: "products.html", icon: "📦", text: "أنواع البحص" },
+                { href: "factories.html", icon: "🏭", text: "المصانع" },
+                { href: "reports.html", icon: "📊", text: "تقارير الكسارة" },
+                { href: "scale_report.html", icon: "⚖️", text: "تقارير الميزان الشهرية" },
+                { href: "settings.html", icon: "⚙️", text: "الإعدادات" },
+                { href: "restrictions.html", icon: "⛔", text: "الحظر" },
+                { href: "users.html", icon: "👥", text: "المستخدمين" },
+                { href: "logs.html", icon: "📜", text: "السجلات" }
+            ];
+            let navHtml = '';
+            for(let item of navItems) {
+                const activeClass = (currentPage === item.href) ? 'active' : '';
+                navHtml += `<a href="${item.href}" class="nav-link ${activeClass}">${item.icon} ${item.text}</a>`;
+            }
+            document.getElementById('navLinks').innerHTML = navHtml;
+        } else window.location.href='/login.html';
+    }).catch(()=>window.location.href='/login.html');
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{ 
+  loadNav(); 
+  document.getElementById('reportDate').value = new Date().toISOString().split('T')[0]; 
+  document.getElementById('reportDateCalc').value = new Date().toISOString().split('T')[0];
+  updateTotalDaysFromDate();
+  updateExpectedInfo();
+});
 </script>
 </body>
 </html>
