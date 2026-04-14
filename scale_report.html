@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
+    /* نفس الستايل السابق - لم يتغير */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -426,7 +427,7 @@ function displayUI(res){
   const tbody = document.querySelector("#driverTable tbody");
   tbody.innerHTML = "";
   for(let d of res.driversStats){
-    let driverAchievement = currentMaxTripsPerDriver > 0 ? ((d.trips / currentMaxTripsPerDriver) * 100).toFixed(2) : '0.00';
+    let driverAchievement = (currentMaxTripsPerDriver > 0) ? ((d.trips / currentMaxTripsPerDriver) * 100).toFixed(2) : '0.00';
     let tr = tbody.insertRow();
     tr.insertCell(0).textContent = d.name;
     tr.insertCell(1).textContent = d.trips;
@@ -569,7 +570,7 @@ async function loadSavedReports() {
         <td>${r.data?.matchedCount||0}</td>
         <td>${(r.data?.totalWeightAll/1000||0).toFixed(1)}</td>
         <td>${r.workingDays || '?'}</td>
-        <td>${r.holidaysCount || '0'}</td>
+        <td>${r.holidaysCount !== undefined ? r.holidaysCount : '0'}</td>
         <td><div class="actions"><button class="btn-load" onclick="loadSavedReport('${r.id}')">📊 عرض</button><button class="btn-danger" onclick="deleteSavedReport('${r.id}','${r.reportName.replace(/'/g,"\\'")}')">🗑️ حذف</button></div></td>
       </tr>`;
     });
@@ -590,11 +591,16 @@ async function loadSavedReport(id) {
     currentTotalDays = report.totalDays || 30;
     currentHolidaysCount = report.holidaysCount || 0;
     currentWorkingDays = report.workingDays || 0;
+    // التأكد من حساب maxTripsPerDriver إذا كان مفقوداً
     currentMaxTripsPerDriver = report.maxTripsPerDriver || (currentWorkingDays * 2);
+    
+    // تحديث واجهة المستخدم
     document.getElementById('reportDateCalc').value = report.reportDate || new Date().toISOString().split('T')[0];
     document.getElementById('totalDaysMonth').value = currentTotalDays;
     document.getElementById('holidaysCount').value = currentHolidaysCount;
     document.getElementById('expectedInfo').innerHTML = `📅 أيام العمل: ${currentWorkingDays} يوم | 🚛 الحد الأقصى لرحلات السائق الواحد: ${currentMaxTripsPerDriver} رحلة (2 رحلة/يوم)`;
+    
+    // إعادة عرض الجدول مع النسب الصحيحة
     switchTab('upload');
     displayUI(currentResult);
     document.getElementById('reportName').value = report.reportName;
