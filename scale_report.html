@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تقارير الميزان - كسارة الحبردي (مع حساب الإنجاز)</title>
+  <title>تقارير الميزان - كسارة الحبردي (حساب الإنجاز بعدد أيام الإجازات)</title>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -70,7 +70,7 @@
       margin-bottom: 8px;
       color: #a8b2d1;
     }
-    .upload-field input, .upload-field select, .expected-field input, .expected-field textarea {
+    .upload-field input, .upload-field select, .expected-field input {
       width: 100%;
       padding: 12px 14px;
       border-radius: 16px;
@@ -78,10 +78,6 @@
       background: rgba(0,0,0,0.3);
       color: #fff;
       font-size: 1em;
-    }
-    .expected-field textarea {
-      resize: vertical;
-      font-family: monospace;
     }
     .btn-primary {
       background: linear-gradient(135deg, #11998e, #38ef7d);
@@ -268,7 +264,7 @@
 <div class="container">
   <div class="header">
     <h1>⚖️ تقارير الميزان الشهرية</h1>
-    <p>تحليل ملفات Excel مع حساب نسبة الإنجاز (2 رحلة يومياً)</p>
+    <p>تحليل ملفات Excel مع حساب نسبة الإنجاز (2 رحلة يومياً - بإدخال عدد أيام الإجازات فقط)</p>
     <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
       <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
     </div>
@@ -291,13 +287,13 @@
         <button class="btn-advanced" id="exportAdvancedBtn">📊 تصدير متقدم (8 أوراق)</button></div>
       </div>
 
-      <!-- قسم حساب الإنتاج المتوقع ونسبة الإنجاز -->
+      <!-- قسم حساب الإنتاج المتوقع (بإدخال عدد الإجازات) -->
       <div class="expected-row">
         <div class="expected-field"><label>📅 تاريخ التقرير (لتحديد الشهر)</label><input type="date" id="reportDateCalc" value="2026-04-01"></div>
-        <div class="expected-field"><label>🗓️ أيام الإجازات (YYYY-MM-DD) كل تاريخ في سطر</label><textarea id="holidaysList" rows="2" placeholder="2026-04-05&#10;2026-04-12"></textarea></div>
+        <div class="expected-field"><label>🗓️ عدد أيام الإجازات في هذا الشهر</label><input type="number" id="holidaysCount" value="0" min="0" step="1" style="direction: ltr;"></div>
         <div><button class="btn-primary" id="calcExpectedBtn" style="background:#f7971e;">🧮 حساب الرحلات المتوقعة</button></div>
       </div>
-      <div id="expectedInfo" class="status" style="background: rgba(247,151,30,0.2);">📊 لم يتم حساب الرحلات المتوقعة بعد. أدخل الإجازات واضغط على الزر.</div>
+      <div id="expectedInfo" class="status" style="background: rgba(247,151,30,0.2);">📊 لم يتم حساب الرحلات المتوقعة بعد. أدخل عدد الإجازات واضغط على الزر.</div>
 
       <div id="statusMsg" class="status">✅ انتظار رفع ملف Excel...</div>
       <div class="save-section" id="saveSection"><h3>💾 حفظ التقرير في قاعدة البيانات</h3>
@@ -348,36 +344,33 @@ function keepDigitsOnly(v){ const ad={"٠":"0","١":"1","٢":"2","٣":"3","٤":"
 function hasExcludedName(row){ return row.some(c=>EXCLUDED_NAMES.has(normalizeText(c))); }
 
 let materialChart=null, topDriversChart=null, currentResult=null;
-let currentExpectedTrips=0, currentHolidaysList="", currentAchievementPercent=0;
+let currentExpectedTrips=0, currentHolidaysCount=0, currentAchievementPercent=0;
 
-// حساب أيام العمل والرحلات المتوقعة
-function calculateExpectedTrips(reportDateStr, holidaysText) {
-  if(!reportDateStr) return { workingDays:0, expectedTrips:0 };
-  const date = new Date(reportDateStr);
+// حساب أيام الشهر (بغض النظر عن الإجازات)
+function getTotalDaysInMonth(dateStr) {
+  const date = new Date(dateStr);
   const year = date.getFullYear();
   const month = date.getMonth();
-  const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month+1, 0);
-  const holidays = new Set();
-  (holidaysText||"").split(/\r?\n/).forEach(line=>{
-    let d = line.trim();
-    if(d.match(/^\d{4}-\d{2}-\d{2}$/)) holidays.add(d);
-  });
-  let workingDays = 0;
-  for(let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate()+1)) {
-    let dateStr = d.toISOString().split('T')[0];
-    if(!holidays.has(dateStr)) workingDays++;
-  }
+  return lastDay.getDate();
+}
+
+// حساب الرحلات المتوقعة بناءً على عدد أيام الإجازات فقط
+function calculateExpectedTrips(reportDateStr, holidaysCount) {
+  if(!reportDateStr) return { totalDays:0, workingDays:0, expectedTrips:0 };
+  const totalDays = getTotalDaysInMonth(reportDateStr);
+  let workingDays = totalDays - (parseInt(holidaysCount) || 0);
+  if(workingDays < 0) workingDays = 0;
   const expectedTrips = workingDays * 2;
-  return { workingDays, expectedTrips };
+  return { totalDays, workingDays, expectedTrips };
 }
 
 function updateExpectedInfo() {
   const reportDate = document.getElementById('reportDateCalc').value;
-  const holidays = document.getElementById('holidaysList').value;
-  const { workingDays, expectedTrips } = calculateExpectedTrips(reportDate, holidays);
-  document.getElementById('expectedInfo').innerHTML = `📅 أيام العمل في الشهر: ${workingDays} يوم | 🚛 الرحلات المتوقعة: ${expectedTrips} رحلة (2 رحلة/يوم)`;
-  return { workingDays, expectedTrips, holidays };
+  const holidaysCount = parseInt(document.getElementById('holidaysCount').value) || 0;
+  const { totalDays, workingDays, expectedTrips } = calculateExpectedTrips(reportDate, holidaysCount);
+  document.getElementById('expectedInfo').innerHTML = `📅 أيام الشهر: ${totalDays} يوم | 🗓️ أيام الإجازات: ${holidaysCount} | 🚛 أيام العمل: ${workingDays} يوم | 🚚 الرحلات المتوقعة: ${expectedTrips} رحلة (2 رحلة/يوم)`;
+  return { workingDays, expectedTrips, holidaysCount };
 }
 
 // معالجة بيانات Excel
@@ -467,7 +460,7 @@ async function processExcelFile(file){
   return processData(rows);
 }
 
-// حفظ التقرير مع البيانات الإضافية
+// حفظ التقرير مع البيانات الإضافية (عدد الإجازات بدلاً من قائمة التواريخ)
 async function saveReportToDB() {
   if (!currentResult) { showToast('⚠️ لا توجد بيانات للحفظ', 'error'); return; }
   const reportName = document.getElementById('reportName').value.trim();
@@ -481,7 +474,7 @@ async function saveReportToDB() {
         reportName, reportDate: reportDate || new Date().toISOString().split('T')[0],
         data: currentResult,
         expectedTrips: currentExpectedTrips,
-        holidaysList: currentHolidaysList,
+        holidaysCount: currentHolidaysCount,
         achievementPercent: currentAchievementPercent
       })
     });
@@ -505,7 +498,9 @@ async function loadSavedReports() {
     if (!reports.length) { container.innerHTML = '<div class="no-reports">📭 لا توجد تقارير محفوظة</div>'; return; }
     let html = `<table class="saved-reports-table"><thead><tr><th>#</th><th>التقرير</th><th>التاريخ</th><th>الرحلات</th><th>الوزن (طن)</th><th>نسبة الإنجاز %</th><th>إجراءات</th></tr></thead><tbody>`;
     reports.forEach((r,i)=>{
-      const ach = r.achievementPercent ? r.achievementPercent.toFixed(1)+'%' : (r.expectedTrips ? ((r.data?.matchedCount||0)/r.expectedTrips*100).toFixed(1)+'%' : '—');
+      let ach = '—';
+      if(r.achievementPercent) ach = r.achievementPercent.toFixed(1)+'%';
+      else if(r.expectedTrips && r.data?.matchedCount) ach = ((r.data.matchedCount / r.expectedTrips)*100).toFixed(1)+'%';
       html += `<tr><td>${i+1}</td><td><strong>${r.reportName}</strong></td><td>${r.reportDate||'—'}</td><td>${r.data?.matchedCount||0}</td><td>${(r.data?.totalWeightAll/1000||0).toFixed(1)}</td><td>${ach}</td>
       <td><div class="actions"><button class="btn-load" onclick="loadSavedReport('${r.id}')">📊 عرض</button><button class="btn-danger" onclick="deleteSavedReport('${r.id}','${r.reportName.replace(/'/g,"\\'")}')">🗑️ حذف</button></div></td></tr>`;
     });
@@ -522,12 +517,14 @@ async function loadSavedReport(id) {
     const report = await response.json();
     currentResult = report.data;
     currentExpectedTrips = report.expectedTrips || 0;
-    currentHolidaysList = report.holidaysList || '';
+    currentHolidaysCount = report.holidaysCount || 0;
     currentAchievementPercent = report.achievementPercent || 0;
     document.getElementById('reportDateCalc').value = report.reportDate || new Date().toISOString().split('T')[0];
-    document.getElementById('holidaysList').value = currentHolidaysList;
-    if(currentExpectedTrips>0) document.getElementById('expectedInfo').innerHTML = `📅 أيام العمل محسوبة مسبقاً | الرحلات المتوقعة: ${currentExpectedTrips}`;
-    else updateExpectedInfo();
+    document.getElementById('holidaysCount').value = currentHolidaysCount;
+    if(currentExpectedTrips>0) {
+      const workingDays = currentExpectedTrips / 2;
+      document.getElementById('expectedInfo').innerHTML = `📅 أيام العمل: ${workingDays} يوم | الرحلات المتوقعة: ${currentExpectedTrips} | أيام الإجازات: ${currentHolidaysCount}`;
+    } else updateExpectedInfo();
     switchTab('upload');
     displayUI(currentResult);
     document.getElementById('reportName').value = report.reportName;
@@ -559,7 +556,7 @@ async function mergeAllReports() {
     const reportsData = [];
     for(let r of reportsMeta){
       const full = await fetch(`${API_BASE}/scale-reports/${r.id}`, { credentials:'include' }).then(res=>res.json());
-      reportsData.push({ meta: r, data: full.data, expectedTrips: full.expectedTrips, holidays: full.holidaysList, achievement: full.achievementPercent });
+      reportsData.push({ meta: r, data: full.data, expectedTrips: full.expectedTrips, holidaysCount: full.holidaysCount, achievement: full.achievementPercent });
     }
     const mergedDriverMap = new Map();
     const mergedMaterialMap = new Map();
@@ -611,7 +608,7 @@ function renderMergedUI(m, reportsMeta){
   m.mergedMaterials.forEach((mat,i)=>{ mtbody.insertRow().innerHTML = `<td>${i+1}</td><td>${mat.name}</td><td>${mat.weight}</td><td>${(mat.weight/1000).toFixed(2)}</td><td>${((mat.weight/m.totalWeightAll)*100).toFixed(1)}%</td>`; });
 }
 
-// تصدير متقدم مع نسبة الإنجاز
+// تصدير متقدم مع نسبة الإنجاز (بسيط هنا ولكن يمكن توسيعه)
 async function exportAdvancedExcel(res, filename) {
   if(!res) return;
   showLoading(true);
@@ -621,8 +618,8 @@ async function exportAdvancedExcel(res, filename) {
     ws.mergeCells('A1:B1'); ws.getCell('A1').value='📊 تقرير الميزان مع نسبة الإنجاز'; ws.getCell('A1').font={ bold:true, size:18 };
     ws.getRow(2).values = ['الرحلات المحققة', res.matchedCount];
     ws.getRow(3).values = ['الرحلات المتوقعة (2 رحلة/يوم عمل)', currentExpectedTrips];
-    ws.getRow(4).values = ['نسبة الإنجاز %', currentExpectedTrips ? ((res.matchedCount/currentExpectedTrips)*100).toFixed(2)+'%' : 'غير محسوب'];
-    // باقي الأوراق يمكن إضافتها بالطريقة نفسها كما في السابق (اختصاراً نكتفي بالملخص هنا)
+    ws.getRow(4).values = ['عدد أيام الإجازات', currentHolidaysCount];
+    ws.getRow(5).values = ['نسبة الإنجاز %', currentExpectedTrips ? ((res.matchedCount/currentExpectedTrips)*100).toFixed(2)+'%' : 'غير محسوب'];
     const buffer = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buffer]), filename.replace('.xlsx','_advanced_with_achievement.xlsx'));
     showToast('✅ تم التصدير مع نسبة الإنجاز', 'success');
@@ -638,9 +635,9 @@ document.getElementById("showResultsBtn").onclick = async () => {
   try {
     const result = await processExcelFile(file);
     currentResult = result;
-    const { expectedTrips, holidays } = updateExpectedInfo();
+    const { expectedTrips, holidaysCount } = updateExpectedInfo();
     currentExpectedTrips = expectedTrips;
-    currentHolidaysList = document.getElementById('holidaysList').value;
+    currentHolidaysCount = holidaysCount;
     currentAchievementPercent = expectedTrips ? (result.matchedCount / expectedTrips * 100) : 0;
     displayUI(result);
     document.getElementById('reportName').value = file.name.replace(/\.[^/.]+$/, "");
@@ -654,7 +651,18 @@ document.getElementById("exportAdvancedBtn").onclick = async () => {
   if(!currentResult) { showToast('لا توجد نتائج', 'error'); return; }
   await exportAdvancedExcel(currentResult, document.getElementById("outputName").value.trim() || "Monthly_Report.xlsx");
 };
-function switchTab(tab){ /* نفس الكود السابق */ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); if(tab==='upload'){ document.querySelectorAll('.tab')[0].classList.add('active'); document.getElementById('tab-upload').classList.add('active'); } else { document.querySelectorAll('.tab')[1].classList.add('active'); document.getElementById('tab-saved').classList.add('active'); loadSavedReports(); } }
+function switchTab(tab){ 
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); 
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active')); 
+  if(tab==='upload'){ 
+    document.querySelectorAll('.tab')[0].classList.add('active'); 
+    document.getElementById('tab-upload').classList.add('active'); 
+  } else { 
+    document.querySelectorAll('.tab')[1].classList.add('active'); 
+    document.getElementById('tab-saved').classList.add('active'); 
+    loadSavedReports(); 
+  } 
+}
 function showToast(msg,type){ let t=document.createElement('div'); t.className=`toast toast-${type}`; t.textContent=msg; document.getElementById('toastContainer').appendChild(t); setTimeout(()=>t.remove(),4000); }
 function showLoading(show){ document.getElementById('loading').classList.toggle('active',show); }
 function logout(){ if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
