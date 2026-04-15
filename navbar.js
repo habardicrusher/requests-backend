@@ -1,4 +1,4 @@
-// navbar.js - شريط التنقل الموحد
+// navbar.js - شريط التنقل الموحد (معدل)
 (function() {
     // Keep-alive: كل 4 دقائق للحفاظ على الجلسة
     setInterval(async () => {
@@ -35,7 +35,7 @@
                 }
             }
 
-            // ========== الروابط الكاملة (تمت إضافة صفحة تقارير الميزان) ==========
+            // ========== الروابط الكاملة (تمت إضافة صفحة السيارات المخالفة) ==========
             const allLinks = [
                 { href: 'index.html', text: '📊 الرئيسية' },
                 { href: 'orders.html', text: '📝 الطلبات' },
@@ -44,7 +44,8 @@
                 { href: 'products.html', text: '📦 أنواع البحص' },
                 { href: 'factories.html', text: '🏭 المصانع' },
                 { href: 'reports.html', text: '📊 تقارير الكسارة' },
-                { href: 'scale_report.html', text: '⚖️ تقارير الميزان الشهرية' },  // ✅ الصفحة الجديدة
+                { href: 'scale_report.html', text: '⚖️ تقارير الميزان الشهرية' },
+                { href: 'trucks-failed.html', text: '⚠️ السيارات المخالفة' },   // ✅ الصفحة الجديدة
                 { href: 'settings.html', text: '⚙️ الإعدادات' },
                 { href: 'restrictions.html', text: '⛔ الحظر' },
                 { href: 'users.html', text: '👥 المستخدمين' },
