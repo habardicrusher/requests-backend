@@ -9,15 +9,16 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ========== Supabase Database Connection (Session Pooler - IPv4 compatible) ==========
+// ========== تعديل مهم: إضافة client_encoding=UTF8 لحل مشكلة العربية ==========
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+    options: '-c client_encoding=UTF8'   // هذا السطر هو الحل الأساسي لمشكلة الترميز
 });
 
 pool.connect((err) => {
     if (err) console.error('❌ Database connection failed:', err.message);
-    else console.log('✅ Connected to Supabase PostgreSQL');
+    else console.log('✅ Connected to Supabase PostgreSQL (UTF8 encoding forced)');
 });
 
 // ========== Helper functions ==========
@@ -45,6 +46,12 @@ async function getLogsCount() {
 }
 
 // ========== Middleware ==========
+// إضافة middleware لضبط رأس Content-Type مع UTF-8 لجميع استجابات JSON
+app.use((req, res, next) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    next();
+});
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
@@ -154,6 +161,74 @@ async function initTables() {
                 ['Admin', hashed, 'admin', JSON.stringify({ manageUsers: true, manageSettings: true, manageRestrictions: true })]
             );
             console.log('✅ Created default Admin user (password: admin123)');
+        }
+
+        // ========== إضافة بيانات السيارات الـ 74 إذا لم تكن موجودة ==========
+        const settingsCheck = await pool.query(`SELECT trucks FROM app_settings WHERE id = 1`);
+        let existingTrucks = [];
+        if (settingsCheck.rows.length > 0 && settingsCheck.rows[0].trucks) {
+            existingTrucks = settingsCheck.rows[0].trucks;
+        }
+        if (existingTrucks.length === 0) {
+            // قائمة السيارات والسائقين الصحيحة (تم تجميعها من القائمة التي قدمتها سابقاً)
+            const defaultTrucks = [
+                { number: "1091", driver: "سينج" }, { number: "2757", driver: "انيس" },
+                { number: "2758", driver: "عارف" }, { number: "2759", driver: "عتيق الاسلام" },
+                { number: "2760", driver: "سليمان" }, { number: "2762", driver: "زرداد" },
+                { number: "2818", driver: "شهداب" }, { number: "2927", driver: "مدثر" },
+                { number: "2928", driver: "سمر اقبال" }, { number: "2929", driver: "عرفان شبير" },
+                { number: "3321", driver: "وقاص" }, { number: "3322", driver: "نعيم" },
+                { number: "3324", driver: "مجمد كليم" }, { number: "3325", driver: "اجسان" },
+                { number: "3326", driver: "نويد" }, { number: "3461", driver: "جيفان كومار" },
+                { number: "3462", driver: "افتخار" }, { number: "3963", driver: "شكيل" },
+                { number: "4445", driver: "عرفان" }, { number: "5324", driver: "بابر" },
+                { number: "5367", driver: "سلفر تان" }, { number: "5520", driver: "نابين" },
+                { number: "5521", driver: "فضل" }, { number: "5522", driver: "عبيدالله" },
+                { number: "5523", driver: "مجمد فيصل" }, { number: "5524", driver: "بير مجمد" },
+                { number: "5525", driver: "صدير الاسلام" }, { number: "5526", driver: "مجمد عبدو" },
+                { number: "5527", driver: "سکير" }, { number: "5528", driver: "تشاندان" },
+                { number: "5658", driver: "مسعود خان" }, { number: "5796", driver: "ساهيل طارق" },
+                { number: "5797", driver: "عبد القادر" }, { number: "5800", driver: "غوا مجمد" },
+                { number: "6398", driver: "نديم خان" }, { number: "6428", driver: "برديب" },
+                { number: "6429", driver: "طاهر" }, { number: "6430", driver: "سليمان غولزار" },
+                { number: "6432", driver: "برويز اختر" }, { number: "6612", driver: "ذو القرنين" },
+                { number: "6613", driver: "نظيم خان" }, { number: "6614", driver: "فينود" },
+                { number: "6615", driver: "رسول" }, { number: "6616", driver: "يعقوب" },
+                { number: "6617", driver: "اظهر" }, { number: "6618", driver: "عثمان" },
+                { number: "6619", driver: "مينا خان" }, { number: "6620", driver: "مجمد ساجل" },
+                { number: "6621", driver: "اسد" }, { number: "6622", driver: "مانوج" },
+                { number: "6623", driver: "خالد رجمان" }, { number: "6624", driver: "هداية" },
+                { number: "6626", driver: "HARENDRA" }, { number: "6629", driver: "جاويد" },
+                { number: "6935", driver: "تيمور" }, { number: "6939", driver: "ارشد" },
+                { number: "7042", driver: "فيراس" }, { number: "7043", driver: "ايوب خان" },
+                { number: "7332", driver: "علي رضا" }, { number: "7682", driver: "خالد" },
+                { number: "7750", driver: "نديم" }, { number: "7837", driver: "ارسلان" },
+                { number: "7926", driver: "سجاد" }, { number: "7927", driver: "اكبر" },
+                { number: "7928", driver: "امير" }, { number: "7929", driver: "طاهر محمود" },
+                { number: "7930", driver: "نارندر" }, { number: "7974", driver: "شريف" },
+                { number: "7980", driver: "شعيب" }, { number: "9103", driver: "ساكب" },
+                { number: "9492", driver: "عدنان" }, { number: "9493", driver: "عامر" },
+                { number: "9495", driver: "ميزان" }, { number: "9496", driver: "غفور احمد" }
+            ];
+            // المصانع والمواد الافتراضية
+            const defaultFactories = [
+                { name: 'SCCCL', location: 'الدمام' }, { name: 'الحارث للمنتجات الاسمنيه', location: 'الدمام' },
+                { name: 'الحارثي القديم', location: 'الدمام' }, { name: 'المعجل لمنتجات الاسمنت', location: 'الدمام' },
+                { name: 'الحارث العزيزية', location: 'الدمام' }, { name: 'سارمكس النظيم', location: 'الرياض' },
+                { name: 'عبر الخليج', location: 'الرياض' }, { name: 'الكفاح للخرسانة الجاهزة', location: 'الدمام' },
+                { name: 'القيشان 3', location: 'الدمام' }, { name: 'القيشان 2 - الأحجار الشرقية', location: 'الدمام' },
+                { name: 'القيشان 1', location: 'الدمام' }, { name: 'الفهد للبلوك والخرسانة', location: 'الرياض' }
+            ];
+            const defaultMaterials = ['3/4', '3/8', '3/16'];
+            await pool.query(
+                `INSERT INTO app_settings (id, factories, materials, trucks, updated_at)
+                 VALUES (1, $1, $2, $3, NOW())
+                 ON CONFLICT (id) DO UPDATE SET factories = $1, materials = $2, trucks = $3, updated_at = NOW()`,
+                [JSON.stringify(defaultFactories), JSON.stringify(defaultMaterials), JSON.stringify(defaultTrucks)]
+            );
+            console.log(`✅ تم إضافة ${defaultTrucks.length} سيارة بشكل افتراضي (بأسماء عربية صحيحة)`);
+        } else {
+            console.log(`✅ توجد سيارات موجودة مسبقاً: ${existingTrucks.length} سيارة`);
         }
         console.log('✅ Tables verified');
     } catch (err) {
