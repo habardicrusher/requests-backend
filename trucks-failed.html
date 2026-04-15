@@ -88,7 +88,7 @@
             </div>
             <div>
                 <button class="btn btn-primary" onclick="loadViolations()">🔍 عرض السيارات المخالفة</button>
-                <button class="btn btn-success" onclick="saveAllReasons()">💾 حفظ الأسباب</button>
+                <button class="btn btn-success" onclick="saveAllReasons()">💾 حفظ الأسباب على الخادم</button>
             </div>
         </div>
 
@@ -120,13 +120,13 @@
             </table>
         </div>
         <div class="save-btn">
-            <button class="btn btn-success" onclick="saveAllReasons()">💾 حفظ جميع الأسباب المدخلة</button>
+            <button class="btn btn-success" onclick="saveAllReasons()">💾 حفظ جميع الأسباب المدخلة على الخادم</button>
         </div>
     </div>
 
     <script>
         const API_BASE = '/api';
-        let violationsData = [];  // تخزين بيانات السيارات المخالفة مع الأسباب المدخلة مؤقتاً
+        let violationsData = [];
         let currentDate = '';
 
         async function apiCall(endpoint, method = 'GET', data = null) {
@@ -148,7 +148,6 @@
             }
         }
 
-        // جلب جميع التوزيعات لليوم المحدد من daily_data
         async function getDistributionsForDate(date) {
             try {
                 const dayData = await apiCall(`/day/${date}`);
@@ -169,7 +168,6 @@
                 const trucks = await loadSettings();
                 const distributions = await getDistributionsForDate(currentDate);
                 
-                // حساب عدد الرحلات لكل سيارة
                 const tripsMap = new Map();
                 distributions.forEach(d => {
                     if (d.truck && d.truck.number) {
@@ -178,31 +176,37 @@
                     }
                 });
                 
-                // تجميع بيانات السيارات المخالفة (أقل من 2 رحلة)
+                // جلب الأسباب المحفوظة مسبقاً من الخادم
+                let savedReasonsMap = new Map();
+                try {
+                    const saved = await apiCall(`/truck-violations/${currentDate}`);
+                    saved.forEach(s => {
+                        savedReasonsMap.set(s.truck_number, { reason: s.reason || '', detail: s.details || '' });
+                    });
+                } catch(e) { /* لا يوجد أسباب محفوظة */ }
+                
                 const violations = [];
-                const zeroTrips = [];
                 trucks.forEach(truck => {
                     const trips = tripsMap.get(truck.number) || 0;
                     if (trips < 2) {
+                        const saved = savedReasonsMap.get(truck.number) || { reason: '', detail: '' };
                         violations.push({
                             number: truck.number,
                             driver: truck.driver || 'غير معروف',
                             trips: trips,
                             required: 2,
                             gap: 2 - trips,
-                            reason: '',
-                            detail: ''
+                            reason: saved.reason,
+                            detail: saved.detail
                         });
-                        if (trips === 0) zeroTrips.push(truck.number);
                     }
                 });
                 
                 violationsData = violations;
                 
-                // عرض الإحصائيات
                 const totalTrucks = trucks.length;
                 const achieved = totalTrucks - violations.length;
-                const zeroCount = zeroTrips.length;
+                const zeroCount = violations.filter(v => v.trips === 0).length;
                 document.getElementById('statsSection').style.display = 'flex';
                 document.getElementById('totalTrucks').textContent = totalTrucks;
                 document.getElementById('achievedCount').textContent = achieved;
@@ -212,12 +216,10 @@
                 renderViolationsTable(violations);
             } catch(e) {
                 showToast('خطأ في تحميل البيانات: ' + e.message, 'error');
-                document.getElementById('violationsBody').innerHTML = '<tr><td colspan="8" style="text-align:center;">حدث خطأ في التحميل</td></tr>';
             }
             showLoading(false);
         }
         
-        // قائمة الأسباب الجاهزة
         const reasonOptions = [
             "عطل مفاجئ في الطريق",
             "الدنيا ممطرة وزلقة",
@@ -243,13 +245,11 @@
             }
             
             tbody.innerHTML = violations.map((v, idx) => {
-                // تحديد الخيارات الديناميكية (عرض المربع المناسب حسب السبب)
                 const reasonSelect = `<select class="reason-select" data-index="${idx}" onchange="onReasonChange(${idx}, this.value)">
                     <option value="">-- اختر السبب --</option>
                     ${reasonOptions.map(opt => `<option value="${opt}" ${v.reason === opt ? 'selected' : ''}>${opt}</option>`).join('')}
                 </select>`;
                 
-                // حقل التفاصيل الإضافية (يظهر حسب السبب)
                 let detailPlaceholder = "تفاصيل إضافية...";
                 if (v.reason.includes("بحص مقاس")) detailPlaceholder = "أدخل المقاس المفقود (مثال: 3/4، 3/8)";
                 else if (v.reason.includes("عطل")) detailPlaceholder = "نوع العطل ومكانه";
@@ -261,25 +261,22 @@
                 
                 const detailInput = `<input type="text" class="reason-detail" data-index="${idx}" placeholder="${detailPlaceholder}" value="${v.detail}" oninput="onDetailChange(${idx}, this.value)">`;
                 
-                return `
-                    <tr>
-                        <td>${idx+1}</td>
-                        <td><strong>${v.number}</strong></td>
-                        <td>${v.driver}</td>
-                        <td>${v.trips}</td>
-                        <td>${v.required}</td>
-                        <td class="badge ${v.gap > 0 ? 'badge-danger' : 'badge-warning'}">-${v.gap}</td>
-                        <td>${reasonSelect}</td>
-                        <td>${detailInput}</td>
-                    </tr>
-                `;
+                return `<tr>
+                    <td>${idx+1}</td>
+                    <td><strong>${v.number}</strong></td>
+                    <td>${v.driver}</td>
+                    <td>${v.trips}</td>
+                    <td>${v.required}</td>
+                    <td class="badge ${v.gap > 0 ? 'badge-danger' : 'badge-warning'}">-${v.gap}</td>
+                    <td>${reasonSelect}</td>
+                    <td>${detailInput}</td>
+                </tr>`;
             }).join('');
         }
         
         function onReasonChange(index, value) {
             if (violationsData[index]) {
                 violationsData[index].reason = value;
-                // إعادة عرض الجدول لتحديث placeholder حقل التفاصيل
                 renderViolationsTable(violationsData);
             }
         }
@@ -299,66 +296,23 @@
                 showToast('يرجى تحميل البيانات أولاً', 'error');
                 return;
             }
-            // التحقق من أن كل الأسباب تم اختيارها (اختياري)
-            const missing = violationsData.filter(v => !v.reason);
-            if (missing.length) {
-                if (!confirm(`هناك ${missing.length} سيارة لم يتم اختيار سبب لها. هل تريد المتابعة مع تركها فارغة؟`)) return;
-            }
             showLoading(true);
             try {
-                // حفظ الأسباب في localStorage مؤقتاً (أو يمكن إرسالها إلى الخادم إذا تم إنشاء API)
-                const reportKey = `violations_${currentDate}`;
                 const toSave = violationsData.map(v => ({
-                    number: v.number,
+                    truckNumber: v.number,
                     driver: v.driver,
                     trips: v.trips,
-                    reason: v.reason,
-                    detail: v.detail
+                    reason: v.reason || '',
+                    detail: v.detail || ''
                 }));
-                localStorage.setItem(reportKey, JSON.stringify(toSave));
-                showToast(`✅ تم حفظ أسباب ${violationsData.length} سيارة مخالفة بنجاح`, 'success');
-                // يمكن أيضاً طباعة التقرير أو عرضه
-                console.log('الأسباب المحفوظة:', toSave);
+                await apiCall('/truck-violations/save', 'POST', { date: currentDate, violations: toSave });
+                showToast(`✅ تم حفظ أسباب ${violationsData.length} سيارة مخالفة على الخادم`, 'success');
             } catch(e) {
-                showToast('خطأ في الحفظ', 'error');
+                showToast('خطأ في الحفظ: ' + e.message, 'error');
             }
             showLoading(false);
         }
         
-        function loadSavedReasons() {
-            if (!currentDate) return;
-            const reportKey = `violations_${currentDate}`;
-            const saved = localStorage.getItem(reportKey);
-            if (saved) {
-                try {
-                    const savedData = JSON.parse(saved);
-                    violationsData.forEach(v => {
-                        const found = savedData.find(s => s.number === v.number);
-                        if (found) {
-                            v.reason = found.reason || '';
-                            v.detail = found.detail || '';
-                        }
-                    });
-                    renderViolationsTable(violationsData);
-                } catch(e) {}
-            }
-        }
-        
-        // دالة إضافية لعرض التقارير المحفوظة في وحدة التحكم (اختياري)
-        async function showSavedReport() {
-            if (!currentDate) return;
-            const reportKey = `violations_${currentDate}`;
-            const saved = localStorage.getItem(reportKey);
-            if (saved) {
-                const data = JSON.parse(saved);
-                console.table(data);
-                showToast(`تم العثور على تقرير محفوظ لـ ${data.length} سيارة`, 'info');
-            } else {
-                showToast('لا يوجد تقرير محفوظ لهذا التاريخ', 'info');
-            }
-        }
-        
-        // وظائف مساعدة
         function showToast(msg, type) {
             const c = document.getElementById('toastContainer');
             const t = document.createElement('div');
@@ -371,28 +325,24 @@
             document.getElementById('loading').classList.toggle('active', show);
         }
         
-        // بناء شريط التنقل
         function loadNav() {
             fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(data => {
                 if (data.user) {
-                    const navLinks = document.getElementById('navLinks');
-                    if (navLinks) {
-                        navLinks.innerHTML = `
-                            <a href="index.html" class="nav-link">📊 الرئيسية</a>
-                            <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                            <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-                            <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                            <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                            <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                            <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
-                            <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
-                            <a href="trucks-failed.html" class="nav-link active">⚠️ السيارات المخالفة</a>
-                            <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                            <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                            <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                            <a href="logs.html" class="nav-link">📜 السجلات</a>
-                        `;
-                    }
+                    document.getElementById('navLinks').innerHTML = `
+                        <a href="index.html" class="nav-link">📊 الرئيسية</a>
+                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                        <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
+                        <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
+                        <a href="trucks-failed.html" class="nav-link active">⚠️ السيارات المخالفة</a>
+                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                        <a href="logs.html" class="nav-link">📜 السجلات</a>
+                    `;
                 } else window.location.href = '/login.html';
             }).catch(() => window.location.href = '/login.html');
         }
@@ -401,9 +351,7 @@
             loadNav();
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('reportDate').value = today;
-            currentDate = today;
-            // تحميل البيانات تلقائياً عند فتح الصفحة
-            loadViolations().then(() => loadSavedReasons());
+            loadViolations();
         });
     </script>
     <script src="navbar.js"></script>
