@@ -8,7 +8,6 @@
   <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
-    /* نفس الستايل السابق - لم يتغير */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -242,6 +241,11 @@
     .tab.active { background: rgba(255,255,255,0.08); color: #667eea; border-color: rgba(102,126,234,0.3); }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
+    .saved-report-viewer {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 2px solid rgba(255,255,255,0.2);
+    }
     @media (max-width:768px) {
       .charts-row { flex-direction: column; }
       .chart-wrap { height: 250px; }
@@ -288,7 +292,6 @@
         <button class="btn-advanced" id="exportAdvancedBtn">📊 تصدير متقدم (8 أوراق)</button></div>
       </div>
 
-      <!-- قسم حساب الإنتاج المتوقع -->
       <div class="expected-row">
         <div class="expected-field"><label>📅 تاريخ التقرير (لتحديد الشهر)</label><input type="date" id="reportDateCalc" value="2026-04-01"></div>
         <div class="expected-field"><label>📆 إجمالي أيام الشهر</label><input type="number" id="totalDaysMonth" value="30" min="28" max="31" step="1" style="direction: ltr;"></div>
@@ -308,12 +311,7 @@
         <div class="charts-row"><div class="chart-card"><div class="chart-title">📦 إجمالي الأوزان حسب نوع البحص</div><div class="chart-wrap"><canvas id="materialChart"></canvas></div></div>
         <div class="chart-card"><div class="chart-title">🏆 أعلى 10 سائقين بعدد الرحلات</div><div class="chart-wrap"><canvas id="topDriversChart"></canvas></div></div></div>
         <div class="driver-table"><div class="chart-title">🚛 إجمالي رحلات الشهر لكل سائق ونسبة الإنجاز (على أساس 2 رحلة يومياً لكل سائق)</div>
-        <table id="driverTable">
-          <thead>
-            <tr><th>اسم السائق</th><th>عدد الرحلات</th><th>مجموع الوزن (كجم)</th><th>نسبة الإنجاز %</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table></div>
+        <table id="driverTable"><thead><tr><th>اسم السائق</th><th>عدد الرحلات</th><th>مجموع الوزن (كجم)</th><th>نسبة الإنجاز %</th></tr></thead><tbody></tbody></table></div>
       </div>
     </div>
   </div>
@@ -326,6 +324,21 @@
       <button class="btn-merge" onclick="mergeAllReports()">🔀 تجميع كل التقارير</button>
       <button class="btn-export-merged" id="exportMergedBtn" style="display:none;" onclick="exportMergedExcel()">📊 تصدير التجميع (Excel)</button></div>
       <div id="savedReportsContainer"><div class="no-reports">⏳ جاري تحميل التقارير...</div></div>
+      
+      <!-- منطقة عرض التقرير المحفوظ (بنفس تصميم التحليل) -->
+      <div id="savedReportViewer" class="saved-report-viewer" style="display:none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h3 style="color: #ffd200;">📄 عرض التقرير: <span id="savedReportName"></span></h3>
+          <button class="btn-danger" onclick="hideSavedReportViewer()">✖️ إخفاء العرض</button>
+        </div>
+        <div id="savedMetricsGrid" class="stats-grid"></div>
+        <div class="charts-row">
+          <div class="chart-card"><div class="chart-title">📦 إجمالي الأوزان حسب نوع البحص</div><div class="chart-wrap"><canvas id="savedMaterialChart"></canvas></div></div>
+          <div class="chart-card"><div class="chart-title">🏆 أعلى 10 سائقين بعدد الرحلات</div><div class="chart-wrap"><canvas id="savedTopDriversChart"></canvas></div></div>
+        </div>
+        <div class="driver-table"><div class="chart-title">🚛 إجمالي رحلات الشهر لكل سائق ونسبة الإنجاز (على أساس 2 رحلة يومياً لكل سائق)</div>
+        <table id="savedDriverTable"><thead><tr><th>اسم السائق</th><th>عدد الرحلات</th><th>مجموع الوزن (كجم)</th><th>نسبة الإنجاز %</th></tr></thead><tbody></tbody></table></div>
+      </div>
     </div>
     <div id="mergedSection"><hr class="merge-divider">
       <div class="merged-card"><h3>📊 إحصائيات مجمّعة</h3><div id="mergedSources"></div><div id="mergedStatsGrid" class="stats-grid merged-stats"></div></div>
@@ -335,7 +348,7 @@
       <div class="merged-chart-card"><div class="chart-title">📅 الرحلات والوزن لكل تقرير</div><div class="chart-wrap"><canvas id="mergedReportsLine"></canvas></div></div></div>
       <div class="charts-row"><div class="merged-chart-card"><div class="chart-title">⚖️ أعلى 10 سائقين بالوزن</div><div class="chart-wrap"><canvas id="mergedDriversWeightBar"></canvas></div></div></div>
       <div class="merged-card"><h3>🚛 جدول السائقين المجمّع (مع نسبة إنجاز كل سائق)</h3><div class="merged-table"><table id="mergedDriverTable"><thead><tr><th>#</th><th>اسم السائق</th><th>إجمالي الرحلات</th><th>الوزن (كجم)</th><th>الوزن (طن)</th><th>نسبة الإنجاز %</th></tr></thead><tbody></tbody></table></div></div>
-      <div class="merged-card"><h3>📦 جدول المواد المجمّع</h3><div class="merged-table"><table id="mergedMaterialTable"><thead><tr><th>#</th><th>نوع البحص</th><th>الوزن (كجم)</th><th>الوزن (طن)</th><th>النسبة</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="merged-card"><h3>📦 جدول المواد المجمّع</h3><div class="merged-table"><table id="mergedMaterialTable"><thead><tr><th>#</th><th>نوع البحص</th><th>الوزن (كجم)</th><th>الوزن (طن)</th><th>النسبة</th></tr></thead><tbody></tbody></tr></div></div>
     </div>
   </div>
 </div>
@@ -351,6 +364,9 @@ function hasExcludedName(row){ return row.some(c=>EXCLUDED_NAMES.has(normalizeTe
 
 let materialChart=null, topDriversChart=null, currentResult=null;
 let currentTotalDays=30, currentHolidaysCount=0, currentWorkingDays=0, currentMaxTripsPerDriver=0;
+
+// Charts for saved report viewer
+let savedMaterialChart=null, savedTopDriversChart=null;
 
 function getTotalDaysFromDate(dateStr) {
   if(!dateStr) return 30;
@@ -449,6 +465,53 @@ function displayUI(res){
   document.getElementById("saveSection").classList.add("active");
 }
 
+// عرض التقرير المحفوظ في تبويب saved
+function displaySavedReportUI(res, reportName, maxTrips) {
+  // تحديث الإحصائيات
+  const metricsDiv = document.getElementById("savedMetricsGrid");
+  metricsDiv.innerHTML = `
+    <div class="stat-card"><div class="stat-label">إجمالي الصفوف</div><div class="stat-value">${res.totalRows}</div></div>
+    <div class="stat-card"><div class="stat-label">رحلاتنا (المحققة)</div><div class="stat-value">${res.matchedCount}</div></div>
+    <div class="stat-card"><div class="stat-label">رحلات غير تابعة</div><div class="stat-value">${res.notMatchedCount}</div></div>
+    <div class="stat-card"><div class="stat-label">عدد السائقين</div><div class="stat-value">${res.driversStats.length}</div></div>
+    <div class="stat-card"><div class="stat-label">إجمالي الوزن (طن)</div><div class="stat-value">${(res.totalWeightAll/1000).toFixed(1)} طن</div></div>
+  `;
+  
+  // جدول السائقين
+  const tbody = document.querySelector("#savedDriverTable tbody");
+  tbody.innerHTML = "";
+  for(let d of res.driversStats){
+    let driverAchievement = (maxTrips > 0) ? ((d.trips / maxTrips) * 100).toFixed(2) : '0.00';
+    let tr = tbody.insertRow();
+    tr.insertCell(0).textContent = d.name;
+    tr.insertCell(1).textContent = d.trips;
+    tr.insertCell(2).textContent = d.totalWeight.toLocaleString();
+    tr.insertCell(3).textContent = driverAchievement + '%';
+  }
+  
+  // رسم المواد
+  const topMats = res.materialsStats.slice(0,10);
+  if(savedMaterialChart) savedMaterialChart.destroy();
+  savedMaterialChart = new Chart(document.getElementById("savedMaterialChart").getContext("2d"), {
+    type:"bar", data:{ labels:topMats.map(m=>m.name), datasets:[{ label:"الوزن (طن)", data:topMats.map(m=>m.weight/1000), backgroundColor:"#38ef7d", borderRadius:8 }] },
+    options:{ responsive:true, maintainAspectRatio:false }
+  });
+  
+  // رسم أفضل السائقين
+  if(savedTopDriversChart) savedTopDriversChart.destroy();
+  savedTopDriversChart = new Chart(document.getElementById("savedTopDriversChart").getContext("2d"), {
+    type:"bar", data:{ labels:res.top10Drivers.map(d=>d.name), datasets:[{ label:"عدد الرحلات", data:res.top10Drivers.map(d=>d.trips), backgroundColor:"#4facfe", borderRadius:8 }] },
+    options:{ responsive:true, maintainAspectRatio:false, indexAxis:'y' }
+  });
+  
+  document.getElementById("savedReportName").innerText = reportName;
+  document.getElementById("savedReportViewer").style.display = "block";
+}
+
+function hideSavedReportViewer() {
+  document.getElementById("savedReportViewer").style.display = "none";
+}
+
 async function processExcelFile(file){
   let buf = await file.arrayBuffer();
   let wb = new ExcelJS.Workbook();
@@ -459,7 +522,6 @@ async function processExcelFile(file){
   return processData(rows);
 }
 
-// ========== تحسين الاتصال بالخادم ومعالجة الأخطاء ==========
 const MAX_DRIVERS_TO_SAVE = 200;
 const MAX_RETRIES = 1;
 
@@ -587,25 +649,13 @@ async function loadSavedReport(id) {
     const response = await fetchWithAuth(`${API_BASE}/scale-reports/${id}`);
     if (!response.ok) throw new Error(await response.text());
     const report = await response.json();
-    currentResult = report.data;
-    currentTotalDays = report.totalDays || 30;
-    currentHolidaysCount = report.holidaysCount || 0;
-    currentWorkingDays = report.workingDays || 0;
-    // التأكد من حساب maxTripsPerDriver إذا كان مفقوداً
-    currentMaxTripsPerDriver = report.maxTripsPerDriver || (currentWorkingDays * 2);
+    const resData = report.data;
+    const workingDays = report.workingDays || 0;
+    const maxTrips = report.maxTripsPerDriver || (workingDays * 2);
     
-    // تحديث واجهة المستخدم
-    document.getElementById('reportDateCalc').value = report.reportDate || new Date().toISOString().split('T')[0];
-    document.getElementById('totalDaysMonth').value = currentTotalDays;
-    document.getElementById('holidaysCount').value = currentHolidaysCount;
-    document.getElementById('expectedInfo').innerHTML = `📅 أيام العمل: ${currentWorkingDays} يوم | 🚛 الحد الأقصى لرحلات السائق الواحد: ${currentMaxTripsPerDriver} رحلة (2 رحلة/يوم)`;
-    
-    // إعادة عرض الجدول مع النسب الصحيحة
-    switchTab('upload');
-    displayUI(currentResult);
-    document.getElementById('reportName').value = report.reportName;
-    document.getElementById('reportDate').value = report.reportDate;
-    showToast(`✅ تم تحميل التقرير: ${report.reportName}`, 'success');
+    // عرض التقرير في منطقة العرض داخل تبويب saved
+    displaySavedReportUI(resData, report.reportName, maxTrips);
+    showToast(`✅ تم عرض التقرير: ${report.reportName}`, 'success');
   } catch(e) {
     if (!e.message.includes('Unauthorized')) showToast('❌ خطأ في التحميل: ' + e.message, 'error');
   }
@@ -620,6 +670,7 @@ async function deleteSavedReport(id, name) {
     if (!response.ok) throw new Error(await response.text());
     showToast(`✅ تم حذف التقرير "${name}"`, 'success');
     await loadSavedReports();
+    hideSavedReportViewer();
   } catch(e) {
     if (!e.message.includes('Unauthorized')) showToast('❌ خطأ في الحذف: ' + e.message, 'error');
   }
@@ -765,6 +816,8 @@ function switchTab(tab) {
   if (tab === 'upload') {
     document.querySelectorAll('.tab')[0].classList.add('active');
     document.getElementById('tab-upload').classList.add('active');
+    // إخفاء أي عرض محفوظ عند العودة للتحليل
+    hideSavedReportViewer();
   } else {
     document.querySelectorAll('.tab')[1].classList.add('active');
     document.getElementById('tab-saved').classList.add('active');
