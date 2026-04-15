@@ -9,7 +9,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ========== Database connection ==========
+// ========== إعداد اتصال Supabase مع SSL ==========
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -17,10 +17,10 @@ const pool = new Pool({
 
 pool.connect((err) => {
     if (err) console.error('❌ Database connection failed:', err.message);
-    else console.log('✅ Connected to database');
+    else console.log('✅ Connected to Supabase PostgreSQL');
 });
 
-// ========== Helper functions ==========
+// ========== دوال مساعدة ==========
 async function addLog(username, action, details, location) {
     try {
         await pool.query(
@@ -67,7 +67,7 @@ function requireAdmin(req, res, next) {
     res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
 }
 
-// ========== Create tables ==========
+// ========== إنشاء الجداول تلقائياً ==========
 async function initTables() {
     try {
         await pool.query(`
@@ -145,24 +145,26 @@ async function initTables() {
                 UNIQUE(report_date, truck_number)
             );
         `);
-        // Create default admin user if none exists
-        const adminCheck = await pool.query(`SELECT id FROM users WHERE username = 'Admin'`);
-        if (adminCheck.rows.length === 0) {
+        // إنشاء مستخدم Admin افتراضي إذا لم يكن موجوداً
+        const adminExists = await pool.query(`SELECT id FROM users WHERE username = 'Admin'`);
+        if (adminExists.rows.length === 0) {
             const hashed = bcrypt.hashSync('admin123', 10);
             await pool.query(
                 `INSERT INTO users (username, password, role, permissions) VALUES ($1, $2, $3, $4)`,
                 ['Admin', hashed, 'admin', JSON.stringify({ manageUsers: true, manageSettings: true, manageRestrictions: true })]
             );
-            console.log('✅ Created default Admin user (password: admin123)');
+            console.log('✅ تم إنشاء مستخدم Admin (كلمة المرور: admin123)');
         }
-        console.log('✅ All tables verified');
+        console.log('✅ تم التأكد من جميع الجداول');
     } catch (err) {
-        console.error('❌ Error creating tables:', err.message);
+        console.error('❌ خطأ في إنشاء الجداول:', err.message);
     }
 }
 initTables();
 
-// ========== API Routes ==========
+// ========== واجهات API ==========
+
+// تسجيل الدخول
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -195,7 +197,7 @@ app.get('/api/me', requireAuth, (req, res) => {
     res.json({ user: req.session.user });
 });
 
-// Settings
+// الإعدادات
 app.get('/api/settings', requireAuth, async (req, res) => {
     try {
         const settings = (await pool.query('SELECT factories, materials, trucks FROM app_settings WHERE id = 1')).rows[0] || {
@@ -235,7 +237,7 @@ app.put('/api/settings', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
-// Daily data
+// البيانات اليومية (الطلبات والتوزيع)
 app.get('/api/day/:date', requireAuth, async (req, res) => {
     try {
         const result = await pool.query('SELECT orders, distribution FROM daily_data WHERE date = $1', [req.params.date]);
@@ -260,7 +262,7 @@ app.put('/api/day/:date', requireAuth, async (req, res) => {
     }
 });
 
-// Users management (admin only)
+// إدارة المستخدمين (للمدير فقط)
 app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
     try {
         const users = (await pool.query('SELECT id, username, role, factory, permissions, created_at FROM users')).rows;
@@ -319,7 +321,7 @@ app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
-// Restrictions
+// قيود الحظر
 app.get('/api/restrictions', requireAuth, async (req, res) => {
     try {
         const restrictions = (await pool.query('SELECT * FROM restrictions ORDER BY created_at DESC')).rows;
@@ -368,7 +370,7 @@ app.delete('/api/restrictions/:id', requireAuth, async (req, res) => {
     }
 });
 
-// Reports (old)
+// تقارير الكسارة القديمة
 app.get('/api/reports', requireAuth, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
@@ -407,7 +409,7 @@ app.get('/api/reports', requireAuth, async (req, res) => {
     }
 });
 
-// Scale Reports
+// تقارير الميزان الشهرية
 app.post('/api/scale-reports', requireAuth, async (req, res) => {
     try {
         const { reportName, reportDate, data } = req.body;
@@ -486,7 +488,7 @@ app.put('/api/scale-reports/:id', requireAuth, async (req, res) => {
     }
 });
 
-// Truck Violations
+// مخالفات السيارات (أقل من رودين)
 app.post('/api/truck-violations/save', requireAuth, async (req, res) => {
     try {
         const { date, violations } = req.body;
@@ -572,7 +574,7 @@ app.get('/api/truck-violations/stats/:startDate/:endDate', requireAuth, async (r
     }
 });
 
-// Backup & Restore
+// النسخ الاحتياطي والاستعادة
 app.get('/api/backup', requireAuth, requireAdmin, async (req, res) => {
     try {
         const settings = (await pool.query('SELECT factories, materials, trucks FROM app_settings WHERE id = 1')).rows[0] || {};
@@ -618,7 +620,7 @@ app.delete('/api/clear-all', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
-// Logs
+// السجلات
 app.get('/api/logs', requireAuth, async (req, res) => {
     if (req.session.user.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     try {
@@ -653,8 +655,13 @@ app.delete('/api/logs/clear', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
-// ========== Serve static files with authentication for protected pages ==========
-const protectedPages = ['index.html', 'orders.html', 'distribution.html', 'trucks.html', 'products.html', 'factories.html', 'reports.html', 'settings.html', 'restrictions.html', 'users.html', 'logs.html', 'upload-report.html', 'scale_report.html', 'trucks-failed.html', 'trucks-failed-report.html'];
+// ========== خدمة الملفات الثابتة مع الحماية ==========
+const protectedPages = [
+    'index.html', 'orders.html', 'distribution.html', 'trucks.html',
+    'products.html', 'factories.html', 'reports.html', 'settings.html',
+    'restrictions.html', 'users.html', 'logs.html', 'upload-report.html',
+    'scale_report.html', 'trucks-failed.html', 'trucks-failed-report.html'
+];
 protectedPages.forEach(page => {
     app.get(`/${page}`, (req, res) => {
         if (!req.session || !req.session.user) return res.redirect('/login.html');
@@ -678,7 +685,7 @@ app.get('/', (req, res) => {
 
 app.use(express.static(__dirname));
 
-// ========== Start server ==========
+// ========== تشغيل السيرفر ==========
 app.listen(PORT, () => {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
