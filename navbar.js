@@ -1,10 +1,7 @@
-// navbar.js - شريط التنقل الموحد (محدث)
 (function() {
-    // Keep-alive: كل 3 دقائق للحفاظ على الجلسة
     setInterval(async () => {
         try {
             await fetch('/api/me', { credentials: 'include' });
-            console.log('navbar keep-alive');
         } catch(e) {}
     }, 3 * 60 * 1000);
 
@@ -23,16 +20,12 @@
 
             let navContainer = document.querySelector('.nav-links');
             if (!navContainer) {
-                const container = document.querySelector('.container');
-                if (!container) return;
                 const header = document.querySelector('.header');
-                if (header && header.nextSibling) {
+                if (header) {
                     navContainer = document.createElement('div');
                     navContainer.className = 'nav-links';
                     header.insertAdjacentElement('afterend', navContainer);
-                } else {
-                    return;
-                }
+                } else return;
             }
 
             const allLinks = [
@@ -52,43 +45,20 @@
                 { href: 'logs.html', text: '📜 السجلات' }
             ];
 
-            let linksToShow = [];
-            if (isAdmin || isUser) {
-                linksToShow = allLinks;
-            } else if (isClient) {
-                linksToShow = [{ href: 'orders.html', text: '📝 الطلبات' }];
-            }
-
+            let linksToShow = (isAdmin || isUser) ? allLinks : (isClient ? [{ href: 'orders.html', text: '📝 الطلبات' }] : []);
             const currentPage = window.location.pathname.split('/').pop();
-            navContainer.innerHTML = linksToShow.map(link => `
-                <a href="${link.href}" class="nav-link ${currentPage === link.href ? 'active' : ''}">${link.text}</a>
-            `).join('');
+            navContainer.innerHTML = linksToShow.map(link => `<a href="${link.href}" class="nav-link ${currentPage === link.href ? 'active' : ''}">${link.text}</a>`).join('');
 
-            // إضافة زر تسجيل الخروج
             if (!document.getElementById('logout-btn-container')) {
                 const logoutDiv = document.createElement('div');
                 logoutDiv.id = 'logout-btn-container';
                 logoutDiv.style.cssText = 'position: absolute; top: 20px; left: 20px; z-index: 100;';
                 const logoutBtn = document.createElement('button');
                 logoutBtn.innerHTML = '🚪 تسجيل الخروج';
-                logoutBtn.style.cssText = `
-                    background: linear-gradient(135deg, #f5576c, #eb3349);
-                    border: none;
-                    padding: 8px 20px;
-                    border-radius: 25px;
-                    color: white;
-                    font-weight: bold;
-                    cursor: pointer;
-                    transition: 0.3s;
-                    font-size: 14px;
-                `;
-                logoutBtn.onmouseover = () => logoutBtn.style.transform = 'scale(1.05)';
-                logoutBtn.onmouseout = () => logoutBtn.style.transform = 'scale(1)';
+                logoutBtn.style.cssText = `background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer; font-size: 14px;`;
                 logoutBtn.onclick = () => {
                     if (confirm('⚠️ هل أنت متأكد من تسجيل الخروج؟')) {
-                        fetch('/api/logout', { method: 'POST', credentials: 'include' })
-                            .then(() => { window.location.href = '/login.html'; })
-                            .catch(() => { window.location.href = '/login.html'; });
+                        fetch('/api/logout', { method: 'POST', credentials: 'include' }).then(() => window.location.href = '/login.html');
                     }
                 };
                 logoutDiv.appendChild(logoutBtn);
@@ -99,14 +69,10 @@
                 }
             }
         } catch(e) {
-            console.error('خطأ في renderNavbar:', e);
             window.location.href = '/login.html';
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', renderNavbar);
-    } else {
-        renderNavbar();
-    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderNavbar);
+    else renderNavbar();
 })();
