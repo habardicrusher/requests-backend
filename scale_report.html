@@ -293,7 +293,22 @@
         const materialsArr=Array.from(materialStats.entries()).map(([n,w])=>({name:n, weight:w})).sort((a,b)=>b.weight-a.weight);
         return { matchedCount:matched, notMatchedCount:notMatched, totalRows:total, driversStats:driversArr, top10Drivers:driversArr.slice(0,10), materialsStats:materialsArr, totalWeightAll:materialsArr.reduce((s,m)=>s+m.weight,0) };
     }
-    function computeRoda(driversList, monthDays, officialVac){
+    function computeRodaFromWorkDays(driversList){
+        // هذه الدالة تحسب الرودات بناءً على أيام العمل المخزنة (totalWorkDays)
+        return driversList.map(d=>{
+            const required = d.totalWorkDays * 2;
+            const percent = required>0 ? (d.trips/required)*100 : 0;
+            return { 
+                name: d.name, 
+                trips: d.trips, 
+                totalWeight: d.totalWeight, 
+                workDays: d.totalWorkDays, 
+                requiredRoda: required, 
+                percentage: Math.min(100,percent).toFixed(2) 
+            };
+        });
+    }
+    function computeRodaFromMonthDays(driversList, monthDays, officialVac){
         const workDays = Math.max(0, monthDays - officialVac);
         return driversList.map(d=>{
             const required = workDays * 2;
@@ -344,7 +359,7 @@
             currentResult = result;
             const monthDays = parseInt(document.getElementById("monthDays").value) || 30;
             const officialVac = parseInt(document.getElementById("officialVacations").value) || 0;
-            currentDriversWithDetails = computeRoda(result.driversStats, monthDays, officialVac);
+            currentDriversWithDetails = computeRodaFromMonthDays(result.driversStats, monthDays, officialVac);
             currentMonthDays = monthDays; currentOfficialVacations = officialVac;
             document.getElementById("metricsGrid").style.display = "grid";
             document.getElementById("chartsArea").style.display = "block";
@@ -357,7 +372,7 @@
         if(currentResult){
             const monthDays = parseInt(document.getElementById("monthDays").value) || 30;
             const officialVac = parseInt(document.getElementById("officialVacations").value) || 0;
-            currentDriversWithDetails = computeRoda(currentResult.driversStats, monthDays, officialVac);
+            currentDriversWithDetails = computeRodaFromMonthDays(currentResult.driversStats, monthDays, officialVac);
             renderDriverTable(currentDriversWithDetails);
             showToast("تم تحديث الرودات","success");
         } else showToast("لا توجد بيانات","error");
@@ -373,23 +388,31 @@
     };
     document.getElementById("saveCurrentReportBtn").onclick = async () => {
         if(!currentResult){ showToast("لا توجد بيانات للحفظ","error"); return; }
-        let name = prompt("اسم التقرير (مثال: مارس 2025):", "تقرير " + new Date().toLocaleDateString('ar-SA'));
+        let name = prompt("اسم التقرير (مثال: مارس 2025 أو الربع سنوي):", "تقرير " + new Date().toLocaleDateString('ar-SA'));
         if(!name) return;
         showLoading(true);
         try{
+            // تخزين أيام العمل الفعلية لكل سائق (totalWorkDays) بدلاً من الاعتماد على monthDays فقط
+            const driversStatsToSave = currentDriversWithDetails.map(d => ({
+                name: d.name,
+                trips: d.trips,
+                totalWeight: d.totalWeight,
+                totalWorkDays: d.workDays,      // <-- حفظ أيام العمل المجمعة
+                extraVacationDays: 0,
+                requiredRoda: d.requiredRoda,
+                percentage: d.percentage
+            }));
             const reportData = {
                 totalRows: currentResult.totalRows,
                 matchedCount: currentResult.matchedCount,
                 notMatchedCount: currentResult.notMatchedCount,
                 totalWeightAll: currentResult.totalWeightAll,
-                driversStats: currentDriversWithDetails.map(d => ({
-                    name: d.name, trips: d.trips, totalWeight: d.totalWeight,
-                    extraVacationDays: 0, requiredRoda: d.requiredRoda, percentage: d.percentage
-                })),
+                driversStats: driversStatsToSave,
                 materialsStats: currentResult.materialsStats,
                 top10Drivers: currentDriversWithDetails.slice(0,10).map(d => ({ name: d.name, trips: d.trips })),
                 monthDays: currentMonthDays,
-                officialVacations: currentOfficialVacations
+                officialVacations: currentOfficialVacations,
+                isMerged: true  // علامة اختيارية
             };
             const res = await fetch(`${API_BASE}/scale-reports`, {
                 method: 'POST',
@@ -411,7 +434,7 @@
         showToast("تم إلغاء التحديد","success");
     };
 
-    // ========== دوال التقارير المحفوظة (مع تصحيح جمع أيام العمل) ==========
+    // ========== دوال التقارير المحفوظة (مع دعم التقرير المدمج) ==========
     async function loadReportsList(){
         try{
             const res = await fetch(`${API_BASE}/scale-reports`);
@@ -485,21 +508,32 @@
             const res = await fetch(`${API_BASE}/scale-reports/${reportId}`);
             const full = await res.json();
             const data = full.data;
-            const monthDays = data.monthDays || 30;
-            const officialVac = data.officialVacations || 4;
-            const driversStats = data.driversStats.map(d => ({ name: d.name, trips: d.trips, totalWeight: d.totalWeight }));
-            const driversWithRoda = computeRoda(driversStats, monthDays, officialVac);
+            // التحقق مما إذا كان التقرير يحتوي على totalWorkDays في driversStats
+            let driversWithDetails;
+            if (data.driversStats && data.driversStats.length > 0 && data.driversStats[0].totalWorkDays !== undefined) {
+                // هذا تقرير مدمج أو محفوظ بأيام العمل المجمعة
+                driversWithDetails = computeRodaFromWorkDays(data.driversStats);
+            } else {
+                // تقرير عادي (شهر واحد) - نستخدم monthDays و officialVacations
+                const monthDays = data.monthDays || 30;
+                const officialVac = data.officialVacations || 4;
+                const driversStats = data.driversStats.map(d => ({ name: d.name, trips: d.trips, totalWeight: d.totalWeight }));
+                driversWithDetails = computeRodaFromMonthDays(driversStats, monthDays, officialVac);
+                currentMonthDays = monthDays;
+                currentOfficialVacations = officialVac;
+                document.getElementById("monthDays").value = monthDays;
+                document.getElementById("officialVacations").value = officialVac;
+            }
             currentResult = {
-                totalRows: data.totalRows, matchedCount: data.matchedCount, notMatchedCount: data.notMatchedCount,
+                totalRows: data.totalRows,
+                matchedCount: data.matchedCount,
+                notMatchedCount: data.notMatchedCount,
                 totalWeightAll: data.totalWeightAll,
-                driversStats: driversStats,
+                driversStats: driversWithDetails.map(d => ({ name: d.name, trips: d.trips, totalWeight: d.totalWeight })),
                 materialsStats: data.materialsStats,
-                top10Drivers: driversStats.slice(0,10)
+                top10Drivers: driversWithDetails.slice(0,10).map(d => ({ name: d.name, trips: d.trips }))
             };
-            currentDriversWithDetails = driversWithRoda;
-            currentMonthDays = monthDays; currentOfficialVacations = officialVac;
-            document.getElementById("monthDays").value = monthDays;
-            document.getElementById("officialVacations").value = officialVac;
+            currentDriversWithDetails = driversWithDetails;
             document.getElementById("metricsGrid").style.display = "grid";
             document.getElementById("chartsArea").style.display = "block";
             renderDriverTable(currentDriversWithDetails);
@@ -509,11 +543,11 @@
         } catch(e){ showToast("خطأ: "+e.message,"error"); } finally{ showLoading(false); }
     }
     
-    // ✅ الدالة المصححة لدمج التقارير (تجمع أيام العمل من كل شهر بشكل صحيح)
+    // ✅ دالة الدمج المصححة (تقوم بتخزين totalWorkDays في النتيجة)
     async function mergeReports(reportIds){
         showLoading(true);
         try{
-            let driversAgg = new Map();  // name -> { trips, weight, workDays }
+            let driversAgg = new Map();  // name -> { trips, weight, totalWorkDays }
             let materialsAgg = new Map();
             let totalRows = 0, matchedCount = 0, notMatchedCount = 0, totalWeightAll = 0;
 
@@ -526,26 +560,29 @@
                 notMatchedCount += data.notMatchedCount || 0;
                 totalWeightAll += data.totalWeightAll || 0;
                 
-                // استخراج أيام العمل الأساسية لهذا التقرير (أيام الشهر - الإجازات الرسمية)
-                const monthDays = data.monthDays || 30;
-                const officialVac = data.officialVacations || 4;
-                const workDaysBase = Math.max(0, monthDays - officialVac);
-                
-                // معالجة السائقين في هذا التقرير
+                // استخراج أيام العمل لكل سائق في هذا التقرير
+                // إذا كان التقرير محفوظاً بـ totalWorkDays نستخدمه مباشرة، وإلا نحسبه من monthDays
                 for(let d of (data.driversStats || [])){
-                    const extraVac = d.extraVacationDays || 0;
-                    const effectiveWorkDays = Math.max(0, workDaysBase - extraVac);
-                    
+                    let workDaysForDriver = 0;
+                    if (d.totalWorkDays !== undefined) {
+                        workDaysForDriver = d.totalWorkDays;
+                    } else {
+                        const monthDays = data.monthDays || 30;
+                        const officialVac = data.officialVacations || 4;
+                        const extraVac = d.extraVacationDays || 0;
+                        const workDaysBase = Math.max(0, monthDays - officialVac);
+                        workDaysForDriver = Math.max(0, workDaysBase - extraVac);
+                    }
                     let existing = driversAgg.get(d.name);
                     if(existing){
                         existing.trips += d.trips;
                         existing.weight += d.totalWeight;
-                        existing.workDays += effectiveWorkDays;  // جمع أيام العمل من هذا الشهر
+                        existing.totalWorkDays += workDaysForDriver;
                     } else {
                         driversAgg.set(d.name, {
                             trips: d.trips,
                             weight: d.totalWeight,
-                            workDays: effectiveWorkDays
+                            totalWorkDays: workDaysForDriver
                         });
                     }
                 }
@@ -562,17 +599,20 @@
                 name,
                 trips: agg.trips,
                 totalWeight: agg.weight,
-                workDays: agg.workDays
+                totalWorkDays: agg.totalWorkDays
             })).sort((a,b) => b.trips - a.trips);
             
             const materialsList = Array.from(materialsAgg.values()).sort((a,b) => b.weight - a.weight);
             
-            // حساب الرودات المطلوبة والنسبة المئوية بناءً على إجمالي أيام العمل المجمعة
+            // حساب الرودات المطلوبة والنسبة المئوية بناءً على totalWorkDays
             const driversWithRoda = driversList.map(d => {
-                const requiredRoda = d.workDays * 2;
+                const requiredRoda = d.totalWorkDays * 2;
                 const percent = requiredRoda > 0 ? (d.trips / requiredRoda) * 100 : 0;
                 return {
-                    ...d,
+                    name: d.name,
+                    trips: d.trips,
+                    totalWeight: d.totalWeight,
+                    workDays: d.totalWorkDays,
                     requiredRoda: requiredRoda,
                     percentage: Math.min(100, percent).toFixed(2)
                 };
@@ -585,15 +625,18 @@
                 top10Drivers: driversList.slice(0,10).map(d => ({ name: d.name, trips: d.trips }))
             };
             currentDriversWithDetails = driversWithRoda;
+            // لا نستخدم monthDays و officialVacations في التقرير المدمج
+            currentMonthDays = 0;
+            currentOfficialVacations = 0;
+            document.getElementById("monthDays").value = 30; // قيم وهمية للواجهة
+            document.getElementById("officialVacations").value = 4;
             
-            // عرض النتائج
             document.getElementById("metricsGrid").style.display = "grid";
             document.getElementById("chartsArea").style.display = "block";
             renderDriverTable(currentDriversWithDetails);
             updateCharts();
             
-            // إظهار رسالة توضيحية تحتوي على إجمالي أيام العمل لأول سائق (كمثال)
-            const totalWorkDaysSample = driversList.length ? driversList[0].workDays : 0;
+            const totalWorkDaysSample = driversList.length ? driversList[0].totalWorkDays : 0;
             document.getElementById("statusMsg").innerHTML = `✅ تم دمج ${reportIds.length} تقرير (إجمالي أيام العمل: ${totalWorkDaysSample} يوم - الرودات المطلوبة: ${totalWorkDaysSample * 2})`;
             showToast(`تم دمج ${reportIds.length} تقارير بنجاح`, "success");
         } catch(e){ 
@@ -630,10 +673,11 @@
             ws1.getRow(1).height = 45;
             ws1.mergeCells('A2:B2');
             ws1.getCell('A2').value = `تاريخ التقرير: ${new Date().toLocaleDateString('ar-SA')}`;
-            const workDays = monthDays - officialVac;
-            const requiredTotal = workDays * 2;
-            const totalTrips = res.matchedCount;
-            const completionRate = ((totalTrips/requiredTotal)*100).toFixed(2);
+            // حساب أيام العمل بناءً على أول سائق (للتقرير المدمج نأخذ workDays من أول سائق)
+            let workDays = drivers.length ? drivers[0].workDays : 0;
+            let requiredTotal = workDays * 2;
+            let totalTrips = res.matchedCount;
+            let completionRate = requiredTotal>0 ? ((totalTrips/requiredTotal)*100).toFixed(2) : 0;
             const metrics = [
                 ['إجمالي الصفوف', res.totalRows],
                 ['عدد الرحلات المطابقة', totalTrips],
@@ -641,8 +685,8 @@
                 ['نسبة الإنجاز الإجمالية (%)', completionRate + '%'],
                 ['عدد السائقين', drivers.length],
                 ['إجمالي الوزن (طن)', (res.totalWeightAll/1000).toFixed(2)],
-                ['عدد أيام الشهر', monthDays],
-                ['أيام الإجازات الرسمية', officialVac],
+                ['عدد أيام الشهر (إن وجد)', monthDays || 'مدمج'],
+                ['أيام الإجازات الرسمية (إن وجد)', officialVac || 'مدمج'],
                 ['أيام العمل الفعلية', workDays],
                 ['الرودات المطلوبة لكل سائق', `${requiredTotal} (2×${workDays})`],
                 ['أعلى عدد رحلات لسائق', drivers.length ? drivers[0].trips : 0],
@@ -757,13 +801,24 @@
     }
     window.onload = async () => {
         await loadReportsList();
-        document.getElementById('navLinks').innerHTML = `
-            <a class="nav-link" href="index.html">🏠 الرئيسية</a>
-            <a class="nav-link" href="orders.html">📦 الطلبات</a>
-            <a class="nav-link" href="distribution.html">🚛 التوزيع</a>
-            <a class="nav-link" href="reports.html">📊 التقارير</a>
-            <a class="nav-link active" href="scale_report.html">⚖️ الميزان</a>
-        `;
+        // إضافة شريط التنقل الكامل (navbar)
+        const navContainer = document.getElementById('navLinks');
+        if (navContainer) {
+            navContainer.innerHTML = `
+                <a href="index.html" class="nav-link">🏠 الرئيسية</a>
+                <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                <a href="reports.html" class="nav-link">📊 التقارير</a>
+                <a href="scale_report.html" class="nav-link active">⚖️ تقارير الميزان الشهرية</a>
+                <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                <a href="logs.html" class="nav-link">📜 السجلات</a>
+            `;
+        }
     };
 </script>
 </body>
