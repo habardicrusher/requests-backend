@@ -89,6 +89,7 @@
             <div>
                 <button class="btn btn-primary" onclick="loadViolations()">🔍 عرض السيارات المخالفة</button>
                 <button class="btn btn-success" onclick="saveAllReasons()">💾 حفظ الأسباب على الخادم</button>
+                <button class="btn btn-info" onclick="window.location.href='trucks-failed-report.html'">📊 تقرير المخالفات المتقدم</button>
             </div>
         </div>
 
@@ -220,17 +221,19 @@
             showLoading(false);
         }
         
+        // قائمة الأسباب (محدثة)
         const reasonOptions = [
             "عطل مفاجئ في الطريق",
-            "الدنيا ممطرة وزلقة",
+            "أمطار والطريق زلقة",
             "الطريق مقفول رسمياً",
             "لا يوجد بالكسارة بحص مقاس",
             "عطل في السيارة داخل الكسارة / المصنع",
             "المصنع قام بتأخير السائق ولم يتسلم الشحنة",
             "السائق قام بالتأخير على الطريق عمداً",
             "السيارة بالصيانة",
-            "السيارة ذهبت لجرين الدرعية",
+            "السيارة ذهبت للدرعية",
             "السيارة ذهبت للشركة الصينية",
+            "السيارة ذهبت لمصنع الجافورة",
             "حادثة",
             "انتهاء كارت التشغيل",
             "مخالفة جسيمة تستدعي التدخل",
@@ -261,22 +264,25 @@
                 
                 const detailInput = `<input type="text" class="reason-detail" data-index="${idx}" placeholder="${detailPlaceholder}" value="${v.detail}" oninput="onDetailChange(${idx}, this.value)">`;
                 
-                return `<tr>
-                    <td>${idx+1}</td>
-                    <td><strong>${v.number}</strong></td>
-                    <td>${v.driver}</td>
-                    <td>${v.trips}</td>
-                    <td>${v.required}</td>
-                    <td class="badge ${v.gap > 0 ? 'badge-danger' : 'badge-warning'}">-${v.gap}</td>
-                    <td>${reasonSelect}</td>
-                    <td>${detailInput}</td>
-                </tr>`;
+                return `
+                    <tr>
+                        <td>${idx+1}</td>
+                        <td><strong>${v.number}</strong></td>
+                        <td>${v.driver}</td>
+                        <td>${v.trips}</td>
+                        <td>${v.required}</td>
+                        <td class="badge ${v.gap > 0 ? 'badge-danger' : 'badge-warning'}">-${v.gap}</td>
+                        <td>${reasonSelect}</td>
+                        <td>${detailInput}</td>
+                    </tr>
+                `;
             }).join('');
         }
         
         function onReasonChange(index, value) {
             if (violationsData[index]) {
                 violationsData[index].reason = value;
+                // إعادة عرض الجدول لتحديث placeholder حقل التفاصيل
                 renderViolationsTable(violationsData);
             }
         }
@@ -290,6 +296,12 @@
         async function saveAllReasons() {
             if (!violationsData.length) {
                 showToast('لا توجد سيارات مخالفة لحفظ الأسباب', 'error');
+                return;
+            }
+            // التحقق من أن جميع السيارات لها سبب
+            const missing = violationsData.filter(v => !v.reason);
+            if (missing.length) {
+                showToast(`⚠️ لا يمكن الحفظ: ${missing.length} سيارة بدون سبب. يرجى اختيار سبب لكل سيارة.`, 'error');
                 return;
             }
             if (!currentDate) {
@@ -338,6 +350,7 @@
                         <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
                         <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
                         <a href="trucks-failed.html" class="nav-link active">⚠️ السيارات المخالفة</a>
+                        <a href="trucks-failed-report.html" class="nav-link">📊 تقرير المخالفات</a>
                         <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
                         <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
                         <a href="users.html" class="nav-link">👥 المستخدمين</a>
