@@ -21,7 +21,6 @@ app.use(session({
     name: 'gravel.sid'
 }));
 
-// Helper functions
 function requireAuth(req, res, next) {
     if (req.session && req.session.user) return next();
     res.status(401).json({ error: 'غير مصرح' });
@@ -31,72 +30,76 @@ function requireAdmin(req, res, next) {
     res.status(403).json({ error: 'صلاحيات المدير مطلوبة' });
 }
 
-// ========== إنشاء الجداول تلقائياً (إذا لم تكن موجودة) ==========
+// ========== إنشاء الجداول تلقائياً إذا لم تكن موجودة ==========
 async function initTables() {
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(100) UNIQUE NOT NULL,
-            password VARCHAR(255) NOT NULL,
-            role VARCHAR(50) DEFAULT 'user',
-            factory VARCHAR(255),
-            permissions JSONB DEFAULT '{}',
-            created_at TIMESTAMP DEFAULT NOW()
-        );
-        CREATE TABLE IF NOT EXISTS logs (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(100),
-            action TEXT,
-            details TEXT,
-            location TEXT,
-            created_at TIMESTAMP DEFAULT NOW()
-        );
-        CREATE TABLE IF NOT EXISTS app_settings (
-            id SERIAL PRIMARY KEY,
-            factories JSONB DEFAULT '[]',
-            materials JSONB DEFAULT '[]',
-            trucks JSONB DEFAULT '[]',
-            updated_at TIMESTAMP DEFAULT NOW()
-        );
-        CREATE TABLE IF NOT EXISTS daily_data (
-            date DATE PRIMARY KEY,
-            orders JSONB DEFAULT '[]',
-            distribution JSONB DEFAULT '[]'
-        );
-        CREATE TABLE IF NOT EXISTS restrictions (
-            id SERIAL PRIMARY KEY,
-            truck_number VARCHAR(50),
-            driver_name VARCHAR(100),
-            restricted_factories JSONB,
-            reason TEXT,
-            active BOOLEAN DEFAULT true,
-            created_by VARCHAR(100),
-            created_at TIMESTAMP DEFAULT NOW()
-        );
-        CREATE TABLE IF NOT EXISTS reports (
-            id SERIAL PRIMARY KEY,
-            filename VARCHAR(255),
-            report_date DATE,
-            data JSONB,
-            created_at TIMESTAMP DEFAULT NOW()
-        );
-        CREATE TABLE IF NOT EXISTS scale_reports (
-            id SERIAL PRIMARY KEY,
-            report_id VARCHAR(100) UNIQUE NOT NULL,
-            report_name VARCHAR(500) NOT NULL,
-            report_date DATE,
-            created_at TIMESTAMP DEFAULT NOW(),
-            created_by VARCHAR(100),
-            total_rows INTEGER DEFAULT 0,
-            matched_count INTEGER DEFAULT 0,
-            not_matched_count INTEGER DEFAULT 0,
-            total_weight_all NUMERIC DEFAULT 0,
-            drivers_stats JSONB DEFAULT '[]',
-            materials_stats JSONB DEFAULT '[]',
-            top10_drivers JSONB DEFAULT '[]'
-        );
-    `);
-    console.log('✅ Tables ensured');
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                role VARCHAR(50) DEFAULT 'user',
+                factory VARCHAR(255),
+                permissions JSONB DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS logs (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(100),
+                action TEXT,
+                details TEXT,
+                location TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS app_settings (
+                id SERIAL PRIMARY KEY,
+                factories JSONB DEFAULT '[]',
+                materials JSONB DEFAULT '[]',
+                trucks JSONB DEFAULT '[]',
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS daily_data (
+                date DATE PRIMARY KEY,
+                orders JSONB DEFAULT '[]',
+                distribution JSONB DEFAULT '[]'
+            );
+            CREATE TABLE IF NOT EXISTS restrictions (
+                id SERIAL PRIMARY KEY,
+                truck_number VARCHAR(50),
+                driver_name VARCHAR(100),
+                restricted_factories JSONB,
+                reason TEXT,
+                active BOOLEAN DEFAULT true,
+                created_by VARCHAR(100),
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS reports (
+                id SERIAL PRIMARY KEY,
+                filename VARCHAR(255),
+                report_date DATE,
+                data JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+            CREATE TABLE IF NOT EXISTS scale_reports (
+                id SERIAL PRIMARY KEY,
+                report_id VARCHAR(100) UNIQUE NOT NULL,
+                report_name VARCHAR(500) NOT NULL,
+                report_date DATE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                created_by VARCHAR(100),
+                total_rows INTEGER DEFAULT 0,
+                matched_count INTEGER DEFAULT 0,
+                not_matched_count INTEGER DEFAULT 0,
+                total_weight_all NUMERIC DEFAULT 0,
+                drivers_stats JSONB DEFAULT '[]',
+                materials_stats JSONB DEFAULT '[]',
+                top10_drivers JSONB DEFAULT '[]'
+            );
+        `);
+        console.log('✅ Tables ensured');
+    } catch (err) {
+        console.error('❌ Error creating tables:', err.message);
+    }
 }
 initTables();
 
