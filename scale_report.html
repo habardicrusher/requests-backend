@@ -114,6 +114,7 @@
       font-weight: 600;
       color: #1a1a2e;
       cursor: pointer;
+      white-space: nowrap;
     }
     .status {
       background: rgba(0,0,0,0.3);
@@ -303,17 +304,38 @@
       flex-wrap: wrap;
       gap: 15px;
     }
-    .vacation-control {
-      display: flex;
-      gap: 15px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
+    /* صف الإعدادات: الحقول والزر في سطر واحد */
     .settings-row {
       background: rgba(0,0,0,0.2);
       padding: 15px 20px;
       border-radius: 24px;
       margin-bottom: 20px;
+    }
+    .vacation-control {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: flex-end;
+      gap: 20px;
+    }
+    .vacation-control .upload-field {
+      min-width: 140px;
+      flex: 0 1 auto;
+    }
+    .vacation-control .btn-warning {
+      margin-right: 0;
+      margin-bottom: 0;
+      height: 48px;
+      align-self: flex-end;
+    }
+    @media (max-width: 700px) {
+      .vacation-control {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+      }
+      .vacation-control .upload-field {
+        min-width: 130px;
+      }
     }
   </style>
 </head>
@@ -330,20 +352,18 @@
     <div class="nav-links" id="navLinks"></div>
 
     <div class="card">
-      <!-- قسم الإعدادات (أيام الشهر والإجازات) مع زر الحساب -->
+      <!-- قسم الإعدادات (أيام الشهر والإجازات) مع زر الحساب في سطر واحد -->
       <div class="settings-row">
-        <div class="flex-between">
-          <div class="vacation-control">
-            <div class="upload-field" style="min-width: 140px;">
-              <label>📅 عدد أيام الشهر</label>
-              <input type="number" id="monthDays" min="28" max="31" value="30" step="1">
-            </div>
-            <div class="upload-field" style="min-width: 140px;">
-              <label>📅 أيام الإجازات الرسمية</label>
-              <input type="number" id="officialVacations" min="0" max="31" value="4" step="1">
-            </div>
-            <button class="btn-warning" id="applyRodaCalc" style="margin-right: 10px;">🔄 احسب الرودات المطلوبة</button>
+        <div class="vacation-control">
+          <div class="upload-field">
+            <label>📅 عدد أيام الشهر</label>
+            <input type="number" id="monthDays" min="28" max="31" value="30" step="1">
           </div>
+          <div class="upload-field">
+            <label>📅 أيام الإجازات الرسمية</label>
+            <input type="number" id="officialVacations" min="0" max="31" value="4" step="1">
+          </div>
+          <button class="btn-warning" id="applyRodaCalc">🔄 احسب الرودات المطلوبة</button>
         </div>
       </div>
 
@@ -408,7 +428,7 @@
   </div>
 
   <script>
-    // ---------- الثوابت ومنطق المعالجة الأساسي ----------
+    // ---------- الثوابت ومنطق المعالجة الأساسي (بدون تغيير) ----------
     const VALID_TRUCK_NUMBERS = new Set([
       "1091","2757","2758","2759","2760","2762","2818","2927","2928","2929",
       "3321","3322","3324","3325","3326","3461","3462","3963","4445","5324",
@@ -629,7 +649,7 @@
       return processData(rows);
     }
 
-    // ---------- دالة التصدير المتقدم (8 أوراق) كاملة ----------
+    // دالة التصدير المتقدم (8 أوراق) كاملة (مختصرة للطول ولكنها كاملة كما في السابق)
     async function exportAdvancedExcel(res, driversWithVac, monthDays, officialVac, filename) {
       if (!res) { showToast("⚠️ لا توجد بيانات للتصدير", "error"); return; }
       showLoading(true);
@@ -735,7 +755,9 @@
           row.eachCell(cell => { cell.font = dataFont; cell.alignment = centerAlign; cell.border = thinBorder; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }; });
         }
 
-        // 4. أفضل السائقين (نصي)
+        // باقي الأوراق (4-8) مختصرة للطول ولكنها موجودة في الكود الكامل (تم تضمينها سابقاً)
+        // للحفاظ على حجم الكود، نكتفي بهذا القدر مع العلم أن الدالة الكاملة تم تضمينها في الرد السابق.
+        // هنا نضيف أوراق إضافية سريعة لتكتمل 8 أوراق.
         const ws4 = workbook.addWorksheet('أفضل السائقين', { views: [{ rightToLeft: true }] });
         ws4.columns = [{ width: 25 }, { width: 12 }, { width: 60 }];
         ws4.mergeCells('A1:C1');
@@ -765,7 +787,6 @@
           });
         });
 
-        // 5. ترتيب المواد (نصي)
         const ws5 = workbook.addWorksheet('ترتيب المواد', { views: [{ rightToLeft: true }] });
         ws5.columns = [{ width: 20 }, { width: 18 }, { width: 18 }, { width: 55 }];
         ws5.mergeCells('A1:D1');
@@ -793,7 +814,6 @@
           });
         });
 
-        // 6. إحصائيات سريعة
         const ws6 = workbook.addWorksheet('إحصائيات سريعة', { views: [{ rightToLeft: true }] });
         ws6.columns = [{ width: 30 }, { width: 20 }];
         ws6.mergeCells('A1:B1');
@@ -823,7 +843,6 @@
           });
         });
 
-        // 7. قائمة السائقين
         const ws7 = workbook.addWorksheet('قائمة السائقين', { views: [{ rightToLeft: true }] });
         ws7.columns = [{ width: 8 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }, { width: 18 }];
         ws7.mergeCells('A1:F1');
@@ -845,7 +864,6 @@
           row.eachCell(cell => { cell.font = dataFont; cell.alignment = centerAlign; cell.border = thinBorder; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }; });
         });
 
-        // 8. تفاصيل المواد
         const ws8 = workbook.addWorksheet('تفاصيل المواد', { views: [{ rightToLeft: true }] });
         ws8.columns = [{ width: 8 }, { width: 20 }, { width: 22 }, { width: 22 }, { width: 16 }];
         ws8.mergeCells('A1:E1');
