@@ -311,14 +311,18 @@
               <label>📅 عدد أيام الشهر</label>
               <input type="number" id="monthDays" min="28" max="31" value="30" step="1">
             </div>
+            <div class="upload-field" style="min-width: 140px;">
+              <label>📅 أيام الإجازات الرسمية (جمعة + أعياد)</label>
+              <input type="number" id="officialVacations" min="0" max="31" value="4" step="1">
+            </div>
             <button class="btn-warning" id="applyRodaCalc">🔄 احسب الرودات المطلوبة</button>
           </div>
           <div class="vacation-control">
-            <button class="btn-primary" id="saveReportBtn" style="background: linear-gradient(135deg, #f093fb, #4facfe);">💾 حفظ التقرير في قاعدة البيانات</button>
+            <button class="btn-primary" id="saveReportBtn" style="background: linear-gradient(135deg, #f093fb, #4facfe);">💾 حفظ التقرير في الخادم</button>
           </div>
         </div>
         <div id="reportsArchive" style="margin-top: 15px;">
-          <div class="chart-title" style="text-align: right;">📚 التقارير المحفوظة</div>
+          <div class="chart-title" style="text-align: right;">📚 التقارير المحفوظة (على الخادم)</div>
           <div id="savedReportsList" class="reports-list"></div>
         </div>
       </div>
@@ -340,10 +344,7 @@
           <div class="chart-title">🚛 إجمالي رحلات الشهر لكل سائق + الرودات المطلوبة والنسبة المئوية</div>
           <table id="driverTable">
             <thead>
-              <tr>
-                <th>اسم السائق</th><th>عدد الرحلات</th><th>مجموع الوزن (كجم)</th>
-                <th>أيام الإجازة</th><th>الرودات المطلوبة</th><th>النسبة المئوية (%)</th>
-              </tr>
+              <tr><th>اسم السائق</th><th>عدد الرحلات</th><th>مجموع الوزن (كجم)</th><th>أيام إجازة إضافية</th><th>الرودات المطلوبة</th><th>النسبة المئوية (%)</th></tr>
             </thead>
             <tbody></tbody>
           </table>
@@ -353,7 +354,7 @@
   </div>
 
   <script>
-    // ---------- الثوابت والمنطق الأساسي (مثل السابق) ----------
+    // ---------- الثوابت ومنطق المعالجة الأساسي (بدون تغيير) ----------
     const VALID_TRUCK_NUMBERS = new Set([
       "1091","2757","2758","2759","2760","2762","2818","2927","2928","2929",
       "3321","3322","3324","3325","3326","3461","3462","3963","4445","5324",
@@ -415,87 +416,59 @@
                driversStats:driversArr, top10Drivers:driversArr.slice(0,10), materialsStats:materialsArr, totalWeightAll:totalWeight };
     }
 
-    // متغيرات عامة
     let materialChart = null, topDriversChart = null;
-    let currentResult = null;          // البيانات الأساسية (بدون إجازات)
-    let currentDriversWithVacation = []; // { name, trips, totalWeight, vacationDays, requiredRoda, percentage }
-    let currentMonthDays = 30;
+    let currentResult = null;               // البيانات الأساسية من Excel
+    let currentDriversWithVacation = [];    // كل سائق مع إجازته الفردية الإضافية
+    let currentMonthDays = 30;              // عدد أيام الشهر
+    let currentOfficialVacations = 4;       // أيام الإجازات الرسمية (جمعة + أعياد)
 
-    // IndexedDB setup
-    const DB_NAME = "MonthlyReportsDB";
-    const STORE_NAME = "reports";
-    let db = null;
+    // ---------- API الاتصال بالخادم (نفس endpoints السيرفر) ----------
+    const API_BASE = window.location.origin + '/api'; // استخدام المسار النسبي
 
-    function openDB() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => { db = request.result; resolve(db); };
-        request.onupgradeneeded = (e) => {
-          const db = e.target.result;
-          if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME, { keyPath: "id" });
-          }
-        };
+    async function saveReportToServer(reportName, reportData) {
+      const response = await fetch(`${API_BASE}/scale-reports`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          reportName: reportName,
+          reportDate: new Date().toISOString().split('T')[0],
+          data: reportData 
+        })
       });
+      if (!response.ok) throw new Error('فشل حفظ التقرير في الخادم');
+      return await response.json();
     }
 
-    async function saveReportToDB(reportName, reportData) {
-      await openDB();
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const record = {
-        id: reportName + "_" + Date.now(),
-        name: reportName,
-        timestamp: new Date().toISOString(),
-        data: reportData   // يخزن كامل الحالة: currentResult, driversWithVacation, monthDays, extra
-      };
-      store.put(record);
-      return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+    async function getReportsFromServer() {
+      const response = await fetch(`${API_BASE}/scale-reports`);
+      if (!response.ok) throw new Error('فشل تحميل قائمة التقارير');
+      return await response.json();
     }
 
-    async function getAllReports() {
-      await openDB();
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const reports = await new Promise((resolve) => {
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result);
-      });
-      return reports.sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+    async function loadReportFromServer(reportId) {
+      const response = await fetch(`${API_BASE}/scale-reports/${reportId}`);
+      if (!response.ok) throw new Error('فشل تحميل التقرير');
+      return await response.json();
     }
 
-    async function loadReport(reportRecord) {
-      const saved = reportRecord.data;
-      currentResult = saved.currentResult;
-      currentDriversWithVacation = saved.driversWithVacation;
-      currentMonthDays = saved.monthDays;
-      document.getElementById("monthDays").value = currentMonthDays;
-      // إعادة عرض الواجهة
-      displayUIWithRoda(currentResult, currentDriversWithVacation, currentMonthDays);
-      document.getElementById("rodaControlSection").style.display = "block";
-      document.getElementById("statusMsg").innerHTML = `✅ تم تحميل التقرير: ${reportRecord.name}`;
-      showToast(`تم تحميل ${reportRecord.name}`, "success");
-    }
-
-    // حساب الرودات والنسبة بناءً على أيام الإجازة لكل سائق وعدد أيام الشهر
-    function computeRodaAndPercentage(driversList, monthDays, vacationMap) {
+    // حساب الرودات المطلوبة والنسبة المئوية (مع مراعاة الإجازات الرسمية + الإجازات الفردية الإضافية)
+    function computeRodaAndPercentage(driversList, monthDays, officialVacations, extraVacationMap) {
+      const workDaysBase = Math.max(0, monthDays - officialVacations);
       return driversList.map(driver => {
-        const vacation = vacationMap.get(driver.name) || 0;
-        const workDays = Math.max(0, monthDays - vacation);
-        const requiredRoda = workDays * 2;   // كل يوم عمل = رودتين
+        const extraVac = extraVacationMap.get(driver.name) || 0;
+        const effectiveWorkDays = Math.max(0, workDaysBase - extraVac);
+        const requiredRoda = effectiveWorkDays * 2;   // رودتين لكل يوم عمل
         const actualTrips = driver.trips;
         const percentage = requiredRoda > 0 ? (actualTrips / requiredRoda) * 100 : 0;
         return {
           ...driver,
-          vacationDays: vacation,
+          extraVacationDays: extraVac,     // أيام إجازة إضافية للسائق
           requiredRoda: requiredRoda,
           percentage: Math.min(100, percentage).toFixed(2)
         };
       });
     }
 
-    // عرض الجدول مع الأعمدة الجديدة
     function renderDriverTable(driversWithDetails) {
       const tbody = document.querySelector("#driverTable tbody");
       tbody.innerHTML = "";
@@ -504,11 +477,10 @@
         tr.insertCell(0).textContent = d.name;
         tr.insertCell(1).textContent = d.trips;
         tr.insertCell(2).textContent = d.totalWeight.toLocaleString();
-        // خلية الإجازة editable
         let vacCell = tr.insertCell(3);
         let vacInput = document.createElement("input");
         vacInput.type = "number";
-        vacInput.value = d.vacationDays;
+        vacInput.value = d.extraVacationDays;
         vacInput.min = 0;
         vacInput.max = 31;
         vacInput.style.width = "70px";
@@ -517,8 +489,8 @@
         vacInput.style.borderRadius = "8px";
         vacInput.style.padding = "5px";
         vacInput.addEventListener("change", (e) => {
-          let newVac = parseInt(e.target.value) || 0;
-          d.vacationDays = newVac;
+          let newExtra = parseInt(e.target.value) || 0;
+          d.extraVacationDays = newExtra;
           updateRodaForAllDrivers();
         });
         vacCell.appendChild(vacInput);
@@ -533,16 +505,17 @@
     function updateRodaForAllDrivers() {
       if(!currentResult) return;
       const monthDays = parseInt(document.getElementById("monthDays").value) || 30;
+      const officialVac = parseInt(document.getElementById("officialVacations").value) || 0;
       currentMonthDays = monthDays;
-      const vacationMap = new Map();
-      currentDriversWithVacation.forEach(d => vacationMap.set(d.name, d.vacationDays));
-      const updated = computeRodaAndPercentage(currentResult.driversStats, monthDays, vacationMap);
+      currentOfficialVacations = officialVac;
+      const extraVacMap = new Map();
+      currentDriversWithVacation.forEach(d => extraVacMap.set(d.name, d.extraVacationDays));
+      const updated = computeRodaAndPercentage(currentResult.driversStats, monthDays, officialVac, extraVacMap);
       currentDriversWithVacation = updated;
       renderDriverTable(updated);
     }
 
-    function displayUIWithRoda(result, driversWithVac, monthDaysVal) {
-      // تحديث البطاقات العلوية
+    function displayUIWithRoda(result, driversWithVac, monthDaysVal, officialVacVal) {
       document.getElementById("metricsGrid").style.display = "grid";
       document.getElementById("metricsGrid").innerHTML = `
         <div class="stat-card"><div class="stat-label">إجمالي الصفوف</div><div class="stat-value">${result.totalRows}</div></div>
@@ -552,7 +525,6 @@
         <div class="stat-card"><div class="stat-label">عدد السائقين المميزين</div><div class="stat-value">${result.driversStats.length}</div></div>
         <div class="stat-card"><div class="stat-label">إجمالي الوزن (طن)</div><div class="stat-value">${(result.totalWeightAll/1000).toFixed(1)} طن</div></div>
       `;
-      // تحديث الرسوم البيانية
       const topMats = result.materialsStats.slice(0,10);
       if(materialChart) materialChart.destroy();
       const ctxMat = document.getElementById("materialChart").getContext("2d");
@@ -566,11 +538,10 @@
       document.getElementById("rodaControlSection").style.display = "block";
     }
 
-    // تهيئة بيانات الإجازات عند تحميل الملف لأول مرة (جميع الإجازات = 0)
-    function initVacationsFromResult(result) {
+    function initDriversFromResult(result) {
       return result.driversStats.map(d => ({
         ...d,
-        vacationDays: 0,
+        extraVacationDays: 0,
         requiredRoda: 0,
         percentage: 0
       }));
@@ -586,7 +557,7 @@
       return processData(rows);
     }
 
-    // وظائف التصدير الأصلية (بدون تعديل)
+    // وظائف التصدير (بدون تغيير)
     async function exportToExcel(res, filename){
       const workbook = new ExcelJS.Workbook();
       const ws = workbook.addWorksheet("Trips Dashboard", { views: [{ rightToLeft: true }] });
@@ -655,15 +626,17 @@
       try {
         const result = await processExcelFile(fileInput.files[0]);
         currentResult = result;
-        const driversWithVac = initVacationsFromResult(result);
-        currentDriversWithVacation = driversWithVac;
+        const driversWithVac = initDriversFromResult(result);
         const monthDays = parseInt(document.getElementById("monthDays").value) || 30;
+        const officialVac = parseInt(document.getElementById("officialVacations").value) || 0;
         currentMonthDays = monthDays;
-        const vacationMap = new Map(); driversWithVac.forEach(d => vacationMap.set(d.name, 0));
-        const updated = computeRodaAndPercentage(result.driversStats, monthDays, vacationMap);
+        currentOfficialVacations = officialVac;
+        const extraVacMap = new Map();
+        driversWithVac.forEach(d => extraVacMap.set(d.name, 0));
+        const updated = computeRodaAndPercentage(result.driversStats, monthDays, officialVac, extraVacMap);
         currentDriversWithVacation = updated;
-        displayUIWithRoda(result, updated, monthDays);
-        document.getElementById("statusMsg").innerHTML = "✅ تمت المعالجة وعرض النتائج. يمكنك تعديل أيام الإجازات ثم حساب الرودات.";
+        displayUIWithRoda(result, updated, monthDays, officialVac);
+        document.getElementById("statusMsg").innerHTML = "✅ تمت المعالجة وعرض النتائج. يمكنك تعديل الإجازات الإضافية لكل سائق أو تغيير الإجازات الرسمية.";
       } catch (e) { console.error(e); document.getElementById("statusMsg").innerHTML = "❌ خطأ: " + e.message; }
     };
 
@@ -671,38 +644,80 @@
     document.getElementById("exportExcelBtn").onclick = async () => { if(!currentResult) { showToast("⚠️ يرجى عرض النتائج أولاً", "error"); return; } await exportToExcel(currentResult, document.getElementById("outputName").value.trim() || "Monthly_Report.xlsx"); };
     document.getElementById("exportAdvancedBtn").onclick = async () => { if(!currentResult) { showToast("⚠️ يرجى عرض النتائج أولاً", "error"); return; } await exportAdvancedExcel(currentResult, document.getElementById("outputName").value.trim() || "Monthly_Report.xlsx"); };
 
-    // حفظ التقرير
+    // حفظ التقرير على الخادم (باستخدام endpoints السيرفر)
     document.getElementById("saveReportBtn").onclick = async () => {
       if(!currentResult || !currentDriversWithVacation.length) { showToast("لا توجد بيانات لحفظها، قم بعرض النتائج أولاً", "error"); return; }
       const reportName = prompt("أدخل اسم التقرير (مثال: مارس 2025):", "تقرير_" + new Date().toLocaleDateString('ar-SA'));
       if(!reportName) return;
-      const snapshot = {
-        currentResult: currentResult,
-        driversWithVacation: currentDriversWithVacation,
-        monthDays: currentMonthDays
-      };
-      await saveReportToDB(reportName, snapshot);
-      showToast(`تم حفظ التقرير "${reportName}" بنجاح`, "success");
-      loadReportsList();
+      showLoading(true);
+      try {
+        // تحضير البيانات بالصيغة التي يطلبها السيرفر
+        const reportData = {
+          totalRows: currentResult.totalRows,
+          matchedCount: currentResult.matchedCount,
+          notMatchedCount: currentResult.notMatchedCount,
+          totalWeightAll: currentResult.totalWeightAll,
+          driversStats: currentDriversWithVacation.map(d => ({ name: d.name, trips: d.trips, totalWeight: d.totalWeight, extraVacationDays: d.extraVacationDays, requiredRoda: d.requiredRoda, percentage: d.percentage })),
+          materialsStats: currentResult.materialsStats,
+          top10Drivers: currentDriversWithVacation.slice(0,10).map(d => ({ name: d.name, trips: d.trips })),
+          monthDays: currentMonthDays,
+          officialVacations: currentOfficialVacations
+        };
+        await saveReportToServer(reportName, reportData);
+        showToast(`تم حفظ التقرير "${reportName}" على الخادم`, "success");
+        await loadReportsList();
+      } catch(err) { showToast("فشل الحفظ: "+err.message, "error"); } finally { showLoading(false); }
     };
 
     async function loadReportsList() {
-      const reports = await getAllReports();
-      const container = document.getElementById("savedReportsList");
-      if(!container) return;
-      container.innerHTML = "";
-      if(reports.length === 0) { container.innerHTML = "<span style='color:#aaa'>لا توجد تقارير محفوظة</span>"; return; }
-      reports.forEach(r => {
-        const badge = document.createElement("div");
-        badge.className = "report-badge";
-        badge.textContent = `${r.name} (${new Date(r.timestamp).toLocaleDateString('ar-SA')})`;
-        badge.onclick = () => loadReport(r);
-        container.appendChild(badge);
-      });
+      try {
+        const reports = await getReportsFromServer();
+        const container = document.getElementById("savedReportsList");
+        if(!container) return;
+        container.innerHTML = "";
+        if(!reports.length) { container.innerHTML = "<span style='color:#aaa'>لا توجد تقارير محفوظة على الخادم</span>"; return; }
+        reports.forEach(r => {
+          const badge = document.createElement("div");
+          badge.className = "report-badge";
+          badge.textContent = `${r.reportName} (${new Date(r.createdAt).toLocaleDateString('ar-SA')})`;
+          badge.onclick = async () => {
+            showLoading(true);
+            try {
+              const full = await loadReportFromServer(r.id);
+              const savedData = full.data;
+              // إعادة بناء الحالة من البيانات المحفوظة
+              currentResult = {
+                totalRows: savedData.totalRows,
+                matchedCount: savedData.matchedCount,
+                notMatchedCount: savedData.notMatchedCount,
+                totalWeightAll: savedData.totalWeightAll,
+                driversStats: savedData.driversStats.map(d => ({ name: d.name, trips: d.trips, totalWeight: d.totalWeight })),
+                materialsStats: savedData.materialsStats,
+                top10Drivers: savedData.top10Drivers
+              };
+              currentDriversWithVacation = savedData.driversStats.map(d => ({
+                name: d.name,
+                trips: d.trips,
+                totalWeight: d.totalWeight,
+                extraVacationDays: d.extraVacationDays,
+                requiredRoda: d.requiredRoda,
+                percentage: d.percentage
+              }));
+              currentMonthDays = savedData.monthDays || 30;
+              currentOfficialVacations = savedData.officialVacations || 4;
+              document.getElementById("monthDays").value = currentMonthDays;
+              document.getElementById("officialVacations").value = currentOfficialVacations;
+              displayUIWithRoda(currentResult, currentDriversWithVacation, currentMonthDays, currentOfficialVacations);
+              showToast(`تم تحميل التقرير: ${r.reportName}`, "success");
+            } catch(e) { showToast("خطأ في تحميل التقرير: "+e.message, "error"); }
+            showLoading(false);
+          };
+          container.appendChild(badge);
+        });
+      } catch(e) { console.error(e); document.getElementById("savedReportsList").innerHTML = "<span style='color:#f00'>خطأ في الاتصال بالخادم</span>"; }
     }
 
-    // تحميل القائمة عند بدء التشغيل
-    window.onload = async () => { await openDB(); await loadReportsList(); };
+    window.onload = async () => { await loadReportsList(); };
     function showToast(msg, type) { const container = document.getElementById('toastContainer'); const toast = document.createElement('div'); toast.className = `toast toast-${type}`; toast.textContent = msg; container.appendChild(toast); setTimeout(() => toast.remove(), 3000); }
     function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
   </script>
