@@ -192,6 +192,21 @@
             border-radius: 12px;
             border: 1px dashed #667eea;
         }
+        .sample-csv {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            margin-top: 10px;
+            overflow-x: auto;
+        }
+        .delimiter-select {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
@@ -219,7 +234,7 @@
                     <label>كلمة المرور</label>
                     <div class="password-wrapper">
                         <input type="password" id="newPassword">
-                        <button type="button" class="toggle-password" id="toggleNewPassword" onclick="togglePasswordVisibility('newPassword', this)">👁️ إظهار</button>
+                        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newPassword', this)">👁️ إظهار</button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -227,7 +242,12 @@
                     <select id="newRole">
                         <option value="user">مستخدم عادي</option>
                         <option value="admin">مدير</option>
+                        <option value="client">عميل مصنع</option>
                     </select>
+                </div>
+                <div class="form-group" id="factoryGroup" style="display:none;">
+                    <label>المصنع (للعملاء)</label>
+                    <select id="newFactory"></select>
                 </div>
                 <div class="form-group">
                     <button class="btn btn-success" onclick="addUser()">➕ إضافة</button>
@@ -238,10 +258,28 @@
 
         <div class="card">
             <h3>📂 استيراد مستخدمين من Excel / CSV</h3>
-            <p style="color: #a8b2d1; margin-bottom: 10px;">ملف Excel أو CSV يحتوي على الأعمدة: <strong>Users, Password, Privileges</strong></p>
+            <p style="color: #a8b2d1; margin-bottom: 10px;">الملف يجب أن يحتوي على الأعمدة التالية (الأسماء مرنة):</p>
+            <ul style="color:#a8b2d1; margin-right: 20px; margin-bottom: 15px;">
+                <li><strong>username</strong> أو <strong>Users</strong> أو <strong>اسم المستخدم</strong></li>
+                <li><strong>password</strong> أو <strong>Password</strong> أو <strong>كلمة المرور</strong></li>
+                <li><strong>role</strong> أو <strong>الدور</strong> (اختياري، افتراضي: user)</li>
+                <li><strong>factory</strong> أو <strong>المصنع</strong> (اختياري، للعملاء فقط)</li>
+            </ul>
+            <div class="delimiter-select">
+                <span>فاصل CSV: </span>
+                <label><input type="radio" name="csvDelimiter" value=","> فاصلة (,) </label>
+                <label><input type="radio" name="csvDelimiter" value=";" checked> فاصلة منقوطة (;) </label>
+                <label><input type="radio" name="csvDelimiter" value="tab"> تبويب (Tab) </label>
+            </div>
             <div class="file-upload">
                 <input type="file" id="uploadExcel" accept=".xlsx, .csv, .xls" style="color: #fff; margin-bottom: 10px;">
-                <button class="btn btn-info" onclick="importUsersFromExcel()">📤 رفع وإضافة المستخدمين</button>
+                <button class="btn btn-info" onclick="importUsersFromFile()">📤 رفع وإضافة المستخدمين</button>
+                <div class="sample-csv">
+                    📄 مثال لمحتوى ملف CSV (بفاصلة منقوطة):<br>
+                    <code>username;password;role;factory<br>
+                    testuser;123456;user;<br>
+                    scccl_client;SCCCL@2025;client;SCCCL</code>
+                </div>
             </div>
         </div>
 
@@ -249,7 +287,7 @@
             <h3>📋 قائمة المستخدمين</h3>
             <table id="usersTable">
                 <thead>
-                <tr><th>#</th><th>اسم المستخدم</th><th>الدور</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr>
+                    <tr><th>#</th><th>اسم المستخدم</th><th>الدور</th><th>المصنع</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr>
                 </thead>
                 <tbody id="usersBody"></tbody>
             </table>
@@ -279,15 +317,24 @@
     </div>
 </div>
 
+<!-- مودال تعديل المستخدم -->
+<div class="modal" id="editUserModal">
+    <div class="modal-content">
+        <h3>✏️ تعديل صلاحيات المستخدم</h3>
+        <input type="hidden" id="editUserId">
+        <div class="form-group"><label>الدور</label><select id="editRole"><option value="user">مستخدم</option><option value="admin">مدير</option><option value="client">عميل مصنع</option></select></div>
+        <div class="form-group" id="editFactoryGroup" style="display:none;"><label>المصنع</label><select id="editFactory"></select></div>
+        <div class="form-group"><label>كلمة مرور جديدة (اختياري)</label><input type="password" id="editPassword"></div>
+        <div id="editPermissionsGrid"></div>
+        <div style="margin-top:20px;"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="saveUserEdit()">حفظ</button></div>
+    </div>
+</div>
+
 <script>
     const API_BASE = '/api';
-    let users = [], currentUserRole = '', currentUserPermissions = {};
+    let users = [], currentUserRole = '', currentUserPermissions = {}, factoriesList = [];
 
     function togglePasswordVisibility(inputId, btnElement) {
-        if (currentUserRole !== 'admin') {
-            showToast("❌ غير مسموح لك بعرض كلمة المرور. هذه الخاصية للمدير فقط.", "error");
-            return;
-        }
         const input = document.getElementById(inputId);
         if (!input) return;
         const isPassword = input.type === 'password';
@@ -305,6 +352,20 @@
             throw new Error(err || `HTTP ${res.status}`);
         }
         return res.json();
+    }
+
+    async function loadFactories() {
+        try {
+            const settings = await apiCall('/settings');
+            factoriesList = settings.factories || [];
+            const factorySelects = ['newFactory', 'editFactory'];
+            factorySelects.forEach(id => {
+                const select = document.getElementById(id);
+                if (select) {
+                    select.innerHTML = '<option value="">-- اختر مصنع --</option>' + factoriesList.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
+                }
+            });
+        } catch(e) { console.error('فشل تحميل المصانع', e); }
     }
 
     async function loadUsers() {
@@ -328,6 +389,17 @@
             users = await apiCall('/users');
             renderUsersTable();
             renderPermissionsCheckboxes();
+            await loadFactories();
+            
+            // التحكم في ظهور حقل المصنع حسب الدور
+            const roleSelect = document.getElementById('newRole');
+            const factoryGroup = document.getElementById('factoryGroup');
+            function toggleFactoryField() {
+                factoryGroup.style.display = roleSelect.value === 'client' ? 'flex' : 'none';
+            }
+            roleSelect.addEventListener('change', toggleFactoryField);
+            toggleFactoryField();
+            
         } catch(e) { 
             showToast('خطأ في تحميل البيانات: ' + e.message, 'error');
             console.error(e);
@@ -351,41 +423,96 @@
         return permissions;
     }
 
-    async function importUsersFromExcel() {
+    async function importUsersFromFile() {
         const fileInput = document.getElementById('uploadExcel');
         if (!fileInput.files.length) {
             showToast('الرجاء اختيار ملف Excel أو CSV', 'error');
             return;
         }
         const file = fileInput.files[0];
+        const delimiterRadio = document.querySelector('input[name="csvDelimiter"]:checked');
+        let csvDelimiter = delimiterRadio ? delimiterRadio.value : ';';
+        
         const reader = new FileReader();
         reader.onload = async function(e) {
             try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                const sheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(sheet);
-                if (!rows.length) {
-                    showToast('الملف فارغ أو لا يحتوي على بيانات', 'error');
+                let rows = [];
+                const fileExt = file.name.split('.').pop().toLowerCase();
+                
+                if (fileExt === 'csv') {
+                    // معالجة CSV يدوياً لاحترام الترميز والمحدد
+                    const text = e.target.result;
+                    let lines = text.split(/\r?\n/);
+                    if (lines.length === 0) throw new Error('الملف فارغ');
+                    
+                    let delimiter = csvDelimiter === 'tab' ? '\t' : csvDelimiter;
+                    let headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+                    
+                    // البحث عن الأعمدة المطلوبة
+                    let usernameCol = headers.findIndex(h => h.includes('username') || h.includes('users') || h === 'اسم المستخدم');
+                    let passwordCol = headers.findIndex(h => h.includes('password') || h === 'كلمة المرور');
+                    let roleCol = headers.findIndex(h => h.includes('role') || h === 'الدور');
+                    let factoryCol = headers.findIndex(h => h.includes('factory') || h === 'المصنع');
+                    
+                    if (usernameCol === -1 || passwordCol === -1) {
+                        throw new Error('الملف يجب أن يحتوي على عمودين على الأقل: اسم المستخدم وكلمة المرور');
+                    }
+                    
+                    for (let i = 1; i < lines.length; i++) {
+                        if (!lines[i].trim()) continue;
+                        const parts = lines[i].split(delimiter);
+                        if (parts.length <= Math.max(usernameCol, passwordCol)) continue;
+                        const username = parts[usernameCol]?.trim();
+                        const password = parts[passwordCol]?.trim();
+                        if (!username || !password) continue;
+                        let role = (roleCol !== -1 && parts[roleCol]) ? parts[roleCol].trim().toLowerCase() : 'user';
+                        let factory = (factoryCol !== -1 && parts[factoryCol]) ? parts[factoryCol].trim() : '';
+                        rows.push({ username, password, role, factory });
+                    }
+                } else {
+                    // Excel
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonRows = XLSX.utils.sheet_to_json(sheet);
+                    if (!jsonRows.length) throw new Error('الملف فارغ أو لا يحتوي على بيانات');
+                    
+                    for (const row of jsonRows) {
+                        let username = row.username || row.Users || row.users || row.USER || row['اسم المستخدم'];
+                        let password = row.password || row.Password || row.PASS || row['كلمة المرور'];
+                        let role = row.role || row.Role || row['الدور'] || 'user';
+                        let factory = row.factory || row.Factory || row['المصنع'] || '';
+                        if (!username || !password) continue;
+                        rows.push({ username: String(username).trim(), password: String(password).trim(), role: String(role).trim().toLowerCase(), factory: String(factory).trim() });
+                    }
+                }
+                
+                if (rows.length === 0) {
+                    showToast('لم يتم العثور على بيانات صالحة في الملف', 'error');
                     return;
                 }
+                
                 let successCount = 0, failCount = 0;
                 showLoading(true);
                 for (const row of rows) {
-                    const username = row.Users || row.users || row.USER || row['اسم المستخدم'];
-                    const password = row.Password || row.password || row.PASS || row['كلمة المرور'];
-                    const privText = row.Privileges || row.privileges || row.PRIVILEGES || row['الصلاحيات'] || '';
-                    if (!username || !password) {
-                        failCount++;
-                        continue;
-                    }
-                    const role = 'user';
-                    const permissions = parsePrivileges(privText);
                     try {
-                        await apiCall('/users', 'POST', { username, password, role, permissions });
+                        let role = row.role;
+                        if (role !== 'admin' && role !== 'client') role = 'user';
+                        const permissions = {}; // صلاحيات افتراضية كاملة للمستخدمين العاديين
+                        const allPerms = ['viewOrders','addOrders','editOrders','deleteOrders','viewDistribution','manageDistribution','viewTrucks','manageTrucks','viewReports','exportReports','viewSettings','manageSettings','viewBackup','manageBackup','manageUsers','manageRestrictions'];
+                        allPerms.forEach(p => { permissions[p] = true; });
+                        if (role === 'client') {
+                            // العملاء لا يمكنهم إدارة المستخدمين أو الإعدادات
+                            permissions.manageUsers = false;
+                            permissions.manageSettings = false;
+                            permissions.manageBackup = false;
+                        }
+                        const payload = { username: row.username, password: row.password, role, permissions };
+                        if (role === 'client' && row.factory) payload.factory = row.factory;
+                        await apiCall('/users', 'POST', payload);
                         successCount++;
                     } catch(err) {
+                        console.error('فشل إضافة', row.username, err);
                         failCount++;
                     }
                 }
@@ -398,7 +525,12 @@
                 showToast('خطأ في قراءة الملف: ' + err.message, 'error');
             }
         };
-        reader.readAsArrayBuffer(file);
+        
+        if (file.name.endsWith('.csv')) {
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
     }
 
     async function addUser() {
@@ -408,23 +540,29 @@
         }
         const username = document.getElementById('newUsername').value.trim();
         const password = document.getElementById('newPassword').value;
-        const role = document.getElementById('newRole').value;
+        let role = document.getElementById('newRole').value;
+        let factory = '';
+        if (role === 'client') {
+            factory = document.getElementById('newFactory').value;
+            if (!factory) {
+                showToast('الرجاء اختيار مصنع للعميل', 'error');
+                return;
+            }
+        }
         if(!username || !password) { showToast('املأ جميع الحقول', 'error'); return; }
         const permissions = {};
         document.querySelectorAll('#permissionsGrid input[type="checkbox"]').forEach(cb => { permissions[cb.value] = cb.checked; });
         showLoading(true);
         try {
-            await apiCall('/users', 'POST', { username, password, role, permissions });
+            const payload = { username, password, role, permissions };
+            if (factory) payload.factory = factory;
+            await apiCall('/users', 'POST', payload);
             showToast('✅ تم إضافة المستخدم', 'success');
             await loadUsers();
             document.getElementById('newUsername').value = '';
             document.getElementById('newPassword').value = '';
-            const toggleBtn = document.getElementById('toggleNewPassword');
             const passInput = document.getElementById('newPassword');
-            if (passInput.type !== 'password') {
-                passInput.type = 'password';
-                if (toggleBtn) toggleBtn.textContent = '👁️ إظهار';
-            }
+            passInput.type = 'password';
         } catch(e) { showToast('خطأ: '+e.message, 'error'); }
         showLoading(false);
     }
@@ -442,31 +580,17 @@
         showLoading(false);
     }
 
-    // فتح مودال إعادة تعيين كلمة المرور
     function openResetPasswordModal(userId, username) {
-        if (currentUserRole !== 'admin') {
-            showToast('غير مصرح لك بإعادة تعيين كلمة المرور', 'error');
-            return;
-        }
         document.getElementById('resetUserId').value = userId;
         document.getElementById('resetUsername').innerText = username;
         document.getElementById('resetPassword').value = '';
-        const resetInput = document.getElementById('resetPassword');
-        const toggleBtn = resetInput.parentElement.querySelector('.toggle-password');
-        if (resetInput.type !== 'password') {
-            resetInput.type = 'password';
-            if (toggleBtn) toggleBtn.textContent = '👁️ إظهار';
-        }
         document.getElementById('resetPasswordModal').classList.add('active');
     }
 
     async function saveResetPassword() {
         const id = document.getElementById('resetUserId').value;
         const newPassword = document.getElementById('resetPassword').value;
-        if (!newPassword) {
-            showToast('الرجاء إدخال كلمة المرور الجديدة', 'error');
-            return;
-        }
+        if (!newPassword) { showToast('الرجاء إدخال كلمة المرور الجديدة', 'error'); return; }
         const user = users.find(u => u.id == id);
         if (!user) { showToast('المستخدم غير موجود', 'error'); return; }
         showLoading(true);
@@ -479,28 +603,40 @@
     }
 
     function openEditModal(user) {
-        if (currentUserRole !== 'admin') { showToast('غير مصرح', 'error'); return; }
         document.getElementById('editUserId').value = user.id;
         document.getElementById('editRole').value = user.role;
         document.getElementById('editPassword').value = '';
-        const container = document.getElementById('editPermissionsGrid');
+        const factoryGroup = document.getElementById('editFactoryGroup');
+        const factorySelect = document.getElementById('editFactory');
+        if (user.role === 'client') {
+            factoryGroup.style.display = 'flex';
+            factorySelect.value = user.factory || '';
+        } else {
+            factoryGroup.style.display = 'none';
+        }
         const perms = user.permissions || {};
         const allPerms = ['viewOrders','addOrders','editOrders','deleteOrders','viewDistribution','manageDistribution','viewTrucks','manageTrucks','viewReports','exportReports','viewSettings','manageSettings','viewBackup','manageBackup','manageUsers','manageRestrictions'];
+        const container = document.getElementById('editPermissionsGrid');
         container.innerHTML = allPerms.map(p => `<label class="permission-item"><input type="checkbox" value="${p}" ${perms[p] ? 'checked' : ''}> ${p}</label>`).join('');
         document.getElementById('editUserModal').classList.add('active');
     }
 
     async function saveUserEdit() {
-        if (currentUserRole !== 'admin') { showToast('غير مصرح', 'error'); return; }
         const id = document.getElementById('editUserId').value;
         const role = document.getElementById('editRole').value;
         const password = document.getElementById('editPassword').value;
+        let factory = '';
+        if (role === 'client') {
+            factory = document.getElementById('editFactory').value;
+            if (!factory) { showToast('الرجاء اختيار مصنع للعميل', 'error'); return; }
+        }
         const permissions = {};
         document.querySelectorAll('#editPermissionsGrid input[type="checkbox"]').forEach(cb => { permissions[cb.value] = cb.checked; });
         const user = users.find(u => u.id == id);
         if (!user) { showToast('المستخدم غير موجود', 'error'); return; }
         const data = { username: user.username, role, permissions };
-        if(password) data.password = password;
+        if (factory) data.factory = factory;
+        if (password) data.password = password;
         showLoading(true);
         try {
             await apiCall(`/users/${id}`, 'PUT', data);
@@ -513,7 +649,7 @@
 
     function renderUsersTable() {
         const tbody = document.getElementById('usersBody');
-        if(!users.length) { tbody.innerHTML = '<tr><td colspan="5">لا يوجد مستخدمين</td></tr>'; return; }
+        if(!users.length) { tbody.innerHTML = '<tr><td colspan="6">لا يوجد مستخدمين</td></tr>'; return; }
         tbody.innerHTML = users.map((u,i) => {
             let formattedDate = 'غير محدد';
             if (u.created_at) {
@@ -526,15 +662,16 @@
             <tr>
                 <td>${i+1}</td>
                 <td>${escapeHtml(u.username)}</td>
-                <td>${u.role === 'admin' ? 'مدير' : 'مستخدم'}</td>
+                <td>${u.role === 'admin' ? 'مدير' : (u.role === 'client' ? 'عميل مصنع' : 'مستخدم')}</td>
+                <td>${escapeHtml(u.factory || '')}</td>
                 <td>${formattedDate}</td>
                 <td>
                     <button class="btn btn-warning btn-sm" onclick="openEditModal(${JSON.stringify(u).replace(/"/g, '&quot;')})">✏️ تعديل</button>
                     <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️ حذف</button>
                     <button class="btn btn-secondary btn-sm" onclick="openResetPasswordModal(${u.id}, '${escapeHtml(u.username)}')">🔑 إعادة تعيين</button>
-                 </td>
-             </tr>
-        `}).join('');
+                </td>
+            </tr>`;
+        }).join('');
     }
 
     function escapeHtml(str) { return str ? str.replace(/[&<>]/g, function(m){ return m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'; }) : ''; }
@@ -547,17 +684,5 @@
 
     document.addEventListener('DOMContentLoaded', () => { loadNav(); loadUsers(); });
 </script>
-
-<!-- مودال التعديل الأساسي (بدون زر إظهار) -->
-<div class="modal" id="editUserModal">
-    <div class="modal-content">
-        <h3>✏️ تعديل صلاحيات المستخدم</h3>
-        <input type="hidden" id="editUserId">
-        <div class="form-group"><label>الدور</label><select id="editRole"><option value="user">مستخدم</option><option value="admin">مدير</option></select></div>
-        <div class="form-group"><label>كلمة مرور جديدة (اختياري)</label><input type="password" id="editPassword"></div>
-        <div id="editPermissionsGrid"></div>
-        <div style="margin-top:20px;"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="saveUserEdit()">حفظ</button></div>
-    </div>
-</div>
 </body>
 </html>
