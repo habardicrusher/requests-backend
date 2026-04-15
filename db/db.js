@@ -1,25 +1,17 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// إعداد اتصال Supabase مع SSL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false   // Supabase يتطلب SSL
-    }
+    ssl: { rejectUnauthorized: false }
 });
 
-// اختبار الاتصال
-pool.connect((err, client, release) => {
-    if (err) {
-        console.error('❌ فشل الاتصال بـ Supabase:', err.message);
-    } else {
-        console.log('✅ تم الاتصال بـ Supabase PostgreSQL بنجاح');
-        release();
-    }
+pool.connect((err) => {
+    if (err) console.error('❌ Supabase connection failed:', err.message);
+    else console.log('✅ Connected to Supabase PostgreSQL');
 });
 
-// دوال السجلات (Logs) - نفس السابق ولكن مع Supabase
+// ========== Logs ==========
 async function addLog(username, action, details, location) {
     await pool.query(
         `INSERT INTO logs (username, action, details, location, created_at)
@@ -41,7 +33,7 @@ async function getLogsCount() {
     return parseInt(res.rows[0].count);
 }
 
-// دوال تقارير الميزان (Scale Reports) - نفس السابق
+// ========== Reports (uploaded files) ==========
 async function saveReport(reportData) {
     const { filename, report_date, data } = reportData;
     const res = await pool.query(
