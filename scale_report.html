@@ -627,8 +627,18 @@
     await loadReportsList();
     const navContainer=document.getElementById('navLinks');
     if(navContainer){
-      navContainer.innerHTML=`<a class="nav-link" href="index.html">🏠 الرئيسية</a><a class="nav-link" href="orders.html">📦 الطلبات</a><a class="nav-link" href="distribution.html">🚛 التوزيع</a><a class="nav-link" href="reports.html">📊 التقارير</a><a class="nav-link active" href="scale_report.html">⚖️ الميزان</a>`;
-    }
+                { href: 'index.html', text: '📊 الرئيسية' },
+                { href: 'orders.html', text: '📝 الطلبات' },
+                { href: 'distribution.html', text: '🚚 التوزيع' },
+                { href: 'trucks.html', text: '🚛 السيارات' },
+                { href: 'products.html', text: '📦 أنواع البحص' },
+                { href: 'factories.html', text: '🏭 المصانع' },
+                { href: 'reports.html', text: '📊 تقارير الكسارة' },
+                { href: 'scale_report.html', text: '⚖️ تقارير الميزان الشهرية' },  // ✅ الصفحة الجديدة
+                { href: 'settings.html', text: '⚙️ الإعدادات' },
+                { href: 'restrictions.html', text: '⛔ الحظر' },
+                { href: 'users.html', text: '👥 المستخدمين' },
+                { href: 'logs.html', text: '📜 السجلات' }    }
   };
 </script>
 <script src="navbar.js"></script>
