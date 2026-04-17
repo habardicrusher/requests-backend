@@ -432,7 +432,7 @@
         showToast("تم إلغاء التحديد","success");
     };
 
-    // ========== دوال التقارير المحفوظة (معدلة لتكون آمنة) ==========
+    // ========== دوال التقارير المحفوظة (معدلة بشكل جذري لتحمل أي تنسيق) ==========
     async function loadReportsList(){
         try{
             const res = await fetch(`${API_BASE}/scale-reports`);
@@ -501,29 +501,56 @@
         }
     }
     
-    // ✅ دالة عرض التقرير المحفوظة (معدلة لتفادي undefined)
+    // دالة مساعدة لاستخراج البيانات من أي شكل من الاستجابة
+    function extractReportData(response) {
+        // محاولة استخراج البيانات من response.data أو من response مباشرة إذا كانت البيانات هي نفسها
+        let data = response.data;
+        if (!data || typeof data !== 'object') {
+            // إذا لم توجد خاصية data، نفترض أن الاستجابة بأكملها هي البيانات (قديمة)
+            data = response;
+        }
+        // إذا كانت data لا تزال غير موجودة أو ليست كائن، نعيد كائن فارغ
+        if (!data || typeof data !== 'object') return {};
+        return data;
+    }
+    
+    // ✅ دالة عرض التقرير المحفوظة (معدلة لتفادي undefined وتحمل أي تنسيق)
     async function displaySingleReport(reportId){
         showLoading(true);
         try{
             const res = await fetch(`${API_BASE}/scale-reports/${reportId}`);
             const full = await res.json();
-            const data = full.data;
-            if (!data) throw new Error('البيانات غير موجودة في التقرير');
+            console.log("البيانات المستلمة من الخادم:", full); // للتصحيح
             
-            const driversStats = data.driversStats || [];
+            // استخراج البيانات باستخدام الدالة المساعدة
+            const data = extractReportData(full);
+            
+            if (!data || Object.keys(data).length === 0) {
+                throw new Error('التقرير لا يحتوي على بيانات صالحة');
+            }
+            
+            // الحصول على driversStats مع التحقق من وجودها
+            let driversStats = data.driversStats || [];
+            if (!Array.isArray(driversStats)) driversStats = [];
+            
             let driversWithDetails;
             if (driversStats.length > 0 && driversStats[0].totalWorkDays !== undefined) {
                 driversWithDetails = computeRodaFromWorkDays(driversStats);
             } else {
                 const monthDays = data.monthDays || 30;
                 const officialVac = data.officialVacations || 4;
-                const cleanDriversStats = driversStats.map(d => ({ name: d.name, trips: d.trips, totalWeight: d.totalWeight }));
+                const cleanDriversStats = driversStats.map(d => ({ 
+                    name: d.name || 'غير معروف', 
+                    trips: d.trips || 0, 
+                    totalWeight: d.totalWeight || 0 
+                }));
                 driversWithDetails = computeRodaFromMonthDays(cleanDriversStats, monthDays, officialVac);
                 currentMonthDays = monthDays;
                 currentOfficialVacations = officialVac;
                 document.getElementById("monthDays").value = monthDays;
                 document.getElementById("officialVacations").value = officialVac;
             }
+            
             currentResult = {
                 totalRows: data.totalRows || 0,
                 matchedCount: data.matchedCount || 0,
@@ -534,12 +561,15 @@
                 top10Drivers: driversWithDetails.slice(0,10).map(d => ({ name: d.name, trips: d.trips }))
             };
             currentDriversWithDetails = driversWithDetails;
+            
             document.getElementById("metricsGrid").style.display = "grid";
             document.getElementById("chartsArea").style.display = "block";
             renderDriverTable(currentDriversWithDetails);
             updateCharts();
-            document.getElementById("statusMsg").innerHTML = `✅ تم عرض التقرير: ${full.reportName}`;
-            showToast(`تم عرض التقرير: ${full.reportName}`,"success");
+            
+            const reportName = full.reportName || (full.report_name) || "التقرير";
+            document.getElementById("statusMsg").innerHTML = `✅ تم عرض التقرير: ${reportName}`;
+            showToast(`تم عرض التقرير: ${reportName}`,"success");
         } catch(e){ 
             console.error(e);
             showToast("خطأ: "+e.message,"error"); 
@@ -559,8 +589,8 @@
             for(let id of reportIds){
                 const res = await fetch(`${API_BASE}/scale-reports/${id}`);
                 const full = await res.json();
-                const data = full.data;
-                if (!data) continue;
+                const data = extractReportData(full);
+                if (!data || Object.keys(data).length === 0) continue;
                 
                 totalRows += data.totalRows || 0;
                 matchedCount += data.matchedCount || 0;
@@ -586,8 +616,8 @@
                         existing.totalWorkDays += workDaysForDriver;
                     } else {
                         driversAgg.set(d.name, {
-                            trips: d.trips,
-                            weight: d.totalWeight,
+                            trips: d.trips || 0,
+                            weight: d.totalWeight || 0,
                             totalWorkDays: workDaysForDriver
                         });
                     }
