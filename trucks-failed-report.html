@@ -18,8 +18,14 @@
         .nav-links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 30px; }
         .nav-link { padding: 12px 24px; background: rgba(255,255,255,0.1); border-radius: 12px; text-decoration: none; color: #fff; font-weight: 600; }
         .nav-link:hover, .nav-link.active { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transform: translateY(-2px); }
-        .date-section { background: rgba(255,255,255,0.1); padding: 15px 25px; border-radius: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
-        .date-section input { padding: 12px 20px; border-radius: 10px; border: none; background: #fff; color: #333; }
+        .date-section { background: rgba(255,255,255,0.1); padding: 15px 25px; border-radius: 15px; margin-bottom: 25px; display: flex; flex-direction: column; gap: 15px; }
+        .date-row { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; justify-content: space-between; }
+        .date-fields { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
+        .date-fields label { display: block; font-size: 0.85rem; color: #a8b2d1; margin-bottom: 4px; }
+        .date-fields input { padding: 10px 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); color: #fff; }
+        .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+        .quick-filter-btn { padding: 8px 16px; border: 1px solid rgba(102,126,234,0.5); background: rgba(102,126,234,0.1); color: #a8b2d1; border-radius: 20px; cursor: pointer; font-size: 0.85em; font-weight: 600; transition: all 0.3s; }
+        .quick-filter-btn:hover, .quick-filter-btn.active { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-color: transparent; transform: translateY(-1px); }
         .btn { padding: 12px 25px; border: none; border-radius: 12px; cursor: pointer; font-size: 1em; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
         .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #fff; }
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
@@ -40,14 +46,8 @@
             margin-bottom: 25px;
             border-right: 4px solid #38ef7d;
         }
-        .executive-box h3 {
-            color: #38ef7d;
-            margin-bottom: 12px;
-        }
-        .executive-box p {
-            line-height: 1.7;
-            color: #ddd;
-        }
+        .executive-box h3 { color: #38ef7d; margin-bottom: 12px; }
+        .executive-box p { line-height: 1.7; color: #ddd; }
         .loading { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; align-items:center; justify-content:center; flex-direction:column; }
         .loading.active { display: flex; }
         .spinner { width:50px; height:50px; border:4px solid rgba(255,255,255,0.3); border-top-color:#667eea; border-radius:50%; animation: spin 1s linear infinite; }
@@ -70,11 +70,21 @@
     <div class="nav-links" id="navLinks"></div>
     
     <div class="date-section">
-        <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
-        <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
-        <div>
-            <button class="btn btn-primary" onclick="loadReport()">🔍 عرض التقرير</button>
-            <button class="btn btn-success" onclick="exportToExcel()">📥 تصدير Excel</button>
+        <div class="date-row">
+            <div class="date-fields">
+                <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
+                <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
+                <div>
+                    <button class="btn btn-primary" onclick="loadReport()">🔍 عرض التقرير</button>
+                    <button class="btn btn-success" onclick="exportToExcel()">📥 تصدير Excel</button>
+                </div>
+            </div>
+        </div>
+        <div class="quick-filters">
+            <button class="quick-filter-btn active" onclick="setQuickFilter('today')">📅 اليوم</button>
+            <button class="quick-filter-btn" onclick="setQuickFilter('week')">📅 أسبوعي</button>
+            <button class="quick-filter-btn" onclick="setQuickFilter('month')">📅 شهري</button>
+            <button class="quick-filter-btn" onclick="setQuickFilter('custom')">📅 مخصص</button>
         </div>
     </div>
 
@@ -82,7 +92,7 @@
     <div class="stats-grid" id="statsGrid"></div>
 
     <h2>🚛 أكثر السيارات تكراراً للمخالفات</h2>
-    <div style="overflow-x: auto;"><table id="topTrucksTable"><thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>عدد مرات المخالفة (أيام)</th><th>متوسط الرحلات</th><tr></thead><tbody></tbody></table></div>
+    <div style="overflow-x: auto;"><table id="topTrucksTable"><thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>عدد مرات المخالفة (أيام)</th><th>متوسط الرحلات</th></tr></thead><tbody></tbody></table></div>
 
     <h2>📋 أكثر الأسباب شيوعاً</h2>
     <div style="overflow-x: auto;"><table id="topReasonsTable"><thead><tr><th>#</th><th>السبب</th><th>عدد المرات</th></tr></thead><tbody></tbody></table></div>
@@ -109,6 +119,45 @@
         return res.json();
     }
 
+    // دالة مساعدة لتنسيق التاريخ إلى YYYY-MM-DD
+    function formatDate(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // دالة ضبط الفلاتر السريعة
+    function setQuickFilter(type) {
+        const today = new Date();
+        let start, end;
+        switch(type) {
+            case 'today':
+                start = new Date(today);
+                end = new Date(today);
+                break;
+            case 'week':
+                // آخر 7 أيام (اليوم والأيام الستة السابقة)
+                start = new Date(today);
+                start.setDate(today.getDate() - 6);
+                end = new Date(today);
+                break;
+            case 'month':
+                // من أول الشهر الحالي إلى اليوم
+                start = new Date(today.getFullYear(), today.getMonth(), 1);
+                end = new Date(today);
+                break;
+            case 'custom':
+                // لا تغيير، يبقي على ما هو موجود
+                return;
+            default:
+                return;
+        }
+        document.getElementById('startDate').value = formatDate(start);
+        document.getElementById('endDate').value = formatDate(end);
+        loadReport();
+    }
+
     // حساب إحصائيات صحيحة من بيانات المخالفات (حيث المخالفة فقط عندما trips_count === 1)
     function computeCorrectStats(violations) {
         if (!violations.length) return null;
@@ -116,8 +165,6 @@
         const totalViolations = violations.length;
         const totalTripsInViolations = violations.reduce((sum, v) => sum + (v.trips_count || 0), 0);
         const avgTrips = totalViolations ? (totalTripsInViolations / totalViolations).toFixed(2) : 0;
-        // عدد السيارات التي لم تقم بأي رحلة في أي يوم (لا تظهر في المخالفات لأننا استبعدنا الرحلات 0)
-        // هذه القيمة ستكون صفراً لأن المخالفات تحتوي فقط على رحلة واحدة.
         const zeroTripsCount = 0;
         return {
             total_trucks: uniqueTrucksViolated.size,
@@ -141,16 +188,12 @@
                 apiCall(`/truck-violations/report/${startDate}/${endDate}`)
             ]);
             currentData = violations;
-            
-            // إعادة حساب الإحصائيات بشكل صحيح بناءً على البيانات المستلمة
             const correctedGeneral = computeCorrectStats(violations);
-            
             currentStats = {
                 general: correctedGeneral || statsFromServer.general,
                 topTrucks: statsFromServer.topTrucks || [],
                 topReasons: statsFromServer.topReasons || []
             };
-            
             renderStats(currentStats.general);
             renderExecutiveSummary(currentStats.general, startDate, endDate);
             renderTopTrucks(currentStats.topTrucks);
@@ -334,11 +377,11 @@
     
     document.addEventListener('DOMContentLoaded', () => {
         loadNav();
-        const today = new Date().toISOString().split('T')[0];
-        const firstDay = new Date();
-        firstDay.setDate(1);
-        document.getElementById('startDate').value = firstDay.toISOString().split('T')[0];
-        document.getElementById('endDate').value = today;
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        // تعيين التاريخ الافتراضي: من اليوم إلى اليوم
+        document.getElementById('startDate').value = todayStr;
+        document.getElementById('endDate').value = todayStr;
         loadReport();
     });
 </script>
