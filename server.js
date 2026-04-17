@@ -51,15 +51,17 @@ async function query(text, params) {
     }
 }
 
-// ==================== إنشاء الجداول ====================
+// ==================== إنشاء الجداول (مع إصلاح عمود data) ====================
 async function initTables() {
     try {
+        // جدول الإعدادات
         await query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value JSONB NOT NULL
             )
         `);
+        // جدول المنتجات
         await query(`
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -67,6 +69,7 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        // جدول بيانات الميزان الشهرية
         await query(`
             CREATE TABLE IF NOT EXISTS scale_data (
                 id SERIAL PRIMARY KEY,
@@ -77,6 +80,7 @@ async function initTables() {
                 UNIQUE(year, month)
             )
         `);
+        // جدول التقارير المحفوظة (مع التحقق من وجود عمود data)
         await query(`
             CREATE TABLE IF NOT EXISTS scale_reports (
                 id SERIAL PRIMARY KEY,
@@ -86,6 +90,15 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        // إضافة عمود data إذا لم يكن موجوداً (للتأكد من التوافق)
+        try {
+            await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS data JSONB`);
+            console.log('✅ تم التأكد من وجود عمود data في scale_reports');
+        } catch (err) {
+            console.warn('⚠️ لا يمكن إضافة عمود data (ربما موجود بالفعل):', err.message);
+        }
+
+        // جدول بيانات اليوم (الطلبات والتوزيع)
         await query(`
             CREATE TABLE IF NOT EXISTS day_data (
                 date DATE PRIMARY KEY,
@@ -93,6 +106,7 @@ async function initTables() {
                 distribution JSONB NOT NULL
             )
         `);
+        // جدول المستخدمين
         await query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -333,14 +347,10 @@ app.delete('/api/users/:id', async (req, res) => {
     }
 });
 
-// ==================== تقارير الميزان المحفوظة ====================
-// ==================== تقارير الميزان المحفوظة (نسخة محسّنة ومتينة) ====================
-
-// جلب جميع التقارير (قائمة)
+// ==================== تقارير الميزان المحفوظة (مع إصلاح عمود data) ====================
 app.get('/api/scale-reports', async (req, res) => {
     try {
         const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
-        // لا نحتاج لمعالجة حقل data هنا، فقط البيانات الأساسية
         res.json(result.rows.map(r => ({
             id: r.id,
             reportName: r.report_name,
@@ -353,63 +363,37 @@ app.get('/api/scale-reports', async (req, res) => {
     }
 });
 
-// جلب تقرير محدد (مع التحقق من صحة البيانات)
 app.get('/api/scale-reports/:id', async (req, res) => {
     try {
         const id = parseInt(req.params.id);
-        if (isNaN(id)) {
-            return res.status(400).json({ error: 'معرّف التقرير غير صالح' });
-        }
+        if (isNaN(id)) return res.status(400).json({ error: 'معرّف غير صالح' });
         const result = await query('SELECT report_name, report_date, data, created_at FROM scale_reports WHERE id = $1', [id]);
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'التقرير غير موجود' });
-        }
+        if (!result.rows.length) return res.status(404).json({ error: 'غير موجود' });
         const row = result.rows[0];
         let reportData = row.data;
-        
-        // إذا كانت البيانات نصية، نحاول تحويلها إلى كائن
         if (typeof reportData === 'string') {
-            try {
-                reportData = JSON.parse(reportData);
-            } catch (e) {
-                console.warn(`⚠️ بيانات التقرير ${id} غير صالحة (نص غير JSON)، سيتم استخدام كائن فارغ`);
-                reportData = {};
-            }
+            try { reportData = JSON.parse(reportData); } catch(e) { reportData = {}; }
         }
-        // إذا لم تكن data كائناً (مثلاً null أو undefined)
-        if (!reportData || typeof reportData !== 'object') {
-            reportData = {};
-        }
-        
+        if (!reportData || typeof reportData !== 'object') reportData = {};
         res.json({
-            id: id,
+            id,
             reportName: row.report_name,
             reportDate: row.report_date,
             data: reportData,
             createdAt: row.created_at
         });
     } catch (err) {
-        console.error(`❌ خطأ في GET /api/scale-reports/${req.params.id}:`, err);
+        console.error('❌ خطأ في GET /api/scale-reports/:id:', err);
         res.status(500).json({ error: 'خطأ في جلب التقرير: ' + err.message });
     }
 });
 
-// حفظ تقرير جديد (مع تأكيد صحة البيانات)
 app.post('/api/scale-reports', async (req, res) => {
-    if (req.session.role !== 'admin') {
-        return res.status(403).json({ error: 'غير مصرح: تحتاج صلاحيات مدير' });
-    }
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     try {
         const { reportName, reportDate, data } = req.body;
-        if (!reportName || !data) {
-            return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
-        }
-        // التأكد من أن data هو كائن صالح قبل تخزينه
-        let safeData = data;
-        if (typeof safeData !== 'object') {
-            safeData = {};
-        }
-        const dataJson = JSON.stringify(safeData);
+        if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
+        const dataJson = JSON.stringify(data);
         await query(
             'INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)',
             [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]
@@ -421,40 +405,58 @@ app.post('/api/scale-reports', async (req, res) => {
     }
 });
 
-// تعديل اسم التقرير
 app.put('/api/scale-reports/:id', async (req, res) => {
-    if (req.session.role !== 'admin') {
-        return res.status(403).json({ error: 'غير مصرح' });
-    }
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     try {
         const id = parseInt(req.params.id);
         const { reportName } = req.body;
-        if (!reportName) {
-            return res.status(400).json({ error: 'اسم التقرير مطلوب' });
-        }
+        if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
         await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
         res.json({ success: true });
     } catch (err) {
-        console.error(`❌ خطأ في PUT /api/scale-reports/${req.params.id}:`, err);
+        console.error('❌ خطأ في PUT /api/scale-reports/:id:', err);
         res.status(500).json({ error: 'خطأ في تعديل التقرير: ' + err.message });
     }
 });
 
-// حذف تقرير
 app.delete('/api/scale-reports/:id', async (req, res) => {
-    if (req.session.role !== 'admin') {
-        return res.status(403).json({ error: 'غير مصرح' });
-    }
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     try {
         const id = parseInt(req.params.id);
         await query('DELETE FROM scale_reports WHERE id = $1', [id]);
         res.json({ success: true });
     } catch (err) {
-        console.error(`❌ خطأ في DELETE /api/scale-reports/${req.params.id}:`, err);
+        console.error('❌ خطأ في DELETE /api/scale-reports/:id:', err);
         res.status(500).json({ error: 'خطأ في حذف التقرير: ' + err.message });
     }
 });
-// ==================== تقارير المخالفات (السيارات التي لم تحقق رودين) ====================
+
+// ==================== بيانات الميزان الشهرية (الخام) ====================
+app.get('/api/scale/monthly/:year/:month', async (req, res) => {
+    try {
+        const year = parseInt(req.params.year);
+        const month = parseInt(req.params.month);
+        const result = await query('SELECT data FROM scale_data WHERE year = $1 AND month = $2', [year, month]);
+        res.json(result.rows.length ? result.rows[0].data : {});
+    } catch (err) {
+        res.status(500).json({ error: 'خطأ في جلب بيانات الميزان' });
+    }
+});
+
+app.put('/api/scale/monthly/:year/:month', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        const year = parseInt(req.params.year);
+        const month = parseInt(req.params.month);
+        const data = req.body;
+        await query(`INSERT INTO scale_data (year, month, data) VALUES ($1, $2, $3) ON CONFLICT (year, month) DO UPDATE SET data = $3, updated_at = NOW()`, [year, month, data]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'خطأ في حفظ بيانات الميزان' });
+    }
+});
+
+// ==================== تقارير المخالفات (السيارات التي عملت برحلة واحدة فقط) ====================
 function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
     const truckTrips = new Map();
     distribution.forEach(d => {
@@ -469,9 +471,10 @@ function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
         const stats = truckTrips.get(truck.number);
         const trips = stats ? stats.trips : 0;
         const driver = stats ? stats.driver : truck.driver;
-        if (trips < requiredTrips) {
-            const reason = trips === 0 ? 'لم يقم بأي رحلة' : 'أقل من رودين (رحلة واحدة فقط)';
-            const details = trips === 0 ? 'لم يتم توزيع أي طلب على هذه السيارة' : `قام بـ ${trips} رحلة فقط، والمطلوب ${requiredTrips}`;
+        // فقط الرحلات = 1 تعتبر مخالفة (أقل من المطلوب ولكنها عملت)
+        if (trips === 1) {
+            const reason = 'أقل من رودين (رحلة واحدة فقط)';
+            const details = `قام بـ ${trips} رحلة فقط، والمطلوب ${requiredTrips}`;
             violations.push({ truck_number: truck.number, driver_name: driver, trips_count: trips, reason, details });
         }
     });
@@ -517,7 +520,7 @@ app.get('/api/truck-violations/stats/:startDate/:endDate', async (req, res) => {
                 total_trucks: uniqueTrucksViolated,
                 total_violations: totalViolations,
                 avg_trips: avgTrips,
-                zero_trips_count: allViolations.filter(v => v.trips_count === 0).length
+                zero_trips_count: 0   // لم نعد نحتسبها كمخالفات
             },
             topTrucks,
             topReasons
