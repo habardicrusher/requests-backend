@@ -7,7 +7,6 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// إعداد اتصال قاعدة البيانات
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -34,7 +33,6 @@ app.use(session({
     cookie: { maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// ==================== دوال مساعدة ====================
 async function query(text, params) {
     try {
         const start = Date.now();
@@ -50,7 +48,6 @@ async function query(text, params) {
     }
 }
 
-// ==================== إنشاء الجداول ====================
 async function initTables() {
     try {
         await query(`
@@ -76,6 +73,8 @@ async function initTables() {
                 UNIQUE(year, month)
             )
         `);
+        
+        // ✅ إنشاء جدول scale_reports إذا لم يكن موجوداً
         await query(`
             CREATE TABLE IF NOT EXISTS scale_reports (
                 id SERIAL PRIMARY KEY,
@@ -85,11 +84,26 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        
+        // ✅ التأكد من وجود جميع الأعمدة المطلوبة (بالإضافة إلى إصلاح أي جدول قديم)
+        const columnsToAdd = [
+            { name: 'report_name', type: 'TEXT NOT NULL DEFAULT \'\'' },
+            { name: 'report_date', type: 'TEXT NOT NULL DEFAULT \'\'' },
+            { name: 'data', type: 'JSONB' },
+            { name: 'created_at', type: 'TIMESTAMP DEFAULT NOW()' }
+        ];
+        for (const col of columnsToAdd) {
+            try {
+                await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`);
+            } catch (err) {
+                console.warn(`⚠️ لا يمكن إضافة العمود ${col.name}:`, err.message);
+            }
+        }
+        // إذا كان العمود data موجوداً ولكن من نوع TEXT، نحوله إلى JSONB
         try {
-            await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS data JSONB`);
-            console.log('✅ تم التأكد من وجود عمود data في scale_reports');
+            await query(`ALTER TABLE scale_reports ALTER COLUMN data TYPE JSONB USING data::jsonb`);
         } catch (err) {
-            console.warn('⚠️ لا يمكن إضافة عمود data (ربما موجود بالفعل):', err.message);
+            // العمود إما ليس موجوداً أو بالفعل JSONB
         }
 
         await query(`
@@ -337,9 +351,25 @@ app.delete('/api/users/:id', async (req, res) => {
     }
 });
 
-// ==================== تقارير الميزان المحفوظة ====================
+// ==================== تقارير الميزان المحفوظة (مع إصلاح شامل) ====================
 app.get('/api/scale-reports', async (req, res) => {
     try {
+        // نتأكد أولاً من وجود الجدول والأعمدة
+        await query(`
+            CREATE TABLE IF NOT EXISTS scale_reports (
+                id SERIAL PRIMARY KEY,
+                report_name TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        // نضيف الأعمدة إذا كانت مفقودة
+        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS report_name TEXT`);
+        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS report_date TEXT`);
+        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS data JSONB`);
+        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
+        
         const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
         res.json(result.rows.map(r => ({
             id: r.id,
@@ -446,7 +476,7 @@ app.put('/api/scale/monthly/:year/:month', async (req, res) => {
     }
 });
 
-// ==================== تقارير المخالفات (مع احتساب 0 و 1) ====================
+// ==================== تقارير المخالفات ====================
 function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
     const truckTrips = new Map();
     distribution.forEach(d => {
@@ -470,7 +500,6 @@ function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
             const details = `قام بـ ${trips} رحلة فقط، والمطلوب ${requiredTrips}`;
             violations.push({ truck_number: truck.number, driver_name: driver, trips_count: trips, reason, details });
         }
-        // الحالة trips >= 2 لا تحتسب مخالفة
     });
     return violations;
 }
