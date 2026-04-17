@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>التوزيع الجغرافي المتوازن بالمسافات - كسارة الحبردي</title>
+    <title>التوزيع الجغرافي المتوازن - كسارة الحبردي</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -73,13 +73,35 @@
         @media (max-width:768px){ th,td { font-size:0.75em; padding:8px; } }
         @media print { .nav-links, .date-section .btn, .btn-danger, .btn-info, .print-btn, .toast-container, .loading { display: none; } .road-badge { -webkit-print-color-adjust: exact; } }
         .distance-badge { background: rgba(56,239,125,0.2); padding: 4px 10px; border-radius: 15px; font-size: 0.8em; display: inline-block; }
+        .excluded-warning {
+            background: rgba(235,51,73,0.2);
+            border-right: 4px solid #eb3349;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .excluded-warning .message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .excluded-warning .count {
+            font-weight: bold;
+            font-size: 1.3em;
+            color: #f5576c;
+        }
     </style>
 </head>
 <body>
     <div class="loading" id="loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
     <div class="toast-container" id="toastContainer"></div>
     <div class="container">
-        <div class="header"><h1>🚚 التوزيع الجغرافي المتوازن (حسب المسافات)</h1><p>توزيع الطلبات بأولوية للسائقين الأقل رحلات لضمان العدالة</p>
+        <div class="header"><h1>🚚 التوزيع الجغرافي المتوازن (حسب المسافات)</h1><p>توزيع الطلبات بأولوية للأقل رحلات مع استثناء مصنع الدرعية أوقات الإغلاق</p>
             <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;"></div>
         </div>
         <div class="nav-links" id="navLinks"></div>
@@ -91,6 +113,16 @@
                 <button class="btn print-btn" onclick="window.print()">🖨️ طباعة</button>
             </div>
         </div>
+        
+        <!-- منطقة تنبيه استثناء مصنع الدرعية -->
+        <div id="excludedWarning" class="excluded-warning" style="display: none;">
+            <div class="message">
+                <span>⚠️</span>
+                <span>الطريق إلى <strong>مصنع دعم وحلول الدرعية</strong> مغلق حالياً (من 7 ص إلى 11 م). تم استبعاد <span id="excludedCount" class="count">0</span> طلب من التوزيع التلقائي. يرجى توزيعها يدوياً عند فتح الطريق.</span>
+            </div>
+            <button class="btn btn-warning" onclick="showExcludedOrders()">🔍 عرض الطلبات المستثناة</button>
+        </div>
+
         <div class="stats" id="statsSection" style="display: none;">
             <div class="stat-card"><h4>📋 الطلبات غير الموزعة</h4><div class="number" id="statUndistributed">0</div></div>
             <div class="stat-card"><h4>🚛 عدد السيارات</h4><div class="number" id="statTrucks">0</div></div>
@@ -109,7 +141,7 @@
         <div style="overflow-x: auto;">
             <table id="distributionTable">
                 <thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>الرود</th></tr></thead>
-                <tbody id="distributionBody"><td><td colspan="9" style="text-align:center;">لا يوجد توزيع بعد</td></tr> </tbody>
+                <tbody id="distributionBody"><tr><td colspan="9" style="text-align:center;">لا يوجد توزيع بعد</td></tr> </tbody>
             </table>
         </div>
     </div>
@@ -159,6 +191,17 @@
         let trucks = [], orders = [], distribution = [], currentDate = '';
         let currentOrderToDistribute = null;
 
+        // اسم المصنع المستثنى وأوقات الإغلاق (7 صباحاً إلى 11 مساءً)
+        const EXCLUDED_FACTORY = "مصنع دعم وحلول الدرعية";
+        const BLOCK_START_HOUR = 7;   // 7 صباحاً
+        const BLOCK_END_HOUR = 23;    // 11 مساءً
+
+        function isRoadBlocked() {
+            const now = new Date();
+            const hour = now.getHours();
+            return hour >= BLOCK_START_HOUR && hour < BLOCK_END_HOUR;
+        }
+
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
             if (data) options.body = JSON.stringify(data);
@@ -189,7 +232,8 @@
                 renderUndistributed(undistributed);
                 renderDistribution();
                 updateStats(undistributed.length);
-            } catch(e) { orders = []; distribution = []; renderUndistributed([]); renderDistribution(); updateStats(0); }
+                updateExcludedWarning(undistributed);
+            } catch(e) { orders = []; distribution = []; renderUndistributed([]); renderDistribution(); updateStats(0); updateExcludedWarning([]); }
         }
 
         function updateStats(undistributedCount) {
@@ -202,6 +246,29 @@
             } else { s.style.display = 'none'; }
         }
 
+        function updateExcludedWarning(undistributed) {
+            const blocked = isRoadBlocked();
+            const excludedOrders = undistributed.filter(o => o.factory === EXCLUDED_FACTORY);
+            const warningDiv = document.getElementById('excludedWarning');
+            if (blocked && excludedOrders.length > 0) {
+                document.getElementById('excludedCount').textContent = excludedOrders.length;
+                warningDiv.style.display = 'flex';
+            } else {
+                warningDiv.style.display = 'none';
+            }
+        }
+
+        function showExcludedOrders() {
+            const excluded = orders.filter(o => o.factory === EXCLUDED_FACTORY && !distribution.some(d => d.orderId === o.id));
+            if (excluded.length === 0) {
+                showToast('لا توجد طلبات مستثناة حالياً', 'info');
+                return;
+            }
+            let msg = 'الطلبات المستثناة:\n';
+            excluded.forEach((o, i) => { msg += `${i+1}. ${o.factory} - ${o.material}\n`; });
+            alert(msg);
+        }
+
         async function saveData() {
             try { await apiCall(`/day/${currentDate}`, 'PUT', { orders, distribution }); return true; } catch(e) { showToast('خطأ في الحفظ', 'error'); return false; }
         }
@@ -212,8 +279,10 @@
             tbody.innerHTML = undistributed.map((order, i) => {
                 const dist = getFactoryDistance(order.factory);
                 const time = getFactoryTime(order.factory);
+                const isExcluded = (order.factory === EXCLUDED_FACTORY && isRoadBlocked());
+                const rowStyle = isExcluded ? 'style="background: rgba(235,51,73,0.2);"' : '';
                 return `
-                    <tr>
+                    <tr ${rowStyle}>
                         <td>${i+1}</td>
                         <td>${order.factory}</td>
                         <td>بحص ${order.material}</td>
@@ -229,7 +298,7 @@
 
         function renderDistribution() {
             const tbody = document.getElementById('distributionBody');
-            if (!distribution.length) { tbody.innerHTML = '<td><td colspan="9" style="text-align:center;">لا يوجد توزيع بعد</td></tr>'; return; }
+            if (!distribution.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">لا يوجد توزيع بعد</td></tr>'; return; }
             const uniqueMap = new Map();
             distribution.forEach(d => { if (!uniqueMap.has(d.orderId)) uniqueMap.set(d.orderId, d); });
             const uniqueDistributions = Array.from(uniqueMap.values());
@@ -293,157 +362,119 @@
             showLoading(false);
         }
 
-        // =============== خوارزمية التوزيع التلقائي العادل (Round-Robin محسن) ===============
-  // =============== خوارزمية التوزيع التلقائي العادل (Round Robin متساوٍ) ===============
-async function autoDistribute() {
-    const distributedOrderIds = new Set(distribution.map(d => d.orderId));
-    const undistributed = orders.filter(o => !distributedOrderIds.has(o.id));
-    if (!undistributed.length) { showToast('لا توجد طلبات غير موزعة', 'error'); return; }
-    if (!trucks.length) { showToast('لا توجد سيارات', 'error'); return; }
-    showLoading(true);
-
-    // إحصائيات اليوم لكل سيارة
-    let truckTrips = {};
-    let truckTotalDistance = {};
-    let truckLastFactory = {};
-
-    trucks.forEach(t => {
-        truckTrips[t.number] = 0;
-        truckTotalDistance[t.number] = 0;
-        truckLastFactory[t.number] = null;
-    });
-
-    // تسجيل التوزيعات السابقة في نفس اليوم (إن وجدت)
-    distribution.forEach(d => {
-        if (d.truck) {
-            truckTrips[d.truck.number]++;
-            const dist = getFactoryDistance(d.factory);
-            truckTotalDistance[d.truck.number] += dist;
-            truckLastFactory[d.truck.number] = d.factory;
-        }
-    });
-
-    // ===== الخطوة 1: توزيع الرحلة الأولى على جميع السيارات (بترتيب عشوائي عادل) =====
-    // نهدف إلى أن تأخذ كل سيارة رحلة واحدة قبل أن تأخذ أي سيارة رحلتها الثانية
-    
-    let newDistributions = [];
-    let remainingOrders = [...undistributed];
-    
-    // قائمة السيارات مرتبة حسب المسافة المقطوعة (الأقل أولاً) لبدء التوزيع العادل
-    let trucksList = [...trucks].sort((a,b) => {
-        // السيارات التي لم تأخذ أي رحلة لها الأولوية المطلقة
-        if (truckTrips[a.number] !== truckTrips[b.number]) 
-            return truckTrips[a.number] - truckTrips[b.number];
-        // إذا تساوت الرحلات، الأقل مسافة مقطوعة يأخذ الأولوية (لتوزيع الأحمال)
-        return truckTotalDistance[a.number] - truckTotalDistance[b.number];
-    });
-    
-    // نستمر في التوزيع حتى نفاد الطلبات
-    let orderIndex = 0;
-    while (remainingOrders.length > 0 && orderIndex < remainingOrders.length * 2) {
-        // إعادة ترتيب السيارات قبل كل دورة: الأقل رحلات أولاً، ثم الأقل مسافة مقطوعة
-        trucksList.sort((a,b) => {
-            if (truckTrips[a.number] !== truckTrips[b.number])
-                return truckTrips[a.number] - truckTrips[b.number];
-            // إذا تساوت الرحلات، الأقل مسافة مقطوعة أولاً (للعدالة)
-            return truckTotalDistance[a.number] - truckTotalDistance[b.number];
-        });
-        
-        let assigned = false;
-        // نحاول توزيع الطلب الحالي على أول سيارة مناسبة
-        for (let t of trucksList) {
-            // تجنب تكرار نفس المصنع إن أمكن
-            if (truckLastFactory[t.number] === remainingOrders[0].factory) {
-                continue;
+        // =============== خوارزمية التوزيع التلقائي العادل (مع استثناء مصنع الدرعية) ===============
+        async function autoDistribute() {
+            const distributedOrderIds = new Set(distribution.map(d => d.orderId));
+            let undistributed = orders.filter(o => !distributedOrderIds.has(o.id));
+            if (!undistributed.length) { showToast('لا توجد طلبات غير موزعة', 'error'); return; }
+            if (!trucks.length) { showToast('لا توجد سيارات', 'error'); return; }
+            
+            // استبعاد طلبات مصنع الدرعية إذا كان الطريق مقفولاً
+            let excludedOrders = [];
+            if (isRoadBlocked()) {
+                excludedOrders = undistributed.filter(o => o.factory === EXCLUDED_FACTORY);
+                undistributed = undistributed.filter(o => o.factory !== EXCLUDED_FACTORY);
+                if (excludedOrders.length > 0) {
+                    showToast(`⚠️ تم استبعاد ${excludedOrders.length} طلب لمصنع الدرعية (الطريق مقفول من 7ص إلى 11م). قم بتوزيعها يدوياً لاحقاً.`, 'warning');
+                    updateExcludedWarning(orders.filter(o => !distributedOrderIds.has(o.id)));
+                }
             }
-            // توزيع الطلب على هذه السيارة
-            const order = remainingOrders.shift();
-            const orderDistance = getFactoryDistance(order.factory);
-            truckTrips[t.number]++;
-            truckTotalDistance[t.number] += orderDistance;
-            truckLastFactory[t.number] = order.factory;
-            const currentRoad = truckTrips[t.number];
-            newDistributions.push({
-                orderId: order.id,
-                orderIndex: distribution.length + newDistributions.length + 1,
-                truck: t,
-                factory: order.factory,
-                material: order.material,
-                time: order.time || '',
-                road: currentRoad
-            });
-            assigned = true;
-            break;
-        }
-        
-        if (!assigned && trucksList.length > 0) {
-            // إذا لم نجد سيارة دون تكرار المصنع، نستخدم أول سيارة
-            const order = remainingOrders.shift();
-            const t = trucksList[0];
-            const orderDistance = getFactoryDistance(order.factory);
-            truckTrips[t.number]++;
-            truckTotalDistance[t.number] += orderDistance;
-            truckLastFactory[t.number] = order.factory;
-            const currentRoad = truckTrips[t.number];
-            newDistributions.push({
-                orderId: order.id,
-                orderIndex: distribution.length + newDistributions.length + 1,
-                truck: t,
-                factory: order.factory,
-                material: order.material,
-                time: order.time || '',
-                road: currentRoad
-            });
-            assigned = true;
-        }
-        
-        if (!assigned) break;
-        orderIndex++;
-    }
-    
-    // إذا بقيت طلبات (نادراً)، نوزعها بشكل متسلسل
-    if (remainingOrders.length > 0) {
-        console.warn(`بقيت ${remainingOrders.length} طلب غير موزع، يتم توزيعها بشكل متسلسل`);
-        for (let order of remainingOrders) {
-            const orderDistance = getFactoryDistance(order.factory);
-            // نختار السيارة الأقل رحلات حالياً
-            let bestTruck = trucksList.reduce((best, t) => {
-                if (truckTrips[t.number] < truckTrips[best.number]) return t;
-                if (truckTrips[t.number] === truckTrips[best.number] && truckTotalDistance[t.number] < truckTotalDistance[best.number]) return t;
-                return best;
-            }, trucksList[0]);
-            truckTrips[bestTruck.number]++;
-            truckTotalDistance[bestTruck.number] += orderDistance;
-            truckLastFactory[bestTruck.number] = order.factory;
-            const currentRoad = truckTrips[bestTruck.number];
-            newDistributions.push({
-                orderId: order.id,
-                orderIndex: distribution.length + newDistributions.length + 1,
-                truck: bestTruck,
-                factory: order.factory,
-                material: order.material,
-                time: order.time || '',
-                road: currentRoad
-            });
-        }
-    }
+            
+            if (!undistributed.length) {
+                showToast('جميع الطلبات المتبقية مستثناة حالياً (مصنع الدرعية). انتظر فتح الطريق أو وزع يدوياً.', 'info');
+                return;
+            }
+            
+            showLoading(true);
 
-    if (newDistributions.length) {
-        distribution.push(...newDistributions);
-        await saveData();
-        await loadData();
-        
-        // إحصائيات نهائية
-        let tripsCount = {};
-        for (let d of distribution) if (d.truck) tripsCount[d.truck.number] = (tripsCount[d.truck.number] || 0) + 1;
-        let summary = trucks.map(t => `${t.number}: ${tripsCount[t.number] || 0} رحلة`).join(' | ');
-        showToast(`✅ تم توزيع ${newDistributions.length} طلب. التوزيع: ${summary}`, 'success');
-        localStorage.setItem('pendingOrdersCount', '0');
-    } else {
-        showToast('فشل التوزيع التلقائي', 'error');
-    }
-    showLoading(false);
-}
+            let truckTrips = {};
+            let truckTotalDistance = {};
+            let truckLastFactory = {};
+
+            trucks.forEach(t => {
+                truckTrips[t.number] = 0;
+                truckTotalDistance[t.number] = 0;
+                truckLastFactory[t.number] = null;
+            });
+
+            distribution.forEach(d => {
+                if (d.truck) {
+                    truckTrips[d.truck.number]++;
+                    const dist = getFactoryDistance(d.factory);
+                    truckTotalDistance[d.truck.number] += dist;
+                    truckLastFactory[d.truck.number] = d.factory;
+                }
+            });
+
+            let newDistributions = [];
+            let remainingOrders = [...undistributed];
+            let trucksList = [...trucks];
+
+            // خوارزمية Round Robin عادلة: الأقل رحلات أولاً، ثم الأقل مسافة مقطوعة
+            while (remainingOrders.length > 0) {
+                trucksList.sort((a,b) => {
+                    if (truckTrips[a.number] !== truckTrips[b.number])
+                        return truckTrips[a.number] - truckTrips[b.number];
+                    return truckTotalDistance[a.number] - truckTotalDistance[b.number];
+                });
+                
+                let assigned = false;
+                for (let t of trucksList) {
+                    if (truckLastFactory[t.number] === remainingOrders[0].factory) continue;
+                    const order = remainingOrders.shift();
+                    const orderDistance = getFactoryDistance(order.factory);
+                    truckTrips[t.number]++;
+                    truckTotalDistance[t.number] += orderDistance;
+                    truckLastFactory[t.number] = order.factory;
+                    const currentRoad = truckTrips[t.number];
+                    newDistributions.push({
+                        orderId: order.id,
+                        orderIndex: distribution.length + newDistributions.length + 1,
+                        truck: t,
+                        factory: order.factory,
+                        material: order.material,
+                        time: order.time || '',
+                        road: currentRoad
+                    });
+                    assigned = true;
+                    break;
+                }
+                if (!assigned && trucksList.length) {
+                    const order = remainingOrders.shift();
+                    const t = trucksList[0];
+                    const orderDistance = getFactoryDistance(order.factory);
+                    truckTrips[t.number]++;
+                    truckTotalDistance[t.number] += orderDistance;
+                    truckLastFactory[t.number] = order.factory;
+                    const currentRoad = truckTrips[t.number];
+                    newDistributions.push({
+                        orderId: order.id,
+                        orderIndex: distribution.length + newDistributions.length + 1,
+                        truck: t,
+                        factory: order.factory,
+                        material: order.material,
+                        time: order.time || '',
+                        road: currentRoad
+                    });
+                    assigned = true;
+                }
+                if (!assigned) break;
+            }
+
+            if (newDistributions.length) {
+                distribution.push(...newDistributions);
+                await saveData();
+                await loadData();
+                let tripsCount = {};
+                for (let d of distribution) if (d.truck) tripsCount[d.truck.number] = (tripsCount[d.truck.number] || 0) + 1;
+                let summary = trucks.slice(0,5).map(t => `${t.number}: ${tripsCount[t.number] || 0} رحلة`).join(' | ');
+                showToast(`✅ تم توزيع ${newDistributions.length} طلب. عينة: ${summary}`, 'success');
+                localStorage.setItem('pendingOrdersCount', '0');
+            } else {
+                showToast('فشل التوزيع التلقائي', 'error');
+            }
+            showLoading(false);
+        }
         // =================================================================
 
         async function resetDistribution() {
