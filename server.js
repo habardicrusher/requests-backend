@@ -334,80 +334,126 @@ app.delete('/api/users/:id', async (req, res) => {
 });
 
 // ==================== تقارير الميزان المحفوظة ====================
+// ==================== تقارير الميزان المحفوظة (نسخة محسّنة ومتينة) ====================
+
+// جلب جميع التقارير (قائمة)
 app.get('/api/scale-reports', async (req, res) => {
     try {
         const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
-        res.json(result.rows.map(r => ({ id: r.id, reportName: r.report_name, reportDate: r.report_date, createdAt: r.created_at })));
-    } catch (err) { res.status(500).json({ error: 'خطأ في جلب التقارير' }); }
+        // لا نحتاج لمعالجة حقل data هنا، فقط البيانات الأساسية
+        res.json(result.rows.map(r => ({
+            id: r.id,
+            reportName: r.report_name,
+            reportDate: r.report_date,
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        console.error('❌ خطأ في GET /api/scale-reports:', err);
+        res.status(500).json({ error: 'خطأ في جلب قائمة التقارير: ' + err.message });
+    }
 });
 
+// جلب تقرير محدد (مع التحقق من صحة البيانات)
 app.get('/api/scale-reports/:id', async (req, res) => {
     try {
         const id = parseInt(req.params.id);
-        if (isNaN(id)) return res.status(400).json({ error: 'معرّف غير صالح' });
+        if (isNaN(id)) {
+            return res.status(400).json({ error: 'معرّف التقرير غير صالح' });
+        }
         const result = await query('SELECT report_name, report_date, data, created_at FROM scale_reports WHERE id = $1', [id]);
-        if (!result.rows.length) return res.status(404).json({ error: 'غير موجود' });
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'التقرير غير موجود' });
+        }
         const row = result.rows[0];
         let reportData = row.data;
+        
+        // إذا كانت البيانات نصية، نحاول تحويلها إلى كائن
         if (typeof reportData === 'string') {
-            try { reportData = JSON.parse(reportData); } catch(e) { reportData = {}; }
+            try {
+                reportData = JSON.parse(reportData);
+            } catch (e) {
+                console.warn(`⚠️ بيانات التقرير ${id} غير صالحة (نص غير JSON)، سيتم استخدام كائن فارغ`);
+                reportData = {};
+            }
         }
-        res.json({ id, reportName: row.report_name, reportDate: row.report_date, data: reportData, createdAt: row.created_at });
-    } catch (err) { res.status(500).json({ error: 'خطأ في جلب التقرير' }); }
+        // إذا لم تكن data كائناً (مثلاً null أو undefined)
+        if (!reportData || typeof reportData !== 'object') {
+            reportData = {};
+        }
+        
+        res.json({
+            id: id,
+            reportName: row.report_name,
+            reportDate: row.report_date,
+            data: reportData,
+            createdAt: row.created_at
+        });
+    } catch (err) {
+        console.error(`❌ خطأ في GET /api/scale-reports/${req.params.id}:`, err);
+        res.status(500).json({ error: 'خطأ في جلب التقرير: ' + err.message });
+    }
 });
 
+// حفظ تقرير جديد (مع تأكيد صحة البيانات)
 app.post('/api/scale-reports', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin') {
+        return res.status(403).json({ error: 'غير مصرح: تحتاج صلاحيات مدير' });
+    }
     try {
         const { reportName, reportDate, data } = req.body;
-        if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
-        const dataJson = JSON.stringify(data);
-        await query('INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)', [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]);
+        if (!reportName || !data) {
+            return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
+        }
+        // التأكد من أن data هو كائن صالح قبل تخزينه
+        let safeData = data;
+        if (typeof safeData !== 'object') {
+            safeData = {};
+        }
+        const dataJson = JSON.stringify(safeData);
+        await query(
+            'INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)',
+            [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]
+        );
         res.status(201).json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'خطأ في حفظ التقرير' }); }
+    } catch (err) {
+        console.error('❌ خطأ في POST /api/scale-reports:', err);
+        res.status(500).json({ error: 'خطأ في حفظ التقرير: ' + err.message });
+    }
 });
 
+// تعديل اسم التقرير
 app.put('/api/scale-reports/:id', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin') {
+        return res.status(403).json({ error: 'غير مصرح' });
+    }
     try {
         const id = parseInt(req.params.id);
         const { reportName } = req.body;
-        if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
+        if (!reportName) {
+            return res.status(400).json({ error: 'اسم التقرير مطلوب' });
+        }
         await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'خطأ في تعديل التقرير' }); }
+    } catch (err) {
+        console.error(`❌ خطأ في PUT /api/scale-reports/${req.params.id}:`, err);
+        res.status(500).json({ error: 'خطأ في تعديل التقرير: ' + err.message });
+    }
 });
 
+// حذف تقرير
 app.delete('/api/scale-reports/:id', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin') {
+        return res.status(403).json({ error: 'غير مصرح' });
+    }
     try {
         const id = parseInt(req.params.id);
         await query('DELETE FROM scale_reports WHERE id = $1', [id]);
         res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'خطأ في حذف التقرير' }); }
+    } catch (err) {
+        console.error(`❌ خطأ في DELETE /api/scale-reports/${req.params.id}:`, err);
+        res.status(500).json({ error: 'خطأ في حذف التقرير: ' + err.message });
+    }
 });
-
-// ==================== بيانات الميزان الشهرية (الخام) ====================
-app.get('/api/scale/monthly/:year/:month', async (req, res) => {
-    try {
-        const year = parseInt(req.params.year);
-        const month = parseInt(req.params.month);
-        const result = await query('SELECT data FROM scale_data WHERE year = $1 AND month = $2', [year, month]);
-        res.json(result.rows.length ? result.rows[0].data : {});
-    } catch (err) { res.status(500).json({ error: 'خطأ في جلب بيانات الميزان' }); }
-});
-
-app.put('/api/scale/monthly/:year/:month', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    try {
-        const year = parseInt(req.params.year);
-        const month = parseInt(req.params.month);
-        const data = req.body;
-        await query(`INSERT INTO scale_data (year, month, data) VALUES ($1, $2, $3) ON CONFLICT (year, month) DO UPDATE SET data = $3, updated_at = NOW()`, [year, month, data]);
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'خطأ في حفظ بيانات الميزان' }); }
-});
-
 // ==================== تقارير المخالفات (السيارات التي لم تحقق رودين) ====================
 function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
     const truckTrips = new Map();
