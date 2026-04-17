@@ -18,7 +18,7 @@
         .btn-warning { background:#f093fb; color:#fff; }
         .card { background:rgba(255,255,255,0.05); border-radius:15px; padding:20px; margin-bottom:25px; }
         .form-row { display:flex; flex-wrap:wrap; gap:15px; align-items:flex-end; }
-        .form-group { flex:1; min-width:200px; display:flex; flex-direction:column; gap:5px; }
+        .form-group { flex:1; min-width:180px; display:flex; flex-direction:column; gap:5px; }
         .form-group label { font-size:0.85em; color:#a8b2d1; }
         .form-group input, .form-group select { padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; }
         table { width:100%; border-collapse:collapse; margin-top:20px; }
@@ -41,7 +41,7 @@
     <div class="loading" id="loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
     <div class="toast-container" id="toastContainer"></div>
     <div class="container">
-        <div class="header"><h1>🏭 إدارة المصانع والمواقع</h1>
+        <div class="header"><h1>🏭 إدارة المصانع والمسافات</h1>
             <div style="position:absolute; top:20px; left:20px;"><button onclick="logout()" style="background:linear-gradient(135deg,#f5576c,#eb3349); border:none; padding:8px 20px; border-radius:25px; color:white; font-weight:bold; cursor:pointer;">🚪 تسجيل الخروج</button></div>
         </div>
         <div class="nav-links" id="navLinks"></div>
@@ -49,8 +49,9 @@
         <div class="card">
             <h3>➕ إضافة مصنع جديد</h3>
             <div class="form-row">
-                <div class="form-group"><label>اسم المصنع</label><input type="text" id="factoryName"></div>
-                <div class="form-group"><label>الموقع</label>
+                <div class="form-group"><label>اسم المصنع</label><input type="text" id="factoryName" placeholder="مثال: مصنع الفهد"></div>
+                <div class="form-group"><label>المسافة (كم)</label><input type="number" id="factoryDistance" step="0.01" placeholder="المسافة الكلية ذهاب وعودة"></div>
+                <div class="form-group"><label>الموقع (اختياري)</label>
                     <select id="factoryLocation">
                         <option value="الرياض">الرياض</option>
                         <option value="الدمام">الدمام</option>
@@ -63,9 +64,9 @@
         </div>
 
         <div class="card">
-            <h3>📋 قائمة المصانع</h3>
+            <h3>📋 قائمة المصانع والمسافات</h3>
             <table id="factoriesTable">
-                <thead><tr><th>#</th><th>اسم المصنع</th><th>الموقع</th><th>إجراءات</th></tr></thead>
+                <thead><tr><th>#</th><th>اسم المصنع</th><th>المسافة (كم)</th><th>الموقع</th><th>إجراءات</th></tr></thead>
                 <tbody id="factoriesBody"></tbody>
             </table>
         </div>
@@ -76,6 +77,7 @@
             <h3>✏️ تعديل المصنع</h3>
             <input type="hidden" id="editFactoryIndex">
             <div class="form-group"><label>اسم المصنع</label><input type="text" id="editFactoryName"></div>
+            <div class="form-group"><label>المسافة (كم)</label><input type="number" id="editFactoryDistance" step="0.01"></div>
             <div class="form-group"><label>الموقع</label>
                 <select id="editFactoryLocation">
                     <option value="الرياض">الرياض</option>
@@ -92,6 +94,31 @@
         const API_BASE = '/api';
         let factories = [];
 
+        // ==================== قائمة المصانع الافتراضية (مع المسافات) ====================
+        const DEFAULT_FACTORIES = [
+            { name: "مصنع الفهد", distance: 337.99, location: "الرياض" },
+            { name: "مصنع قوة معمارية", distance: 339.87, location: "الدمام" },
+            { name: "مصنع سارمكس النظيم", distance: 352.64, location: "الرياض" },
+            { name: "مصنع القيشان 3", distance: 396.22, location: "الدمام" },
+            { name: "مصنع القيشان 1", distance: 396.22, location: "الدمام" },
+            { name: "شركة الحارث للمنتجات الاسمنيه حي المنار", distance: 401.37, location: "الدمام" },
+            { name: "شركة برينسا للخرسانة الجاهزه", distance: 403.21, location: "الدمام" },
+            { name: "مصنع الاحجار الشرقية", distance: 416.11, location: "الدمام" },
+            { name: "شركة ابتك للخرسانة الجاهزه", distance: 418.11, location: "الدمام" },
+            { name: "شركةالحارث للمنتجات الاسمنتية", distance: 420.4, location: "الدمام" },
+            { name: "مصنع باسل أبو الرب وشريكه", distance: 420.6, location: "الدمام" },
+            { name: "شركة عبر الخليج", distance: 427.48, location: "الرياض" },
+            { name: "مصنع المعجل", distance: 431.01, location: "الدمام" },
+            { name: "مصنع نبراس2", distance: 439.61, location: "الدمام" },
+            { name: "مصنع دعم وحلول الدرعية", distance: 441.05, location: "الرياض" },
+            { name: "مصنع نبراس الخليج", distance: 448.99, location: "الدمام" },
+            { name: "الحارث العزيزية", distance: 475.49, location: "الدمام" },
+            { name: "انشاءات دبي", distance: 522.92, location: "الدمام" },
+            { name: "الشركة الصينية", distance: 605.51, location: "الجبيل" },
+            { name: "شركة اعمار", distance: 662.14, location: "الدمام" }
+        ];
+        // ========================================================================
+
         async function apiCall(endpoint, method='GET', data=null) {
             const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'include' };
             if(data && (method==='POST'||method==='PUT')) opts.body = JSON.stringify(data);
@@ -105,20 +132,38 @@
             showLoading(true);
             try {
                 const settings = await apiCall('/settings');
-                factories = settings.factories || [];
+                // إذا لم توجد مصانع أو القائمة فارغة، نستخدم القائمة الافتراضية
+                if (!settings.factories || settings.factories.length === 0) {
+                    factories = [...DEFAULT_FACTORIES];
+                    await saveFactories(); // حفظها في الخادم
+                } else {
+                    // التأكد من أن كل مصنع يحتوي على حقل distance (للتوافق مع القديم)
+                    factories = settings.factories.map(f => ({
+                        name: f.name,
+                        distance: f.distance || 150,
+                        location: f.location || 'أخرى'
+                    }));
+                }
                 renderFactoriesTable();
-            } catch(e) { showToast('خطأ في تحميل البيانات','error'); }
+            } catch(e) { 
+                console.error(e);
+                showToast('خطأ في تحميل البيانات','error');
+                // في حالة فشل الاتصال، نستخدم القائمة الافتراضية محلياً
+                factories = [...DEFAULT_FACTORIES];
+                renderFactoriesTable();
+            }
             showLoading(false);
         }
 
         function renderFactoriesTable() {
             const tbody = document.getElementById('factoriesBody');
-            if(!factories.length) { tbody.innerHTML='<tr><td colspan="4">لا توجد مصانع</td></tr>'; return; }
+            if(!factories.length) { tbody.innerHTML='<tr><td colspan="5">لا توجد مصانع</td></tr>'; return; }
             tbody.innerHTML = factories.map((f, idx) => `
                 <tr>
                     <td>${idx+1}</td>
                     <td>${escapeHtml(f.name)}</td>
-                    <td>${escapeHtml(f.location || 'الرياض')}</td>
+                    <td>${f.distance ? f.distance.toFixed(2) : '—'}</td>
+                    <td>${escapeHtml(f.location || '—')}</td>
                     <td>
                         <button class="btn btn-warning" onclick="openEditModal(${idx})">✏️ تعديل</button>
                         <button class="btn btn-danger" onclick="deleteFactory(${idx})">🗑️ حذف</button>
@@ -129,11 +174,14 @@
 
         async function addFactory() {
             const name = document.getElementById('factoryName').value.trim();
+            const distance = parseFloat(document.getElementById('factoryDistance').value);
             const location = document.getElementById('factoryLocation').value;
             if(!name) { showToast('أدخل اسم المصنع','error'); return; }
-            factories.push({ name, location });
+            if(isNaN(distance) || distance <= 0) { showToast('أدخل مسافة صحيحة (أكبر من 0)','error'); return; }
+            factories.push({ name, distance, location });
             await saveFactories();
             document.getElementById('factoryName').value = '';
+            document.getElementById('factoryDistance').value = '';
             renderFactoriesTable();
             showToast('✅ تم إضافة المصنع','success');
         }
@@ -142,16 +190,19 @@
             const f = factories[idx];
             document.getElementById('editFactoryIndex').value = idx;
             document.getElementById('editFactoryName').value = f.name;
-            document.getElementById('editFactoryLocation').value = f.location || 'الرياض';
+            document.getElementById('editFactoryDistance').value = f.distance || '';
+            document.getElementById('editFactoryLocation').value = f.location || 'أخرى';
             document.getElementById('editFactoryModal').classList.add('active');
         }
 
         async function saveFactoryEdit() {
             const idx = parseInt(document.getElementById('editFactoryIndex').value);
             const name = document.getElementById('editFactoryName').value.trim();
+            const distance = parseFloat(document.getElementById('editFactoryDistance').value);
             const location = document.getElementById('editFactoryLocation').value;
             if(!name) { showToast('أدخل اسم المصنع','error'); return; }
-            factories[idx] = { name, location };
+            if(isNaN(distance) || distance <= 0) { showToast('أدخل مسافة صحيحة','error'); return; }
+            factories[idx] = { name, distance, location };
             await saveFactories();
             renderFactoriesTable();
             closeModal();
@@ -175,7 +226,10 @@
                     trucks: currentSettings.trucks || []
                 };
                 await apiCall('/settings', 'PUT', newSettings);
-            } catch(e) { showToast('خطأ في حفظ البيانات','error'); }
+            } catch(e) { 
+                console.error(e);
+                showToast('خطأ في حفظ البيانات','error'); 
+            }
         }
 
         function closeModal() { document.getElementById('editFactoryModal').classList.remove('active'); }
@@ -183,9 +237,8 @@
         function showToast(msg,type){ const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
         function showLoading(s){ document.getElementById('loading').classList.toggle('active',s); }
         function logout(){ if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
-        function loadNav(){ fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{ if(data.user) document.getElementById('navLinks').innerHTML=`<a href="index.html" class="nav-link">📊 الرئيسية</a><a href="orders.html" class="nav-link">📝 الطلبات</a><a href="distribution.html" class="nav-link">🚚 التوزيع</a><a href="trucks.html" class="nav-link">🚛 السيارات</a><a href="products.html" class="nav-link">📦 أنواع البحص</a><a href="factories.html" class="nav-link active">🏭 المصانع</a><a href="reports.html" class="nav-link">📊 التقارير</a><a href="settings.html" class="nav-link">⚙️ الإعدادات</a><a href="restrictions.html" class="nav-link">⛔ الحظر</a><a href="users.html" class="nav-link">👥 المستخدمين</a><a href="logs.html" class="nav-link">📜 السجلات</a>`; else window.location.href='/login.html'; }).catch(()=>window.location.href='/login.html'); }
-        document.addEventListener('DOMContentLoaded', () => { loadNav(); loadFactories(); });
-       function loadNav() {
+        
+        function loadNav() {
             fetch('/api/me',{credentials:'include'}).then(r=>r.json()).then(data=>{
                 if(data.user) {
                     document.getElementById('navLinks').innerHTML = `
@@ -194,10 +247,11 @@
                         <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
                         <a href="trucks.html" class="nav-link">🚛 السيارات</a>
                         <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                        <a href="factories.html" class="nav-link active">🏭 المصانع</a>
                         <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
                         <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
-                        <a href="trucks-failed.html" class="nav-link active">⚠️ السيارات المخالفة</a>
+                        <a href="trucks-failed.html" class="nav-link">⚠️ السيارات المخالفة</a>
+                        <a href="distribution-quality.html" class="nav-link">📈 جودة التوزيع</a>
                         <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
                         <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
                         <a href="users.html" class="nav-link">👥 المستخدمين</a>
@@ -207,6 +261,7 @@
             }).catch(()=>window.location.href='/login.html');
         }
 
+        document.addEventListener('DOMContentLoaded', () => { loadNav(); loadFactories(); });
     </script>
     <script src="navbar.js"></script>
 </body>
