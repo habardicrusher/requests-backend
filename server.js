@@ -25,8 +25,8 @@ pool.connect((err, client, release) => {
     }
 });
 
-// ==================== إعداد الجلسة (لتعمل على Render) ====================
-app.set('trust proxy', 1); // ضروري لـ Render (خلف proxy)
+// ==================== إعداد الجلسة ====================
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use(session({
@@ -34,9 +34,9 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        maxAge: 24 * 60 * 60 * 1000, // 24 ساعة
+        maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production', // true في الإنتاج (HTTPS)
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax'
     }
 }));
@@ -57,17 +57,16 @@ async function query(text, params) {
     }
 }
 
-// ==================== إنشاء الجداول ====================
+// ==================== إنشاء الجداول وإصلاحها ====================
 async function initTables() {
     try {
-        // جدول الإعدادات
+        // جداول أخرى (settings, products, scale_data, day_data, users, truck_violations)
         await query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value JSONB NOT NULL
             )
         `);
-        // جدول المنتجات
         await query(`
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -75,7 +74,6 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        // جدول بيانات الميزان الشهرية
         await query(`
             CREATE TABLE IF NOT EXISTS scale_data (
                 id SERIAL PRIMARY KEY,
@@ -86,24 +84,6 @@ async function initTables() {
                 UNIQUE(year, month)
             )
         `);
-        // جدول التقارير المحفوظة (الميزان) - مع إصلاح id
-        await query(`
-            CREATE TABLE IF NOT EXISTS scale_reports (
-                id SERIAL PRIMARY KEY,
-                report_name TEXT NOT NULL,
-                report_date TEXT NOT NULL,
-                data JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        // إصلاح إذا كان هناك عمود قديم باسم report_id
-        try {
-            await query(`ALTER TABLE scale_reports RENAME COLUMN report_id TO id`);
-            await query(`ALTER TABLE scale_reports ALTER COLUMN id SET DEFAULT nextval('scale_reports_id_seq')`);
-            console.log('✅ تم إصلاح جدول scale_reports (إعادة تسمية العمود id)');
-        } catch(e) { /* العمود غير موجود أو لا حاجة */ }
-
-        // جدول بيانات اليوم (الطلبات والتوزيع)
         await query(`
             CREATE TABLE IF NOT EXISTS day_data (
                 date DATE PRIMARY KEY,
@@ -111,7 +91,6 @@ async function initTables() {
                 distribution JSONB NOT NULL
             )
         `);
-        // جدول المستخدمين
         await query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -122,7 +101,6 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        // جدول أسباب المخالفات المحفوظة
         await query(`
             CREATE TABLE IF NOT EXISTS truck_violations (
                 id SERIAL PRIMARY KEY,
@@ -136,8 +114,76 @@ async function initTables() {
                 UNIQUE(date, truck_number)
             )
         `);
-        
-        // إضافة المستخدمين الافتراضيين (مع دعم حالة الأحرف)
+
+        // ========== إصلاح جدول scale_reports ==========
+        // 1. التحقق من وجود الجدول
+        const tableExists = await query(`
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'scale_reports'
+            )
+        `);
+        if (!tableExists.rows[0].exists) {
+            // إنشاء الجدول من الصفر
+            await query(`
+                CREATE TABLE scale_reports (
+                    id SERIAL PRIMARY KEY,
+                    report_name TEXT NOT NULL,
+                    report_date TEXT NOT NULL,
+                    data JSONB NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            console.log('✅ تم إنشاء جدول scale_reports');
+        } else {
+            // الجدول موجود، نحتاج للتأكد من وجود عمود id من نوع SERIAL
+            // التحقق من وجود عمود report_id (القديم)
+            const colCheck = await query(`
+                SELECT column_name, data_type, is_identity 
+                FROM information_schema.columns 
+                WHERE table_name = 'scale_reports' AND column_name IN ('id', 'report_id')
+            `);
+            const columns = colCheck.rows;
+            const hasReportId = columns.some(c => c.column_name === 'report_id');
+            const hasId = columns.some(c => c.column_name === 'id');
+            
+            if (hasReportId && !hasId) {
+                // يوجد عمود report_id (قديم) – نقوم بتحويله إلى id SERIAL
+                console.log('⚠️ تم اكتشاف عمود report_id قديم، جاري الترقية إلى id SERIAL...');
+                // حذف القيد الأساسي إذا كان موجوداً
+                await query(`ALTER TABLE scale_reports DROP CONSTRAINT IF EXISTS scale_reports_pkey`);
+                // إعادة تسمية العمود
+                await query(`ALTER TABLE scale_reports RENAME COLUMN report_id TO id`);
+                // جعله من نوع SERIAL (ينشئ تسلسلاً تلقائياً)
+                await query(`CREATE SEQUENCE IF NOT EXISTS scale_reports_id_seq OWNED BY scale_reports.id`);
+                await query(`ALTER TABLE scale_reports ALTER COLUMN id SET DEFAULT nextval('scale_reports_id_seq')`);
+                await query(`SELECT setval('scale_reports_id_seq', COALESCE((SELECT MAX(id) FROM scale_reports), 0))`);
+                // إعادة تعيين القيد الأساسي
+                await query(`ALTER TABLE scale_reports ADD PRIMARY KEY (id)`);
+                console.log('✅ تم ترقية عمود report_id إلى id SERIAL');
+            } else if (!hasId) {
+                // لا يوجد لا id ولا report_id – نضيف id SERIAL
+                console.log('⚠️ لا يوجد عمود id، جاري إضافته...');
+                await query(`ALTER TABLE scale_reports ADD COLUMN id SERIAL PRIMARY KEY`);
+                console.log('✅ تم إضافة عمود id SERIAL');
+            } else {
+                // يوجد عمود id – نتأكد أنه SERIAL
+                const idCol = columns.find(c => c.column_name === 'id');
+                if (idCol && idCol.data_type !== 'integer' && !idCol.is_identity) {
+                    console.log('⚠️ عمود id ليس من نوع SERIAL، جاري إصلاحه...');
+                    await query(`ALTER TABLE scale_reports DROP CONSTRAINT IF EXISTS scale_reports_pkey`);
+                    await query(`ALTER TABLE scale_reports ALTER COLUMN id SET DEFAULT nextval('scale_reports_id_seq')`);
+                    await query(`ALTER TABLE scale_reports ADD PRIMARY KEY (id)`);
+                }
+            }
+            // التأكد من وجود الأعمدة الأخرى
+            await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS report_name TEXT`);
+            await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS report_date TEXT`);
+            await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS data JSONB`);
+            await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
+        }
+
+        // ========== المستخدمون الافتراضيون ==========
         const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
         if (adminCheck.rows.length === 0) {
             await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', 
@@ -156,7 +202,7 @@ async function initTables() {
                 ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد']);
             console.log('✅ تم إنشاء المستخدم client (client/client)');
         }
-        
+
         console.log('✅ جميع الجداول جاهزة');
     } catch (err) {
         console.error('❌ فشل إنشاء الجداول:', err.message);
@@ -182,27 +228,23 @@ async function getDayData(date) {
     else return { orders: [], distribution: [] };
 }
 
-// ==================== Endpoints العامة ====================
+// ==================== Endpoints ====================
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
-// تسجيل الدخول (مع دعم حالة الأحرف)
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'مطلوب' });
-        
         const result = await query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
         const user = result.rows[0];
         if (!user || !bcrypt.compareSync(password, user.password)) {
             return res.status(401).json({ error: 'بيانات غير صحيحة' });
         }
-        
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.role = user.role;
-        
         req.session.save((err) => {
             if (err) {
                 console.error('خطأ في حفظ الجلسة:', err);
@@ -232,7 +274,7 @@ app.get('/api/me', async (req, res) => {
     }
 });
 
-// ==================== الإعدادات ====================
+// ==================== الإعدادات والمنتجات ====================
 app.get('/api/settings', async (req, res) => {
     try {
         const settings = await loadSettings();
@@ -252,7 +294,6 @@ app.put('/api/settings', async (req, res) => {
     }
 });
 
-// ==================== المنتجات ====================
 app.get('/api/products', async (req, res) => {
     try {
         const result = await query('SELECT name FROM products ORDER BY id');
@@ -314,7 +355,6 @@ app.put('/api/day/:date', async (req, res) => {
     }
 });
 
-// ==================== نطاق زمني ====================
 app.get('/api/range/:startDate/:endDate', async (req, res) => {
     const { startDate, endDate } = req.params;
     try {
@@ -389,7 +429,7 @@ app.delete('/api/users/:id', async (req, res) => {
     }
 });
 
-// ==================== تقارير الميزان المحفوظة (مع صلاحية admin و user) ====================
+// ==================== تقارير الميزان المحفوظة (مع إصلاح عمود id) ====================
 app.get('/api/scale-reports', async (req, res) => {
     try {
         const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
@@ -431,7 +471,6 @@ app.get('/api/scale-reports/:id', async (req, res) => {
 });
 
 app.post('/api/scale-reports', async (req, res) => {
-    // السماح لكل من admin و user (وليس client)
     if (req.session.role !== 'admin' && req.session.role !== 'user') {
         return res.status(403).json({ error: 'غير مصرح: تحتاج صلاحيات مدير أو مستخدم' });
     }
@@ -501,7 +540,7 @@ app.put('/api/scale/monthly/:year/:month', async (req, res) => {
     }
 });
 
-// ==================== تقارير المخالفات (السيارات التي عملت برحلة واحدة فقط) ====================
+// ==================== تقارير المخالفات ====================
 function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
     const truckTrips = new Map();
     distribution.forEach(d => {
