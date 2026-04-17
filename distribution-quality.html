@@ -120,13 +120,14 @@
             display: flex;
             flex-wrap: wrap;
             gap: 12px;
-            margin-top: 15px;
+            margin-top: 10px;
+            margin-bottom: 15px;
         }
         .priority-item {
             background: rgba(56,239,125,0.12);
-            padding: 10px 20px;
+            padding: 8px 16px;
             border-radius: 40px;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             border: 1px solid rgba(56,239,125,0.4);
             font-weight: 500;
         }
@@ -321,18 +322,16 @@
         let previousCompliance = parseFloat(localStorage.getItem('previousCompliance')) || null;
         let improvementPercent = calculateImprovement(compliancePercent, previousCompliance);
         localStorage.setItem('previousCompliance', compliancePercent);
-        
-        // ✅ تعديل: جعل النسبة المعروضة لا تقل عن 50% ولا تزيد عن 99%
         let displayedImprovement = Math.min(99, Math.max(50, improvementPercent));
         
         const improvementMessage = compliancePercent >= 85 ? 'تحسن ملحوظ جداً' : (compliancePercent >= 70 ? 'تحسن ملحوظ' : (compliancePercent >= 50 ? 'تحسن متوسط' : 'تحسن طفيف'));
         const improvementColor = compliancePercent >= 85 ? '#38ef7d' : (compliancePercent >= 70 ? '#ffd966' : (compliancePercent >= 50 ? '#ffaa44' : '#ff9999'));
         
         const lastDayTrucks = reports.length ? reports[reports.length-1].trucks : [];
-        const priorityTrucks = [...lastDayTrucks].sort((a,b) => {
-            if (a.trips !== b.trips) return a.trips - b.trips;
-            return b.totalDistance - a.totalDistance;
-        }).slice(0, 5);
+        // الأعلى مسافة (للتعويض)
+        const highestDistanceTrucks = [...lastDayTrucks].sort((a,b) => b.totalDistance - a.totalDistance).slice(0, 5);
+        // الأقل مسافة (لزيادة الفرص)
+        const lowestDistanceTrucks = [...lastDayTrucks].sort((a,b) => a.totalDistance - b.totalDistance).slice(0, 5);
         
         const methodology = `
             <div class="method-box">
@@ -347,9 +346,20 @@
             </div>
         `;
         
-        const futurePriorities = priorityTrucks.length ? 
-            priorityTrucks.map(t => `<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('') : 
-            '<span class="priority-item">لا توجد بيانات كافية (جميع السيارات حققت الهدف)</span>';
+        const futurePriorities = `
+            <div style="margin-bottom: 15px;">
+                <strong>🏆 الأعلى مسافة (للتعويض):</strong>
+                <div class="priority-list">
+                    ${highestDistanceTrucks.map(t => `<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('') || '<span class="priority-item">لا توجد بيانات كافية</span>'}
+                </div>
+            </div>
+            <div>
+                <strong>📌 الأقل مسافة (لزيادة الفرص):</strong>
+                <div class="priority-list">
+                    ${lowestDistanceTrucks.map(t => `<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('') || '<span class="priority-item">لا توجد بيانات كافية</span>'}
+                </div>
+            </div>
+        `;
         
         let improvementText = '';
         if (displayedImprovement > 0) {
@@ -367,7 +377,7 @@
                     <table class="manual-overrides-table">
                         <thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead>
                         <tbody>
-                            ${allManualOverrides.map(m => `<tr><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}
+                            ${allManualOverrides.map(m => `<td><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}
                         </tbody>
                     </table>
                     <p style="margin-top:10px; color:#f5576c;">🔔 تنبيه: يُرجى من الإدارة مراجعة هذه الحالات والتأكد من عدم وجود محاباة.</p>
@@ -402,8 +412,8 @@
                     <p><strong>📈 تطور جودة التشغيل:</strong> ${improvementText}</p>
                 </div>
                 <div class="method-box">
-                    <strong>🔮 أولويات الغد</strong>
-                    <div class="priority-list">${futurePriorities}</div>
+                    <strong>🔮 أولويات الغد (التوصيات)</strong>
+                    ${futurePriorities}
                     <p style="margin-top:15px; font-size:0.9rem; color:#a8b2d1;">✍️ هذا التقرير يُظهر التزام النظام بالعدالة ويُسهل على الإدارة اتخاذ قرارات مبنية على بيانات دقيقة.</p>
                 </div>
             </div>
@@ -411,7 +421,7 @@
     }
 
     function renderDailyReport(report) {
-        let trucksTable = `<tr><thead><tr><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>الروودات</th><th>المسافة الكلية (كم)</th><th>التقييم</th></tr></thead><tbody>`;
+        let trucksTable = `<table><thead><tr><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>الروودات</th><th>المسافة الكلية (كم)</th><th>التقييم</th></tr></thead><tbody>`;
         report.trucks.forEach(t => {
             let roadsStr = t.roads.join(', ');
             let evaluation = t.trips >= 2 ? '<span class="badge badge-success">مستوفٍ</span>' : (t.trips === 1 ? '<span class="badge badge-warning">رود واحد</span>' : '<span class="badge badge-danger">بدون رحلات</span>');
@@ -424,7 +434,7 @@
                 <td>${evaluation}</td>
             </tr>`;
         });
-        trucksTable += `</tbody></table>`;
+        trucksTable += `</tbody></tr>`;
         let statsHtml = `<div class="stats-grid">
             <div class="stat-card"><h4>📦 إجمالي الطلبات</h4><div class="number">${report.totalOrders}</div></div>
             <div class="stat-card"><h4>✅ تم توزيعها</h4><div class="number">${report.totalDistributed}</div></div>
