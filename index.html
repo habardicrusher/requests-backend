@@ -206,7 +206,6 @@
             window.location.href = 'distribution.html';
         }
 
-        // تحديث البيانات في الخلفية (بدون تأثير على واجهة المستخدم)
         async function silentUpdate() {
             try {
                 const [settings, dayData] = await Promise.all([
@@ -217,7 +216,6 @@
                 const distribution = dayData.distribution || [];
                 const trucks = settings.trucks || [];
 
-                // حساب التوزيعات الفريدة
                 const distributedMap = new Map();
                 distribution.forEach(d => { if (!distributedMap.has(d.orderId)) distributedMap.set(d.orderId, d); });
                 const uniqueDistributions = Array.from(distributedMap.values());
@@ -227,13 +225,11 @@
                 const target = trucks.length * 2;
                 const percentage = target > 0 ? Math.min(100, Math.round((distributedCount / target) * 100)) : 0;
 
-                // تحديث العناصر في الصفحة
                 document.getElementById('totalOrders').textContent = orders.length;
                 document.getElementById('totalTrips').textContent = distributedCount;
                 document.getElementById('activeTrucks').textContent = activeTrucksCount;
                 document.getElementById('completedPercentage').textContent = percentage + '%';
 
-                // إحصائيات للرسوم البيانية
                 const factoryStats = {};
                 orders.forEach(order => { const f = order.factory || 'غير محدد'; factoryStats[f] = (factoryStats[f] || 0) + 1; });
                 const materialStats = {};
@@ -252,7 +248,6 @@
                 if (!recent.length) tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">لا توجد طلبات اليوم<\/td><\/tr>';
                 else tbody.innerHTML = recent.map((o, i) => `<tr><td>${i+1}<\/td><td>${o.factory}<\/td><td>${o.material}<\/td><td>${o.time}<\/td><td>${o.timestamp}<\/td><\/tr>`).join('');
 
-                // التحقق من الطلبات الجديدة (لإظهار الإشعارات)
                 if (orders.length > lastOrderCount && lastOrderCount > 0) {
                     const newOrdersCount = orders.length - lastOrderCount;
                     playBeep();
@@ -264,19 +259,15 @@
             } catch(e) { console.error('خطأ في التحديث الخلفي:', e); }
         }
 
-        // التحديث اليدوي (يظهر رسالة)
         async function manualCheckOrders() {
             showToast('جاري تحديث البيانات...', 'info');
             await silentUpdate();
             showToast('تم تحديث البيانات بنجاح', 'success');
         }
 
-        // بدء التحديث التلقائي في الخلفية (بدون إزعاج)
         function startBackgroundPolling() {
             if (pollingInterval) clearInterval(pollingInterval);
-            // تحديث فوري أول مرة
             setTimeout(() => silentUpdate(), 1000);
-            // ثم كل 10 ثوانٍ في الخلفية
             pollingInterval = setInterval(() => {
                 silentUpdate();
             }, 10000);
@@ -362,6 +353,8 @@
                         <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
                         <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
                         <a href="trucks-failed.html" class="nav-link">⚠️ السيارات المخالفة</a>
+                        <a href="trucks-failed-report.html" class="nav-link">📊 تقرير المخالفات</a>
+                        <a href="distribution-quality.html" class="nav-link">📈 جودة التوزيع</a>
                         <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
                         <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
                         <a href="users.html" class="nav-link">👥 المستخدمين</a>
@@ -382,10 +375,10 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadNav();
             showLoading(true);
-            await silentUpdate(); // التحميل الأولي
+            await silentUpdate();
             showLoading(false);
-            startBackgroundPolling(); // بدء التحديث الخلفي
+            startBackgroundPolling();
         });
     </script>
-    </body>
+</body>
 </html>
