@@ -28,7 +28,7 @@
                 } else return;
             }
 
-            const allLinks = [
+            const commonLinks = [
                 { href: 'index.html', text: '📊 الرئيسية' },
                 { href: 'orders.html', text: '📝 الطلبات' },
                 { href: 'distribution.html', text: '🚚 التوزيع' },
@@ -44,17 +44,16 @@
                 { href: 'restrictions.html', text: '⛔ الحظر' }
             ];
 
-            // ✅ روابط خاصة بالمدير فقط
-            const adminLinks = [
+            const adminOnlyLinks = [
                 { href: 'users.html', text: '👥 المستخدمين' },
                 { href: 'logs.html', text: '📜 السجلات' }
             ];
 
             let linksToShow = [];
             if (isAdmin) {
-                linksToShow = [...allLinks, ...adminLinks];
+                linksToShow = [...commonLinks, ...adminOnlyLinks];
             } else if (isUser) {
-                linksToShow = [...allLinks]; // المستخدم العادي لا يرى users ولا logs
+                linksToShow = [...commonLinks];
             } else if (isClient) {
                 linksToShow = [{ href: 'orders.html', text: '📝 الطلبات' }];
             }

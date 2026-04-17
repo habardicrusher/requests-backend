@@ -86,9 +86,6 @@
             align-items: center;
             gap: 8px;
         }
-        .password-wrapper input {
-            flex: 1;
-        }
         .toggle-password {
             background: #2d3e50;
             border: none;
@@ -97,22 +94,7 @@
             font-size: 0.9rem;
             padding: 8px 12px;
             border-radius: 6px;
-            transition: 0.2s;
             white-space: nowrap;
-        }
-        .toggle-password:hover {
-            background: #667eea;
-        }
-        .permissions-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px,1fr));
-            gap: 10px;
-            margin-top: 10px;
-        }
-        .permission-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
         table {
             width: 100%;
@@ -140,7 +122,6 @@
         }
         .toast-success { background: #11998e; }
         .toast-error { background: #eb3349; }
-        .toast-warning { background: #f093fb; }
         .loading {
             position: fixed;
             top:0; left:0;
@@ -185,28 +166,6 @@
             font-size: 1.2em;
         }
         .hidden { display: none; }
-        .file-upload {
-            margin-top: 15px;
-            padding: 15px;
-            background: rgba(255,255,255,0.03);
-            border-radius: 12px;
-            border: 1px dashed #667eea;
-        }
-        .sample-csv {
-            background: rgba(0,0,0,0.3);
-            padding: 10px;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 0.8rem;
-            margin-top: 10px;
-            overflow-x: auto;
-        }
-        .delimiter-select {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 15px;
-            align-items: center;
-        }
     </style>
 </head>
 <body>
@@ -214,7 +173,7 @@
 <div class="toast-container" id="toastContainer"></div>
 <div class="container">
     <div class="header">
-        <h1>👥 إدارة المستخدمين والصلاحيات</h1>
+        <h1>👥 إدارة المستخدمين</h1>
         <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
             <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
         </div>
@@ -234,7 +193,7 @@
                     <label>كلمة المرور</label>
                     <div class="password-wrapper">
                         <input type="password" id="newPassword">
-                        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newPassword', this)">👁️ إظهار</button>
+                        <button type="button" class="toggle-password" onclick="togglePassword('newPassword', this)">👁️ إظهار</button>
                     </div>
                 </div>
                 <div class="form-group">
@@ -246,39 +205,11 @@
                     </select>
                 </div>
                 <div class="form-group" id="factoryGroup" style="display:none;">
-                    <label>المصنع (للعملاء)</label>
+                    <label>المصنع</label>
                     <select id="newFactory"></select>
                 </div>
                 <div class="form-group">
                     <button class="btn btn-success" onclick="addUser()">➕ إضافة</button>
-                </div>
-            </div>
-            <div class="permissions-grid" id="permissionsGrid"></div>
-        </div>
-
-        <div class="card">
-            <h3>📂 استيراد مستخدمين من Excel / CSV</h3>
-            <p style="color: #a8b2d1; margin-bottom: 10px;">الملف يجب أن يحتوي على الأعمدة التالية (الأسماء مرنة):</p>
-            <ul style="color:#a8b2d1; margin-right: 20px; margin-bottom: 15px;">
-                <li><strong>username</strong> أو <strong>Users</strong> أو <strong>اسم المستخدم</strong></li>
-                <li><strong>password</strong> أو <strong>Password</strong> أو <strong>كلمة المرور</strong></li>
-                <li><strong>role</strong> أو <strong>الدور</strong> (اختياري، افتراضي: user)</li>
-                <li><strong>factory</strong> أو <strong>المصنع</strong> (اختياري، للعملاء فقط)</li>
-            </ul>
-            <div class="delimiter-select">
-                <span>فاصل CSV: </span>
-                <label><input type="radio" name="csvDelimiter" value=","> فاصلة (,) </label>
-                <label><input type="radio" name="csvDelimiter" value=";" checked> فاصلة منقوطة (;) </label>
-                <label><input type="radio" name="csvDelimiter" value="tab"> تبويب (Tab) </label>
-            </div>
-            <div class="file-upload">
-                <input type="file" id="uploadExcel" accept=".xlsx, .csv, .xls" style="color: #fff; margin-bottom: 10px;">
-                <button class="btn btn-info" onclick="importUsersFromFile()">📤 رفع وإضافة المستخدمين</button>
-                <div class="sample-csv">
-                    📄 مثال لمحتوى ملف CSV (بفاصلة منقوطة):<br>
-                    <code>username;password;role;factory<br>
-                    testuser;123456;user;<br>
-                    scccl_client;SCCCL@2025;client;SCCCL</code>
                 </div>
             </div>
         </div>
@@ -295,59 +226,42 @@
     </div>
 </div>
 
-<!-- مودال إعادة تعيين كلمة المرور -->
-<div class="modal" id="resetPasswordModal">
-    <div class="modal-content">
-        <h3>🔑 إعادة تعيين كلمة المرور</h3>
-        <input type="hidden" id="resetUserId">
-        <div class="form-group">
-            <label>المستخدم: <span id="resetUsername"></span></label>
-        </div>
-        <div class="form-group">
-            <label>كلمة المرور الجديدة</label>
-            <div class="password-wrapper">
-                <input type="password" id="resetPassword">
-                <button type="button" class="toggle-password" onclick="togglePasswordVisibility('resetPassword', this)">👁️ إظهار</button>
-            </div>
-        </div>
-        <div style="margin-top:20px;">
-            <button class="btn btn-danger" onclick="closeResetModal()">إلغاء</button>
-            <button class="btn btn-success" onclick="saveResetPassword()">حفظ كلمة المرور</button>
-        </div>
-    </div>
-</div>
-
 <!-- مودال تعديل المستخدم -->
 <div class="modal" id="editUserModal">
     <div class="modal-content">
-        <h3>✏️ تعديل صلاحيات المستخدم</h3>
+        <h3>✏️ تعديل المستخدم</h3>
         <input type="hidden" id="editUserId">
         <div class="form-group"><label>الدور</label><select id="editRole"><option value="user">مستخدم</option><option value="admin">مدير</option><option value="client">عميل مصنع</option></select></div>
         <div class="form-group" id="editFactoryGroup" style="display:none;"><label>المصنع</label><select id="editFactory"></select></div>
-        <div class="form-group"><label>كلمة مرور جديدة (اختياري)</label><input type="password" id="editPassword"></div>
-        <div id="editPermissionsGrid"></div>
+        <div class="form-group"><label>كلمة مرور جديدة (اختياري)</label><div class="password-wrapper"><input type="password" id="editPassword"><button type="button" class="toggle-password" onclick="togglePassword('editPassword', this)">👁️ إظهار</button></div></div>
         <div style="margin-top:20px;"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="saveUserEdit()">حفظ</button></div>
     </div>
 </div>
 
 <script>
     const API_BASE = '/api';
-    let users = [], currentUserRole = '', currentUserPermissions = {}, factoriesList = [];
+    let users = [], currentUserRole = '', factoriesList = [];
 
-    function togglePasswordVisibility(inputId, btnElement) {
+    function togglePassword(inputId, btn) {
         const input = document.getElementById(inputId);
-        if (!input) return;
-        const isPassword = input.type === 'password';
-        input.type = isPassword ? 'text' : 'password';
-        btnElement.textContent = isPassword ? '🙈 إخفاء' : '👁️ إظهار';
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.textContent = '🙈 إخفاء';
+        } else {
+            input.type = 'password';
+            btn.textContent = '👁️ إظهار';
+        }
     }
 
     async function apiCall(endpoint, method='GET', data=null) {
         const opts = { method, headers:{'Content-Type':'application/json'}, credentials:'include' };
-        if(data && (method==='POST'||method==='PUT')) opts.body = JSON.stringify(data);
+        if (data && (method==='POST'||method==='PUT')) opts.body = JSON.stringify(data);
         const res = await fetch(`${API_BASE}${endpoint}`, opts);
-        if (res.status === 401) { window.location.href = '/login.html'; throw new Error('غير مصرح'); }
-        if(!res.ok) {
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            throw new Error('غير مصرح');
+        }
+        if (!res.ok) {
             const err = await res.text();
             throw new Error(err || `HTTP ${res.status}`);
         }
@@ -362,7 +276,8 @@
             factorySelects.forEach(id => {
                 const select = document.getElementById(id);
                 if (select) {
-                    select.innerHTML = '<option value="">-- اختر مصنع --</option>' + factoriesList.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
+                    select.innerHTML = '<option value="">-- اختر مصنع --</option>' + 
+                        factoriesList.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('');
                 }
             });
         } catch(e) { console.error('فشل تحميل المصانع', e); }
@@ -373,10 +288,7 @@
         try {
             const me = await apiCall('/me');
             currentUserRole = me.user.role;
-            currentUserPermissions = me.user.permissions || {};
-            
-            const hasManageUsers = (currentUserRole === 'admin') || (currentUserPermissions && currentUserPermissions.manageUsers === true);
-            if (!hasManageUsers) {
+            if (currentUserRole !== 'admin') {
                 document.getElementById('unauthorizedMsg').innerHTML = '⛔ غير مصرح لك بالوصول إلى إدارة المستخدمين. هذه الصفحة متاحة فقط للمديرين.';
                 document.getElementById('unauthorizedMsg').classList.remove('hidden');
                 document.getElementById('authorizedContent').classList.add('hidden');
@@ -388,10 +300,8 @@
             
             users = await apiCall('/users');
             renderUsersTable();
-            renderPermissionsCheckboxes();
             await loadFactories();
             
-            // التحكم في ظهور حقل المصنع حسب الدور
             const roleSelect = document.getElementById('newRole');
             const factoryGroup = document.getElementById('factoryGroup');
             function toggleFactoryField() {
@@ -399,143 +309,15 @@
             }
             roleSelect.addEventListener('change', toggleFactoryField);
             toggleFactoryField();
-            
         } catch(e) { 
-            showToast('خطأ في تحميل البيانات: ' + e.message, 'error');
-            console.error(e);
+            showToast('خطأ: ' + e.message, 'error');
         }
         showLoading(false);
     }
 
-    function renderPermissionsCheckboxes() {
-        const permissions = ['viewOrders','addOrders','editOrders','deleteOrders','viewDistribution','manageDistribution','viewTrucks','manageTrucks','viewReports','exportReports','viewSettings','manageSettings','viewBackup','manageBackup','manageUsers','manageRestrictions'];
-        const container = document.getElementById('permissionsGrid');
-        container.innerHTML = permissions.map(p => `<label class="permission-item"><input type="checkbox" value="${p}" id="perm_${p}" checked> ${p}</label>`).join('');
-    }
-
-    function parsePrivileges(privText) {
-        const allPerms = ['viewOrders','addOrders','editOrders','deleteOrders','viewDistribution','manageDistribution','viewTrucks','manageTrucks','viewReports','exportReports','viewSettings','manageSettings','viewBackup','manageBackup','manageUsers','manageRestrictions'];
-        const permissions = {};
-        allPerms.forEach(p => { permissions[p] = true; });
-        if (privText && (privText.toLowerCase().includes('all except user') || privText.toLowerCase().includes('كل الصلاحيات ما عدا'))) {
-            permissions.manageUsers = false;
-        }
-        return permissions;
-    }
-
-    async function importUsersFromFile() {
-        const fileInput = document.getElementById('uploadExcel');
-        if (!fileInput.files.length) {
-            showToast('الرجاء اختيار ملف Excel أو CSV', 'error');
-            return;
-        }
-        const file = fileInput.files[0];
-        const delimiterRadio = document.querySelector('input[name="csvDelimiter"]:checked');
-        let csvDelimiter = delimiterRadio ? delimiterRadio.value : ';';
-        
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            try {
-                let rows = [];
-                const fileExt = file.name.split('.').pop().toLowerCase();
-                
-                if (fileExt === 'csv') {
-                    // معالجة CSV يدوياً لاحترام الترميز والمحدد
-                    const text = e.target.result;
-                    let lines = text.split(/\r?\n/);
-                    if (lines.length === 0) throw new Error('الملف فارغ');
-                    
-                    let delimiter = csvDelimiter === 'tab' ? '\t' : csvDelimiter;
-                    let headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
-                    
-                    // البحث عن الأعمدة المطلوبة
-                    let usernameCol = headers.findIndex(h => h.includes('username') || h.includes('users') || h === 'اسم المستخدم');
-                    let passwordCol = headers.findIndex(h => h.includes('password') || h === 'كلمة المرور');
-                    let roleCol = headers.findIndex(h => h.includes('role') || h === 'الدور');
-                    let factoryCol = headers.findIndex(h => h.includes('factory') || h === 'المصنع');
-                    
-                    if (usernameCol === -1 || passwordCol === -1) {
-                        throw new Error('الملف يجب أن يحتوي على عمودين على الأقل: اسم المستخدم وكلمة المرور');
-                    }
-                    
-                    for (let i = 1; i < lines.length; i++) {
-                        if (!lines[i].trim()) continue;
-                        const parts = lines[i].split(delimiter);
-                        if (parts.length <= Math.max(usernameCol, passwordCol)) continue;
-                        const username = parts[usernameCol]?.trim();
-                        const password = parts[passwordCol]?.trim();
-                        if (!username || !password) continue;
-                        let role = (roleCol !== -1 && parts[roleCol]) ? parts[roleCol].trim().toLowerCase() : 'user';
-                        let factory = (factoryCol !== -1 && parts[factoryCol]) ? parts[factoryCol].trim() : '';
-                        rows.push({ username, password, role, factory });
-                    }
-                } else {
-                    // Excel
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonRows = XLSX.utils.sheet_to_json(sheet);
-                    if (!jsonRows.length) throw new Error('الملف فارغ أو لا يحتوي على بيانات');
-                    
-                    for (const row of jsonRows) {
-                        let username = row.username || row.Users || row.users || row.USER || row['اسم المستخدم'];
-                        let password = row.password || row.Password || row.PASS || row['كلمة المرور'];
-                        let role = row.role || row.Role || row['الدور'] || 'user';
-                        let factory = row.factory || row.Factory || row['المصنع'] || '';
-                        if (!username || !password) continue;
-                        rows.push({ username: String(username).trim(), password: String(password).trim(), role: String(role).trim().toLowerCase(), factory: String(factory).trim() });
-                    }
-                }
-                
-                if (rows.length === 0) {
-                    showToast('لم يتم العثور على بيانات صالحة في الملف', 'error');
-                    return;
-                }
-                
-                let successCount = 0, failCount = 0;
-                showLoading(true);
-                for (const row of rows) {
-                    try {
-                        let role = row.role;
-                        if (role !== 'admin' && role !== 'client') role = 'user';
-                        const permissions = {}; // صلاحيات افتراضية كاملة للمستخدمين العاديين
-                        const allPerms = ['viewOrders','addOrders','editOrders','deleteOrders','viewDistribution','manageDistribution','viewTrucks','manageTrucks','viewReports','exportReports','viewSettings','manageSettings','viewBackup','manageBackup','manageUsers','manageRestrictions'];
-                        allPerms.forEach(p => { permissions[p] = true; });
-                        if (role === 'client') {
-                            // العملاء لا يمكنهم إدارة المستخدمين أو الإعدادات
-                            permissions.manageUsers = false;
-                            permissions.manageSettings = false;
-                            permissions.manageBackup = false;
-                        }
-                        const payload = { username: row.username, password: row.password, role, permissions };
-                        if (role === 'client' && row.factory) payload.factory = row.factory;
-                        await apiCall('/users', 'POST', payload);
-                        successCount++;
-                    } catch(err) {
-                        console.error('فشل إضافة', row.username, err);
-                        failCount++;
-                    }
-                }
-                showLoading(false);
-                showToast(`✅ تم إضافة ${successCount} مستخدم، ❌ فشل ${failCount}`, successCount > 0 ? 'success' : 'error');
-                if (successCount > 0) await loadUsers();
-                fileInput.value = '';
-            } catch(err) {
-                showLoading(false);
-                showToast('خطأ في قراءة الملف: ' + err.message, 'error');
-            }
-        };
-        
-        if (file.name.endsWith('.csv')) {
-            reader.readAsText(file, 'UTF-8');
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
-    }
-
     async function addUser() {
         if (currentUserRole !== 'admin') {
-            showToast('غير مصرح لك بإضافة مستخدمين', 'error');
+            showToast('غير مصرح', 'error');
             return;
         }
         const username = document.getElementById('newUsername').value.trim();
@@ -549,56 +331,43 @@
                 return;
             }
         }
-        if(!username || !password) { showToast('املأ جميع الحقول', 'error'); return; }
-        const permissions = {};
-        document.querySelectorAll('#permissionsGrid input[type="checkbox"]').forEach(cb => { permissions[cb.value] = cb.checked; });
+        if (!username || !password) {
+            showToast('املأ جميع الحقول', 'error');
+            return;
+        }
         showLoading(true);
         try {
-            const payload = { username, password, role, permissions };
+            const payload = { username, password, role };
             if (factory) payload.factory = factory;
             await apiCall('/users', 'POST', payload);
             showToast('✅ تم إضافة المستخدم', 'success');
             await loadUsers();
             document.getElementById('newUsername').value = '';
             document.getElementById('newPassword').value = '';
-            const passInput = document.getElementById('newPassword');
-            passInput.type = 'password';
-        } catch(e) { showToast('خطأ: '+e.message, 'error'); }
+        } catch(e) {
+            showToast('خطأ: ' + e.message, 'error');
+        }
         showLoading(false);
     }
 
     async function deleteUser(id, username) {
-        if (currentUserRole !== 'admin') { showToast('غير مصرح', 'error'); return; }
-        if(username === 'Admin') { showToast('لا يمكن حذف المدير الرئيسي', 'error'); return; }
-        if(!confirm(`حذف المستخدم ${username}؟`)) return;
+        if (currentUserRole !== 'admin') {
+            showToast('غير مصرح', 'error');
+            return;
+        }
+        if (username === 'admin') {
+            showToast('لا يمكن حذف المدير الرئيسي', 'error');
+            return;
+        }
+        if (!confirm(`حذف المستخدم ${username}؟`)) return;
         showLoading(true);
         try {
             await apiCall(`/users/${id}`, 'DELETE');
             showToast('تم الحذف', 'success');
             await loadUsers();
-        } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
-        showLoading(false);
-    }
-
-    function openResetPasswordModal(userId, username) {
-        document.getElementById('resetUserId').value = userId;
-        document.getElementById('resetUsername').innerText = username;
-        document.getElementById('resetPassword').value = '';
-        document.getElementById('resetPasswordModal').classList.add('active');
-    }
-
-    async function saveResetPassword() {
-        const id = document.getElementById('resetUserId').value;
-        const newPassword = document.getElementById('resetPassword').value;
-        if (!newPassword) { showToast('الرجاء إدخال كلمة المرور الجديدة', 'error'); return; }
-        const user = users.find(u => u.id == id);
-        if (!user) { showToast('المستخدم غير موجود', 'error'); return; }
-        showLoading(true);
-        try {
-            await apiCall(`/users/${id}`, 'PUT', { username: user.username, role: user.role, permissions: user.permissions, password: newPassword });
-            showToast('✅ تم تغيير كلمة المرور بنجاح', 'success');
-            closeResetModal();
-        } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
+        } catch(e) {
+            showToast('خطأ: ' + e.message, 'error');
+        }
         showLoading(false);
     }
 
@@ -614,10 +383,6 @@
         } else {
             factoryGroup.style.display = 'none';
         }
-        const perms = user.permissions || {};
-        const allPerms = ['viewOrders','addOrders','editOrders','deleteOrders','viewDistribution','manageDistribution','viewTrucks','manageTrucks','viewReports','exportReports','viewSettings','manageSettings','viewBackup','manageBackup','manageUsers','manageRestrictions'];
-        const container = document.getElementById('editPermissionsGrid');
-        container.innerHTML = allPerms.map(p => `<label class="permission-item"><input type="checkbox" value="${p}" ${perms[p] ? 'checked' : ''}> ${p}</label>`).join('');
         document.getElementById('editUserModal').classList.add('active');
     }
 
@@ -628,13 +393,12 @@
         let factory = '';
         if (role === 'client') {
             factory = document.getElementById('editFactory').value;
-            if (!factory) { showToast('الرجاء اختيار مصنع للعميل', 'error'); return; }
+            if (!factory) {
+                showToast('الرجاء اختيار مصنع للعميل', 'error');
+                return;
+            }
         }
-        const permissions = {};
-        document.querySelectorAll('#editPermissionsGrid input[type="checkbox"]').forEach(cb => { permissions[cb.value] = cb.checked; });
-        const user = users.find(u => u.id == id);
-        if (!user) { showToast('المستخدم غير موجود', 'error'); return; }
-        const data = { username: user.username, role, permissions };
+        const data = { role };
         if (factory) data.factory = factory;
         if (password) data.password = password;
         showLoading(true);
@@ -643,14 +407,19 @@
             showToast('✅ تم التعديل', 'success');
             closeModal();
             await loadUsers();
-        } catch(e) { showToast('خطأ: ' + e.message, 'error'); }
+        } catch(e) {
+            showToast('خطأ: ' + e.message, 'error');
+        }
         showLoading(false);
     }
 
     function renderUsersTable() {
         const tbody = document.getElementById('usersBody');
-        if(!users.length) { tbody.innerHTML = '<tr><td colspan="6">لا يوجد مستخدمين</td></tr>'; return; }
-        tbody.innerHTML = users.map((u,i) => {
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="6">لا يوجد مستخدمين</td></tr>';
+            return;
+        }
+        tbody.innerHTML = users.map((u, i) => {
             let formattedDate = 'غير محدد';
             if (u.created_at) {
                 try {
@@ -666,23 +435,58 @@
                 <td>${escapeHtml(u.factory || '')}</td>
                 <td>${formattedDate}</td>
                 <td>
-                    <button class="btn btn-warning btn-sm" onclick="openEditModal(${JSON.stringify(u).replace(/"/g, '&quot;')})">✏️ تعديل</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️ حذف</button>
-                    <button class="btn btn-secondary btn-sm" onclick="openResetPasswordModal(${u.id}, '${escapeHtml(u.username)}')">🔑 إعادة تعيين</button>
+                    <button class="btn btn-warning" onclick='openEditModal(${JSON.stringify(u).replace(/'/g, "&#39;")})'>✏️ تعديل</button>
+                    <button class="btn btn-danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️ حذف</button>
                 </td>
             </tr>`;
         }).join('');
     }
 
     function escapeHtml(str) { return str ? str.replace(/[&<>]/g, function(m){ return m==='&'?'&amp;':m==='<'?'&lt;':'&gt;'; }) : ''; }
-    function showToast(msg,type) { const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
+    function showToast(msg, type) {
+        const c = document.getElementById('toastContainer');
+        const t = document.createElement('div');
+        t.className = `toast toast-${type}`;
+        t.innerText = msg;
+        c.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    }
     function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
     function closeModal() { document.getElementById('editUserModal').classList.remove('active'); }
-    function closeResetModal() { document.getElementById('resetPasswordModal').classList.remove('active'); }
-    function logout() { if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html'); }
-    function loadNav() { fetch('/api/me', {credentials:'include'}).then(r=>r.json()).then(data=>{ if(data.user) document.getElementById('navLinks').innerHTML = `<a href="index.html" class="nav-link">📊 الرئيسية</a><a href="orders.html" class="nav-link">📝 الطلبات</a><a href="distribution.html" class="nav-link">🚚 التوزيع</a><a href="trucks.html" class="nav-link">🚛 السيارات</a><a href="products.html" class="nav-link">📦 أنواع البحص</a><a href="factories.html" class="nav-link">🏭 المصانع</a><a href="reports.html" class="nav-link">📊 التقارير</a><a href="settings.html" class="nav-link">⚙️ الإعدادات</a><a href="restrictions.html" class="nav-link">⛔ الحظر</a><a href="users.html" class="nav-link active">👥 المستخدمين</a><a href="logs.html" class="nav-link">📜 السجلات</a>`; }).catch(()=>{ window.location='/login.html'; }); }
+    function logout() {
+        if (confirm('تسجيل الخروج؟')) {
+            fetch('/api/logout', { method: 'POST', credentials: 'include' }).then(() => window.location.href = '/login.html');
+        }
+    }
+    function loadNav() {
+        fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(data => {
+            if (data.user) {
+                const nav = document.getElementById('navLinks');
+                if (nav) {
+                    nav.innerHTML = `<a href="index.html" class="nav-link">📊 الرئيسية</a>
+                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                        <a href="reports.html" class="nav-link">📊 التقارير</a>
+                        <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان</a>
+                        <a href="trucks-failed.html" class="nav-link">⚠️ السيارات المخالفة</a>
+                        <a href="trucks-failed-report.html" class="nav-link">📊 تقرير المخالفات</a>
+                        <a href="distribution-quality.html" class="nav-link">📈 جودة التوزيع</a>
+                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                        <a href="users.html" class="nav-link active">👥 المستخدمين</a>
+                        <a href="logs.html" class="nav-link">📜 السجلات</a>`;
+                }
+            }
+        }).catch(() => window.location.href = '/login.html');
+    }
 
-    document.addEventListener('DOMContentLoaded', () => { loadNav(); loadUsers(); });
+    document.addEventListener('DOMContentLoaded', () => {
+        loadNav();
+        loadUsers();
+    });
 </script>
 </body>
 </html>
