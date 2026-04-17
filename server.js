@@ -50,7 +50,7 @@ async function initTables() {
             created_at TIMESTAMP DEFAULT NOW()
         )
     `);
-    // جدول بيانات الميزان الشهرية
+    // جدول بيانات الميزان الشهرية (البيانات الخام)
     await query(`
         CREATE TABLE IF NOT EXISTS scale_data (
             id SERIAL PRIMARY KEY,
@@ -59,6 +59,16 @@ async function initTables() {
             data JSONB NOT NULL,
             updated_at TIMESTAMP DEFAULT NOW(),
             UNIQUE(year, month)
+        )
+    `);
+    // جدول التقارير المحفوظة (الميزان)
+    await query(`
+        CREATE TABLE IF NOT EXISTS scale_reports (
+            id SERIAL PRIMARY KEY,
+            report_name TEXT NOT NULL,
+            report_date TEXT NOT NULL,
+            data JSONB NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
         )
     `);
     // جدول بيانات اليوم (الطلبات والتوزيع)
@@ -260,7 +270,7 @@ app.delete('/api/products/:name', async (req, res) => {
     res.json({ success: true });
 });
 
-// ==================== بيانات الميزان الشهرية ====================
+// ==================== بيانات الميزان الشهرية (الخام) ====================
 app.get('/api/scale/monthly/:year/:month', async (req, res) => {
     const year = parseInt(req.params.year);
     const month = parseInt(req.params.month);
@@ -276,6 +286,81 @@ app.put('/api/scale/monthly/:year/:month', async (req, res) => {
     const data = req.body;
     await query(`INSERT INTO scale_data (year, month, data) VALUES ($1, $2, $3) ON CONFLICT (year, month) DO UPDATE SET data = $3, updated_at = NOW()`, [year, month, data]);
     res.json({ success: true });
+});
+
+// ==================== تقارير الميزان المحفوظة (جديد) ====================
+// جلب جميع التقارير
+app.get('/api/scale-reports', async (req, res) => {
+    try {
+        const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
+        res.json(result.rows.map(r => ({
+            id: r.id,
+            reportName: r.report_name,
+            reportDate: r.report_date,
+            createdAt: r.created_at
+        })));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في جلب التقارير' });
+    }
+});
+
+// جلب تقرير محدد
+app.get('/api/scale-reports/:id', async (req, res) => {
+    try {
+        const id = parseInt(req.params.id);
+        const result = await query('SELECT report_name, report_date, data, created_at FROM scale_reports WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'التقرير غير موجود' });
+        res.json({
+            id: id,
+            reportName: result.rows[0].report_name,
+            reportDate: result.rows[0].report_date,
+            data: result.rows[0].data,
+            createdAt: result.rows[0].created_at
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'خطأ في جلب التقرير' });
+    }
+});
+
+// حفظ تقرير جديد
+app.post('/api/scale-reports', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        const { reportName, reportDate, data } = req.body;
+        if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
+        await query('INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3)', [reportName, reportDate || new Date().toISOString().split('T')[0], data]);
+        res.status(201).json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في حفظ التقرير' });
+    }
+});
+
+// تعديل اسم التقرير
+app.put('/api/scale-reports/:id', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        const id = parseInt(req.params.id);
+        const { reportName } = req.body;
+        if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
+        await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'خطأ في تعديل التقرير' });
+    }
+});
+
+// حذف تقرير
+app.delete('/api/scale-reports/:id', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        const id = parseInt(req.params.id);
+        await query('DELETE FROM scale_reports WHERE id = $1', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'خطأ في حذف التقرير' });
+    }
 });
 
 // ==================== بيانات اليوم (الطلبات والتوزيع) ====================
