@@ -6,18 +6,18 @@ const session = require('express-session');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// مجلد حفظ البيانات اليومية
+// مجلد حفظ البيانات اليومية (سيتم إنشاؤه في الجذر)
 const DATA_DIR = path.join(__dirname, 'data');
-// ملف الإعدادات (السيارات والمصانع)
+// ملف الإعدادات (في الجذر)
 const SETTINGS_FILE = path.join(__dirname, 'settings.json');
 
-// التأكد من وجود مجلد البيانات
 (async () => {
     try { await fs.mkdir(DATA_DIR, { recursive: true }); } catch(e) {}
 })();
 
 // Middlewares
 app.use(express.json());
+// ✅ تعديل: خدمة الملفات الثابتة من المجلد الجذر (حيث توجد HTML)
 app.use(express.static(__dirname));
 app.use(session({
     secret: 'كسارة_الحبردي_سر_آمن',
@@ -27,23 +27,21 @@ app.use(session({
 }));
 
 // ==================== دوال مساعدة ====================
+let cachedSettings = null;
+let settingsLastLoaded = null;
+
 async function loadSettings() {
+    if (cachedSettings && settingsLastLoaded && (Date.now() - settingsLastLoaded) < 5 * 60 * 1000) {
+        return cachedSettings;
+    }
     try {
         const data = await fs.readFile(SETTINGS_FILE, 'utf8');
-        return JSON.parse(data);
+        cachedSettings = JSON.parse(data);
+        settingsLastLoaded = Date.now();
+        return cachedSettings;
     } catch (err) {
-        // إعدادات افتراضية
-        return {
-            trucks: [
-                { number: "1", driver: "سائق 1" },
-                { number: "2", driver: "سائق 2" },
-                { number: "3", driver: "سائق 3" }
-            ],
-            factories: [
-                { name: "مصنع الفهد", location: "الرياض" },
-                { name: "مصنع القيشان 1", location: "الدمام" }
-            ]
-        };
+        console.warn('فشل تحميل الإعدادات، استخدام قيم فارغة');
+        return { trucks: [], factories: [] };
     }
 }
 
@@ -64,12 +62,13 @@ async function saveDayData(date, data) {
 }
 
 // ==================== Endpoints ====================
-// التحقق من المصادقة (لتبسيط العرض، نقبل أي مستخدم في هذا المثال)
+// ✅ إضافة مسار رئيسي يعرض index.html (إذا لم يكن موجوداً افتراضياً)
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 app.get('/api/me', (req, res) => {
-    // في الحقيقة هنا يجب التحقق من تسجيل الدخول.
-    // للاختبار، نعيد مستخدم عادي.
     if (!req.session.userId) {
-        // إنشاء جلسة وهمية
         req.session.userId = 'admin';
         req.session.role = 'admin';
     }
@@ -81,27 +80,23 @@ app.post('/api/logout', (req, res) => {
     res.json({ success: true });
 });
 
-// جلب الإعدادات
 app.get('/api/settings', async (req, res) => {
     const settings = await loadSettings();
     res.json(settings);
 });
 
-// جلب بيانات يوم محدد
 app.get('/api/day/:date', async (req, res) => {
     const { date } = req.params;
     const data = await getDayData(date);
     res.json(data);
 });
 
-// حفظ بيانات يوم محدد
 app.put('/api/day/:date', async (req, res) => {
     const { date } = req.params;
     await saveDayData(date, req.body);
     res.json({ success: true });
 });
 
-// ** التحسين الجديد: جلب نطاق زمني دفعة واحدة **
 app.get('/api/range/:startDate/:endDate', async (req, res) => {
     try {
         const { startDate, endDate } = req.params;
@@ -132,5 +127,5 @@ app.get('/api/range/:startDate/:endDate', async (req, res) => {
 // بدء الخادم
 app.listen(PORT, () => {
     console.log(`الخادم يعمل على http://localhost:${PORT}`);
-    console.log(`تأكد من وضع ملفات HTML في مجلد "public"`);
+    console.log(`ملفات HTML موجودة في الجذر مباشرة`);
 });
