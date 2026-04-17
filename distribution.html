@@ -294,97 +294,156 @@
         }
 
         // =============== خوارزمية التوزيع التلقائي العادل (Round-Robin محسن) ===============
-        async function autoDistribute() {
-            const distributedOrderIds = new Set(distribution.map(d => d.orderId));
-            const undistributed = orders.filter(o => !distributedOrderIds.has(o.id));
-            if (!undistributed.length) { showToast('لا توجد طلبات غير موزعة', 'error'); return; }
-            if (!trucks.length) { showToast('لا توجد سيارات', 'error'); return; }
-            showLoading(true);
+  // =============== خوارزمية التوزيع التلقائي العادل (Round Robin متساوٍ) ===============
+async function autoDistribute() {
+    const distributedOrderIds = new Set(distribution.map(d => d.orderId));
+    const undistributed = orders.filter(o => !distributedOrderIds.has(o.id));
+    if (!undistributed.length) { showToast('لا توجد طلبات غير موزعة', 'error'); return; }
+    if (!trucks.length) { showToast('لا توجد سيارات', 'error'); return; }
+    showLoading(true);
 
-            // إحصائيات اليوم لكل سيارة
-            let truckTrips = {};
-            let truckTotalDistance = {};
-            let truckLastFactory = {};
+    // إحصائيات اليوم لكل سيارة
+    let truckTrips = {};
+    let truckTotalDistance = {};
+    let truckLastFactory = {};
 
-            trucks.forEach(t => {
-                truckTrips[t.number] = 0;
-                truckTotalDistance[t.number] = 0;
-                truckLastFactory[t.number] = null;
-            });
+    trucks.forEach(t => {
+        truckTrips[t.number] = 0;
+        truckTotalDistance[t.number] = 0;
+        truckLastFactory[t.number] = null;
+    });
 
-            // تسجيل التوزيعات السابقة
-            distribution.forEach(d => {
-                if (d.truck) {
-                    truckTrips[d.truck.number]++;
-                    const dist = getFactoryDistance(d.factory);
-                    truckTotalDistance[d.truck.number] += dist;
-                    truckLastFactory[d.truck.number] = d.factory;
-                }
-            });
-
-            let newDistributions = [];
-
-            // ترتيب السيارات: الأقل رحلات أولاً، ثم الأكثر مسافة مقطوعة (لتعويض البعيد)
-            function getSortedTrucks() {
-                return [...trucks].sort((a, b) => {
-                    if (truckTrips[a.number] !== truckTrips[b.number])
-                        return truckTrips[a.number] - truckTrips[b.number];
-                    // إذا تساوت الرحلات، الأكثر مسافة مقطوعة يأخذ الأولوية (ليأخذ طلباً أقرب)
-                    return truckTotalDistance[b.number] - truckTotalDistance[a.number];
-                });
-            }
-
-            // توزيع كل طلب على السيارة المناسبة
-            for (let i = 0; i < undistributed.length; i++) {
-                const order = undistributed[i];
-                const orderDistance = getFactoryDistance(order.factory);
-                
-                // الحصول على قائمة السيارات مرتبة حسب الأولوية
-                let sortedTrucks = getSortedTrucks();
-                
-                // اختيار أول سيارة لا تتكرر نفس المصنع إن أمكن
-                let selectedTruck = null;
-                for (let t of sortedTrucks) {
-                    if (truckLastFactory[t.number] !== order.factory) {
-                        selectedTruck = t;
-                        break;
-                    }
-                }
-                if (!selectedTruck) selectedTruck = sortedTrucks[0]; // إذا كلهم نفس المصنع، اختر أول واحد
-                
-                // تحديث الإحصائيات
-                truckTrips[selectedTruck.number]++;
-                truckTotalDistance[selectedTruck.number] += orderDistance;
-                truckLastFactory[selectedTruck.number] = order.factory;
-                
-                // الرود = عدد الرحلات بعد الإضافة
-                const currentRoad = truckTrips[selectedTruck.number];
-                
-                newDistributions.push({
-                    orderId: order.id,
-                    orderIndex: distribution.length + newDistributions.length + 1,
-                    truck: selectedTruck,
-                    factory: order.factory,
-                    material: order.material,
-                    time: order.time || '',
-                    road: currentRoad
-                });
-            }
-
-            if (newDistributions.length) {
-                distribution.push(...newDistributions);
-                await saveData();
-                await loadData();
-                
-                // إحصائيات نهائية
-                let summary = trucks.map(t => `${t.number}: ${truckTrips[t.number]} رحلة`).join(' | ');
-                showToast(`✅ تم توزيع ${newDistributions.length} طلب. التوزيع: ${summary}`, 'success');
-                localStorage.setItem('pendingOrdersCount', '0');
-            } else {
-                showToast('فشل التوزيع التلقائي', 'error');
-            }
-            showLoading(false);
+    // تسجيل التوزيعات السابقة في نفس اليوم (إن وجدت)
+    distribution.forEach(d => {
+        if (d.truck) {
+            truckTrips[d.truck.number]++;
+            const dist = getFactoryDistance(d.factory);
+            truckTotalDistance[d.truck.number] += dist;
+            truckLastFactory[d.truck.number] = d.factory;
         }
+    });
+
+    // ===== الخطوة 1: توزيع الرحلة الأولى على جميع السيارات (بترتيب عشوائي عادل) =====
+    // نهدف إلى أن تأخذ كل سيارة رحلة واحدة قبل أن تأخذ أي سيارة رحلتها الثانية
+    
+    let newDistributions = [];
+    let remainingOrders = [...undistributed];
+    
+    // قائمة السيارات مرتبة حسب المسافة المقطوعة (الأقل أولاً) لبدء التوزيع العادل
+    let trucksList = [...trucks].sort((a,b) => {
+        // السيارات التي لم تأخذ أي رحلة لها الأولوية المطلقة
+        if (truckTrips[a.number] !== truckTrips[b.number]) 
+            return truckTrips[a.number] - truckTrips[b.number];
+        // إذا تساوت الرحلات، الأقل مسافة مقطوعة يأخذ الأولوية (لتوزيع الأحمال)
+        return truckTotalDistance[a.number] - truckTotalDistance[b.number];
+    });
+    
+    // نستمر في التوزيع حتى نفاد الطلبات
+    let orderIndex = 0;
+    while (remainingOrders.length > 0 && orderIndex < remainingOrders.length * 2) {
+        // إعادة ترتيب السيارات قبل كل دورة: الأقل رحلات أولاً، ثم الأقل مسافة مقطوعة
+        trucksList.sort((a,b) => {
+            if (truckTrips[a.number] !== truckTrips[b.number])
+                return truckTrips[a.number] - truckTrips[b.number];
+            // إذا تساوت الرحلات، الأقل مسافة مقطوعة أولاً (للعدالة)
+            return truckTotalDistance[a.number] - truckTotalDistance[b.number];
+        });
+        
+        let assigned = false;
+        // نحاول توزيع الطلب الحالي على أول سيارة مناسبة
+        for (let t of trucksList) {
+            // تجنب تكرار نفس المصنع إن أمكن
+            if (truckLastFactory[t.number] === remainingOrders[0].factory) {
+                continue;
+            }
+            // توزيع الطلب على هذه السيارة
+            const order = remainingOrders.shift();
+            const orderDistance = getFactoryDistance(order.factory);
+            truckTrips[t.number]++;
+            truckTotalDistance[t.number] += orderDistance;
+            truckLastFactory[t.number] = order.factory;
+            const currentRoad = truckTrips[t.number];
+            newDistributions.push({
+                orderId: order.id,
+                orderIndex: distribution.length + newDistributions.length + 1,
+                truck: t,
+                factory: order.factory,
+                material: order.material,
+                time: order.time || '',
+                road: currentRoad
+            });
+            assigned = true;
+            break;
+        }
+        
+        if (!assigned && trucksList.length > 0) {
+            // إذا لم نجد سيارة دون تكرار المصنع، نستخدم أول سيارة
+            const order = remainingOrders.shift();
+            const t = trucksList[0];
+            const orderDistance = getFactoryDistance(order.factory);
+            truckTrips[t.number]++;
+            truckTotalDistance[t.number] += orderDistance;
+            truckLastFactory[t.number] = order.factory;
+            const currentRoad = truckTrips[t.number];
+            newDistributions.push({
+                orderId: order.id,
+                orderIndex: distribution.length + newDistributions.length + 1,
+                truck: t,
+                factory: order.factory,
+                material: order.material,
+                time: order.time || '',
+                road: currentRoad
+            });
+            assigned = true;
+        }
+        
+        if (!assigned) break;
+        orderIndex++;
+    }
+    
+    // إذا بقيت طلبات (نادراً)، نوزعها بشكل متسلسل
+    if (remainingOrders.length > 0) {
+        console.warn(`بقيت ${remainingOrders.length} طلب غير موزع، يتم توزيعها بشكل متسلسل`);
+        for (let order of remainingOrders) {
+            const orderDistance = getFactoryDistance(order.factory);
+            // نختار السيارة الأقل رحلات حالياً
+            let bestTruck = trucksList.reduce((best, t) => {
+                if (truckTrips[t.number] < truckTrips[best.number]) return t;
+                if (truckTrips[t.number] === truckTrips[best.number] && truckTotalDistance[t.number] < truckTotalDistance[best.number]) return t;
+                return best;
+            }, trucksList[0]);
+            truckTrips[bestTruck.number]++;
+            truckTotalDistance[bestTruck.number] += orderDistance;
+            truckLastFactory[bestTruck.number] = order.factory;
+            const currentRoad = truckTrips[bestTruck.number];
+            newDistributions.push({
+                orderId: order.id,
+                orderIndex: distribution.length + newDistributions.length + 1,
+                truck: bestTruck,
+                factory: order.factory,
+                material: order.material,
+                time: order.time || '',
+                road: currentRoad
+            });
+        }
+    }
+
+    if (newDistributions.length) {
+        distribution.push(...newDistributions);
+        await saveData();
+        await loadData();
+        
+        // إحصائيات نهائية
+        let tripsCount = {};
+        for (let d of distribution) if (d.truck) tripsCount[d.truck.number] = (tripsCount[d.truck.number] || 0) + 1;
+        let summary = trucks.map(t => `${t.number}: ${tripsCount[t.number] || 0} رحلة`).join(' | ');
+        showToast(`✅ تم توزيع ${newDistributions.length} طلب. التوزيع: ${summary}`, 'success');
+        localStorage.setItem('pendingOrdersCount', '0');
+    } else {
+        showToast('فشل التوزيع التلقائي', 'error');
+    }
+    showLoading(false);
+}
         // =================================================================
 
         async function resetDistribution() {
