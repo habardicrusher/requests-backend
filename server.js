@@ -7,7 +7,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// اتصال قاعدة البيانات
+// إعداد اتصال قاعدة البيانات
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
@@ -16,7 +16,7 @@ const pool = new Pool({
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'habardicrusher_secret',
+    secret: process.env.SESSION_SECRET || 'habardicrusher_secret_2026',
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 }
@@ -25,8 +25,7 @@ app.use(session({
 // ==================== دوال مساعدة ====================
 async function query(text, params) {
     try {
-        const res = await pool.query(text, params);
-        return res;
+        return await pool.query(text, params);
     } catch (err) {
         console.error('خطأ في الاستعلام:', err);
         throw err;
@@ -35,6 +34,7 @@ async function query(text, params) {
 
 // إنشاء الجداول إذا لم تكن موجودة
 async function initTables() {
+    // جدول المستخدمين
     await query(`
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -43,29 +43,39 @@ async function initTables() {
             role TEXT NOT NULL DEFAULT 'user',
             factory TEXT,
             created_at TIMESTAMP DEFAULT NOW()
-        );
+        )
+    `);
+    // جدول الإعدادات (السيارات والمصانع)
+    await query(`
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value JSONB NOT NULL
-        );
+        )
+    `);
+    // جدول بيانات اليوم (الطلبات والتوزيع)
+    await query(`
         CREATE TABLE IF NOT EXISTS day_data (
             date DATE PRIMARY KEY,
             orders JSONB NOT NULL,
             distribution JSONB NOT NULL
-        );
+        )
     `);
-    // إضافة مستخدم افتراضي إذا لم يوجد
-    const adminExists = await query('SELECT * FROM users WHERE username = $1', ['admin']);
-    if (adminExists.rows.length === 0) {
-        const hashed = bcrypt.hashSync('admin', 10);
-        await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['admin', hashed, 'admin']);
-        await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['user', bcrypt.hashSync('user', 10), 'user']);
-        await query('INSERT INTO users (username, password, role, factory) VALUES ($1, $2, $3, $4)', ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد']);
+    
+    // إضافة مستخدم افتراضي (admin) إذا لم يوجد
+    const adminCheck = await query('SELECT * FROM users WHERE username = $1', ['admin']);
+    if (adminCheck.rows.length === 0) {
+        const hashedAdmin = bcrypt.hashSync('admin', 10);
+        await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['admin', hashedAdmin, 'admin']);
+        const hashedUser = bcrypt.hashSync('user', 10);
+        await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['user', hashedUser, 'user']);
+        const hashedClient = bcrypt.hashSync('client', 10);
+        await query('INSERT INTO users (username, password, role, factory) VALUES ($1, $2, $3, $4)', ['client', hashedClient, 'client', 'مصنع الفهد']);
+        console.log('✅ تم إنشاء المستخدمين الافتراضيين');
     }
 }
 initTables().catch(console.error);
 
-// ==================== واجهات API ====================
+// ==================== Endpoints العامة ====================
 app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
@@ -73,17 +83,18 @@ app.get('/', (req, res) => {
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        if (!username || !password) return res.status(400).json({ error: 'مطلوب' });
+        if (!username || !password) return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبة' });
         const result = await query('SELECT * FROM users WHERE username = $1', [username]);
         const user = result.rows[0];
-        if (!user) return res.status(401).json({ error: 'بيانات غير صحيحة' });
-        if (!bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: 'بيانات غير صحيحة' });
+        if (!user) return res.status(401).json({ error: 'اسم مستخدم أو كلمة مرور غير صحيحة' });
+        if (!bcrypt.compareSync(password, user.password)) return res.status(401).json({ error: 'اسم مستخدم أو كلمة مرور غير صحيحة' });
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.role = user.role;
         res.json({ success: true, role: user.role });
     } catch (err) {
-        res.status(500).json({ error: 'خطأ داخلي' });
+        console.error(err);
+        res.status(500).json({ error: 'خطأ داخلي في الخادم' });
     }
 });
 
@@ -99,7 +110,7 @@ app.get('/api/me', async (req, res) => {
     res.json({ user: result.rows[0] });
 });
 
-// إدارة المستخدمين (للمدير فقط)
+// ==================== إدارة المستخدمين (للمدير فقط) ====================
 app.get('/api/users', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const result = await query('SELECT id, username, role, factory, created_at FROM users ORDER BY id');
@@ -111,7 +122,7 @@ app.post('/api/users', async (req, res) => {
     const { username, password, role, factory } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'اسم المستخدم وكلمة المرور مطلوبة' });
     const exists = await query('SELECT id FROM users WHERE username = $1', [username]);
-    if (exists.rows.length) return res.status(400).json({ error: 'اسم المستخدم موجود' });
+    if (exists.rows.length) return res.status(400).json({ error: 'اسم المستخدم موجود بالفعل' });
     const hashed = bcrypt.hashSync(password, 10);
     const finalRole = role || 'user';
     const finalFactory = (finalRole === 'client' && factory) ? factory : null;
@@ -123,6 +134,7 @@ app.put('/api/users/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const userId = parseInt(req.params.id);
     const { role, password, factory } = req.body;
+    // لا نسمح بتغيير اسم المستخدم عبر هذه الواجهة (يمكن إضافته لاحقاً)
     const updates = [];
     const values = [];
     if (role) { updates.push(`role = $${updates.length+1}`); values.push(role); }
@@ -139,13 +151,13 @@ app.delete('/api/users/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const userId = parseInt(req.params.id);
     const user = await query('SELECT username FROM users WHERE id = $1', [userId]);
-    if (user.rows.length === 0) return res.status(404).json({ error: 'غير موجود' });
+    if (user.rows.length === 0) return res.status(404).json({ error: 'المستخدم غير موجود' });
     if (user.rows[0].username === 'admin') return res.status(400).json({ error: 'لا يمكن حذف المدير الرئيسي' });
     await query('DELETE FROM users WHERE id = $1', [userId]);
     res.json({ success: true });
 });
 
-// باقي endpoints (الإعدادات، بيانات اليوم، النطاق)
+// ==================== إعدادات النظام (السيارات والمصانع) ====================
 app.get('/api/settings', async (req, res) => {
     const result = await query(`SELECT value FROM settings WHERE key = 'settings'`);
     if (result.rows.length) return res.json(result.rows[0].value);
@@ -157,6 +169,7 @@ app.put('/api/settings', async (req, res) => {
     res.json({ success: true });
 });
 
+// ==================== بيانات اليوم (الطلبات والتوزيع) ====================
 app.get('/api/day/:date', async (req, res) => {
     const { date } = req.params;
     const result = await query(`SELECT orders, distribution FROM day_data WHERE date = $1`, [date]);
@@ -171,6 +184,7 @@ app.put('/api/day/:date', async (req, res) => {
     res.json({ success: true });
 });
 
+// ==================== نطاق زمني (للتقارير) ====================
 app.get('/api/range/:startDate/:endDate', async (req, res) => {
     const { startDate, endDate } = req.params;
     const result = await query(`SELECT date, orders, distribution FROM day_data WHERE date BETWEEN $1 AND $2 ORDER BY date`, [startDate, endDate]);
@@ -179,4 +193,9 @@ app.get('/api/range/:startDate/:endDate', async (req, res) => {
     res.json(data);
 });
 
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+// بدء الخادم
+app.listen(PORT, () => {
+    console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
+    console.log(`🔗 رابط التطبيق: http://localhost:${PORT}`);
+    console.log(`👤 بيانات الدخول الافتراضية: admin/admin , user/user , client/client`);
+});
