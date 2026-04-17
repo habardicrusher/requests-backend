@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ==================== إعداد قاعدة البيانات ====================
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -24,15 +25,23 @@ pool.connect((err, client, release) => {
     }
 });
 
+// ==================== إعداد الجلسة (لتعمل على Render) ====================
+app.set('trust proxy', 1); // ضروري لـ Render (خلف proxy)
 app.use(express.json());
 app.use(express.static(__dirname));
 app.use(session({
     secret: process.env.SESSION_SECRET || 'habardicrusher_secret_2026',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 }
+    cookie: {
+        maxAge: 24 * 60 * 60 * 1000, // 24 ساعة
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production', // true في الإنتاج (HTTPS)
+        sameSite: 'lax'
+    }
 }));
 
+// ==================== دوال مساعدة ====================
 async function query(text, params) {
     try {
         const start = Date.now();
@@ -48,14 +57,17 @@ async function query(text, params) {
     }
 }
 
+// ==================== إنشاء الجداول ====================
 async function initTables() {
     try {
+        // جدول الإعدادات
         await query(`
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value JSONB NOT NULL
             )
         `);
+        // جدول المنتجات
         await query(`
             CREATE TABLE IF NOT EXISTS products (
                 id SERIAL PRIMARY KEY,
@@ -63,6 +75,7 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        // جدول بيانات الميزان الشهرية
         await query(`
             CREATE TABLE IF NOT EXISTS scale_data (
                 id SERIAL PRIMARY KEY,
@@ -73,8 +86,7 @@ async function initTables() {
                 UNIQUE(year, month)
             )
         `);
-        
-        // ✅ إنشاء جدول scale_reports إذا لم يكن موجوداً
+        // جدول التقارير المحفوظة (الميزان)
         await query(`
             CREATE TABLE IF NOT EXISTS scale_reports (
                 id SERIAL PRIMARY KEY,
@@ -84,28 +96,7 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        
-        // ✅ التأكد من وجود جميع الأعمدة المطلوبة (بالإضافة إلى إصلاح أي جدول قديم)
-        const columnsToAdd = [
-            { name: 'report_name', type: 'TEXT NOT NULL DEFAULT \'\'' },
-            { name: 'report_date', type: 'TEXT NOT NULL DEFAULT \'\'' },
-            { name: 'data', type: 'JSONB' },
-            { name: 'created_at', type: 'TIMESTAMP DEFAULT NOW()' }
-        ];
-        for (const col of columnsToAdd) {
-            try {
-                await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`);
-            } catch (err) {
-                console.warn(`⚠️ لا يمكن إضافة العمود ${col.name}:`, err.message);
-            }
-        }
-        // إذا كان العمود data موجوداً ولكن من نوع TEXT، نحوله إلى JSONB
-        try {
-            await query(`ALTER TABLE scale_reports ALTER COLUMN data TYPE JSONB USING data::jsonb`);
-        } catch (err) {
-            // العمود إما ليس موجوداً أو بالفعل JSONB
-        }
-
+        // جدول بيانات اليوم (الطلبات والتوزيع)
         await query(`
             CREATE TABLE IF NOT EXISTS day_data (
                 date DATE PRIMARY KEY,
@@ -113,6 +104,7 @@ async function initTables() {
                 distribution JSONB NOT NULL
             )
         `);
+        // جدول المستخدمين
         await query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -123,14 +115,42 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        // جدول أسباب المخالفات المحفوظة
+        await query(`
+            CREATE TABLE IF NOT EXISTS truck_violations (
+                id SERIAL PRIMARY KEY,
+                date DATE NOT NULL,
+                truck_number TEXT NOT NULL,
+                driver TEXT NOT NULL,
+                trips INTEGER NOT NULL,
+                reason TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(date, truck_number)
+            )
+        `);
         
-        const userCount = await query('SELECT COUNT(*) FROM users');
-        if (parseInt(userCount.rows[0].count) === 0) {
-            await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['admin', bcrypt.hashSync('admin', 10), 'admin']);
-            await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', ['user', bcrypt.hashSync('user', 10), 'user']);
-            await query('INSERT INTO users (username, password, role, factory) VALUES ($1, $2, $3, $4)', ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد']);
-            console.log('✅ تم إنشاء المستخدمين الافتراضيين');
+        // إضافة المستخدمين الافتراضيين إذا لم يوجد أحد (مع دعم حالة الأحرف)
+        const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
+        if (adminCheck.rows.length === 0) {
+            // إنشاء مستخدم admin بالحرف الصغير
+            await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', 
+                ['admin', bcrypt.hashSync('admin', 10), 'admin']);
+            console.log('✅ تم إنشاء المستخدم admin (admin/admin)');
         }
+        const userCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'user'`);
+        if (userCheck.rows.length === 0) {
+            await query('INSERT INTO users (username, password, role) VALUES ($1, $2, $3)', 
+                ['user', bcrypt.hashSync('user', 10), 'user']);
+            console.log('✅ تم إنشاء المستخدم user (user/user)');
+        }
+        const clientCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'client'`);
+        if (clientCheck.rows.length === 0) {
+            await query('INSERT INTO users (username, password, role, factory) VALUES ($1, $2, $3, $4)', 
+                ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد']);
+            console.log('✅ تم إنشاء المستخدم client (client/client)');
+        }
+        
         console.log('✅ جميع الجداول جاهزة');
     } catch (err) {
         console.error('❌ فشل إنشاء الجداول:', err.message);
@@ -138,6 +158,7 @@ async function initTables() {
 }
 initTables().catch(console.error);
 
+// ==================== دوال تحميل البيانات ====================
 async function loadSettings() {
     try {
         const result = await query(`SELECT value FROM settings WHERE key = 'settings'`);
@@ -160,18 +181,31 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/index.html');
 });
 
+// تسجيل الدخول (مع دعم حالة الأحرف)
 app.post('/api/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'مطلوب' });
-        const result = await query('SELECT * FROM users WHERE username = $1', [username]);
+        
+        // البحث بدون حساسية حالة الأحرف (case-insensitive)
+        const result = await query(`SELECT * FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
         const user = result.rows[0];
-        if (!user || !bcrypt.compareSync(password, user.password))
+        if (!user || !bcrypt.compareSync(password, user.password)) {
             return res.status(401).json({ error: 'بيانات غير صحيحة' });
+        }
+        
         req.session.userId = user.id;
-        req.session.username = user.username;
+        req.session.username = user.username; // الاسم الأصلي من قاعدة البيانات
         req.session.role = user.role;
-        res.json({ success: true, role: user.role });
+        
+        // حفظ الجلسة بشكل صريح
+        req.session.save((err) => {
+            if (err) {
+                console.error('خطأ في حفظ الجلسة:', err);
+                return res.status(500).json({ error: 'خطأ في إنشاء الجلسة' });
+            }
+            res.json({ success: true, role: user.role });
+        });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'خطأ داخلي' });
@@ -305,8 +339,9 @@ app.post('/api/users', async (req, res) => {
     try {
         const { username, password, role, factory } = req.body;
         if (!username || !password) return res.status(400).json({ error: 'مطلوب' });
-        const exists = await query('SELECT id FROM users WHERE username = $1', [username]);
-        if (exists.rows.length) return res.status(400).json({ error: 'موجود' });
+        // تحقق من وجود المستخدم بدون حساسية حالة
+        const exists = await query(`SELECT id FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
+        if (exists.rows.length) return res.status(400).json({ error: 'اسم المستخدم موجود' });
         const hashed = bcrypt.hashSync(password, 10);
         const finalRole = role || 'user';
         const finalFactory = (finalRole === 'client' && factory) ? factory : null;
@@ -343,7 +378,7 @@ app.delete('/api/users/:id', async (req, res) => {
         const userId = parseInt(req.params.id);
         const user = await query('SELECT username FROM users WHERE id = $1', [userId]);
         if (!user.rows.length) return res.status(404).json({ error: 'غير موجود' });
-        if (user.rows[0].username === 'admin') return res.status(400).json({ error: 'لا يمكن حذف المدير' });
+        if (user.rows[0].username.toLowerCase() === 'admin') return res.status(400).json({ error: 'لا يمكن حذف المدير الرئيسي' });
         await query('DELETE FROM users WHERE id = $1', [userId]);
         res.json({ success: true });
     } catch (err) {
@@ -351,25 +386,9 @@ app.delete('/api/users/:id', async (req, res) => {
     }
 });
 
-// ==================== تقارير الميزان المحفوظة (مع إصلاح شامل) ====================
+// ==================== تقارير الميزان المحفوظة (مع صلاحية admin و user) ====================
 app.get('/api/scale-reports', async (req, res) => {
     try {
-        // نتأكد أولاً من وجود الجدول والأعمدة
-        await query(`
-            CREATE TABLE IF NOT EXISTS scale_reports (
-                id SERIAL PRIMARY KEY,
-                report_name TEXT NOT NULL,
-                report_date TEXT NOT NULL,
-                data JSONB NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        // نضيف الأعمدة إذا كانت مفقودة
-        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS report_name TEXT`);
-        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS report_date TEXT`);
-        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS data JSONB`);
-        await query(`ALTER TABLE scale_reports ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`);
-        
         const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
         res.json(result.rows.map(r => ({
             id: r.id,
@@ -409,7 +428,10 @@ app.get('/api/scale-reports/:id', async (req, res) => {
 });
 
 app.post('/api/scale-reports', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    // السماح لكل من admin و user (وليس client)
+    if (req.session.role !== 'admin' && req.session.role !== 'user') {
+        return res.status(403).json({ error: 'غير مصرح: تحتاج صلاحيات مدير أو مستخدم' });
+    }
     try {
         const { reportName, reportDate, data } = req.body;
         if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
@@ -451,7 +473,7 @@ app.delete('/api/scale-reports/:id', async (req, res) => {
     }
 });
 
-// ==================== بيانات الميزان الشهرية ====================
+// ==================== بيانات الميزان الشهرية (الخام) ====================
 app.get('/api/scale/monthly/:year/:month', async (req, res) => {
     try {
         const year = parseInt(req.params.year);
@@ -476,7 +498,7 @@ app.put('/api/scale/monthly/:year/:month', async (req, res) => {
     }
 });
 
-// ==================== تقارير المخالفات ====================
+// ==================== تقارير المخالفات (السيارات التي عملت برحلة واحدة فقط) ====================
 function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
     const truckTrips = new Map();
     distribution.forEach(d => {
@@ -581,9 +603,49 @@ app.get('/api/truck-violations/report/:startDate/:endDate', async (req, res) => 
     } catch (err) { console.error(err); res.status(500).json({ error: 'خطأ في جلب التقرير' }); }
 });
 
+// ==================== إدارة أسباب المخالفات (لصفحة trucks-failed.html) ====================
+// جلب الأسباب المحفوظة ليوم معين
+app.get('/api/truck-violations/:date', async (req, res) => {
+    const { date } = req.params;
+    try {
+        const result = await query('SELECT truck_number, reason, details FROM truck_violations WHERE date = $1', [date]);
+        res.json(result.rows.map(r => ({
+            truck_number: r.truck_number,
+            reason: r.reason,
+            details: r.details
+        })));
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في جلب الأسباب' });
+    }
+});
+
+// حفظ أسباب المخالفات ليوم معين
+app.post('/api/truck-violations/save', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    const { date, violations } = req.body;
+    if (!date || !violations) return res.status(400).json({ error: 'بيانات ناقصة' });
+    try {
+        // حذف الأسباب القديمة لهذا اليوم
+        await query('DELETE FROM truck_violations WHERE date = $1', [date]);
+        // إدخال الأسباب الجديدة
+        for (const v of violations) {
+            await query(
+                'INSERT INTO truck_violations (date, truck_number, driver, trips, reason, details) VALUES ($1, $2, $3, $4, $5, $6)',
+                [date, v.truckNumber, v.driver, v.trips, v.reason, v.detail || '']
+            );
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في حفظ الأسباب' });
+    }
+});
+
 // بدء الخادم
 app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
     console.log(`🔗 http://localhost:${PORT}`);
     console.log(`👤 بيانات الدخول الافتراضية: admin/admin , user/user , client/client`);
+    console.log(`📝 ملاحظة: تسجيل الدخول غير حساس لحالة الأحرف (admin, Admin, ADMIN كلها تؤدي إلى نفس المستخدم)`);
 });
