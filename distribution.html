@@ -110,7 +110,7 @@
     const API_BASE = '/api';
     let currentDate = '';
     let orders = [];          // الطلبات غير الموزعة
-    let allOrders = [];       // جميع الطلبات (للتوزيع التلقائي)
+    let allOrders = [];       // جميع الطلبات
     let distribution = [];    // التوزيع الحالي
     let trucks = [];
     let currentUserRole = '';
@@ -276,13 +276,7 @@
         }
         showLoading(true);
         try {
-            // 1. جمع كل الطلبات (غير الموزعة + الموزعة سابقاً؟ لا، سنقوم بتوزيع غير الموزعة فقط)
-            // لكن الخوارزمية يجب أن تعيد توزيع كل الطلبات (بما فيها الموزعة سابقاً) لتحقيق العدالة؟
-            // الأفضل: إعادة توزيع كل الطلبات (allOrders) من الصفر، ثم حفظ التوزيع الجديد.
-            // لكن المستخدم قد يريد إضافة توزيع على الطلبات غير الموزعة فقط. سأتبع الطريقة الأكثر شيوعاً:
-            // توزيع الطلبات غير الموزعة فقط، مع مراعاة التوزيع الحالي (لحساب عدد الرحلات لكل سيارة).
-            
-            // بناء قائمة بالسيارات مع إحصائياتها من التوزيع الحالي
+            // إحصائيات السيارات من التوزيع الحالي
             let truckStats = trucks.map(truck => {
                 const existing = distribution.filter(d => d.truck?.number === truck.number);
                 const trips = existing.length;
@@ -296,31 +290,25 @@
                 };
             });
             
-            // قائمة الطلبات التي سنوزعها (غير الموزعة)
             let pendingOrders = [...orders];
             let newDistributions = [];
             let currentRoad = 1;
-            let ordersProcessed = 0;
-            const maxRoad = 10; // حد أقصى للرودات
+            const maxRoad = 10;
             
             while (pendingOrders.length > 0 && currentRoad <= maxRoad) {
-                // نسخة من السيارات المتاحة لهذا الرود
                 let availableTrucks = [...truckStats];
                 let roadOrders = [];
                 
-                // توزيع طلبات هذا الرود (كل سيارة تأخذ طلباً واحداً في الرود الواحد)
                 for (let i = 0; i < availableTrucks.length && pendingOrders.length > 0; i++) {
-                    // اختيار أفضل سيارة حسب الخوارزمية: الأقل رحلات ثم الأكبر مسافة
+                    // ترتيب حسب الأقل رحلات ثم الأعلى مسافة
                     availableTrucks.sort((a, b) => {
                         if (a.trips !== b.trips) return a.trips - b.trips;
                         return b.totalDistance - a.totalDistance;
                     });
                     
-                    // تجنب تكرار نفس المصنع للسيارة
                     let selectedIndex = -1;
                     for (let j = 0; j < availableTrucks.length; j++) {
                         const truck = availableTrucks[j];
-                        // لا تختار سيارة ذهبت لنفس المصنع في آخر رحلة
                         if (truck.lastFactory !== pendingOrders[0]?.factory) {
                             selectedIndex = j;
                             break;
@@ -333,8 +321,7 @@
                     const order = pendingOrders.shift();
                     if (!order) break;
                     
-                    // تسجيل التوزيع
-                    const newDist = {
+                    newDistributions.push({
                         orderId: order.id,
                         orderIndex: distribution.length + newDistributions.length + 1,
                         truck: { number: selectedTruck.number, driver: selectedTruck.driver },
@@ -342,17 +329,12 @@
                         material: order.material,
                         time: order.time || '',
                         road: currentRoad
-                    };
-                    newDistributions.push(newDist);
+                    });
                     
-                    // تحديث إحصائيات السيارة مؤقتاً لهذا التوزيع
                     selectedTruck.trips++;
                     selectedTruck.totalDistance += getFactoryDistance(order.factory);
                     selectedTruck.lastFactory = order.factory;
-                    
-                    // إزالة السيارة من قائمة المتاحة لهذا الرود
                     availableTrucks.splice(selectedIndex, 1);
-                    ordersProcessed++;
                 }
                 currentRoad++;
             }
@@ -363,10 +345,7 @@
                 return;
             }
             
-            // دمج التوزيع الجديد مع القديم (الحفاظ على التوزيع السابق)
             const finalDistribution = [...distribution, ...newDistributions];
-            
-            // حفظ البيانات
             await apiCall(`/day/${currentDate}`, 'PUT', { orders: allOrders, distribution: finalDistribution });
             showToast(`✅ تم توزيع ${newDistributions.length} طلب بعدالة (آخر رود: ${currentRoad-1})`, 'success');
             await loadDayData();
@@ -376,7 +355,6 @@
         showLoading(false);
     }
 
-    // دالة مسح كل التوزيع
     async function clearAllDistribution() {
         if (!confirm('⚠️ تحذير: سيتم مسح جميع التوزيعات الحالية. هل أنت متأكد؟')) return;
         showLoading(true);
@@ -390,7 +368,6 @@
         showLoading(false);
     }
 
-    // تصدير الطلبات غير الموزعة إلى Excel
     function exportPendingOrders() {
         if (!orders.length) { showToast('لا توجد طلبات للتصدير', 'error'); return; }
         const data = orders.map((o, i) => ({
@@ -408,7 +385,6 @@
         showToast('✅ تم التصدير', 'success');
     }
 
-    // دوال التوزيع اليدوي (كما هي)
     function openDistributeModal(orderId) {
         const order = orders.find(o => o.id === orderId);
         if (!order) return;
