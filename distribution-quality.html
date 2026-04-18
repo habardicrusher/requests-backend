@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
+        /* (نفس الأنماط السابقة، اختصاراً) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -202,6 +203,7 @@
                     recommendedTruck: d.recommendedTruck || 'غير محدد'
                 });
             }
+            // التأكد من وجود restrictionApplied (قد تكون boolean أو undefined)
             if (d.restrictionApplied === true) {
                 restrictionSkips.push({
                     truckNumber: d.truck.number,
@@ -503,6 +505,7 @@
     });
 
     async function exportToExcel() {
+        // (كما هو سابقاً، لا تغيير)
         if (!dailyDataStore.length) { showToast('لا توجد بيانات للتصدير', 'error'); return; }
         showLoading(true);
         try {
@@ -571,7 +574,13 @@
 
     async function exportExecutivePDF() {
         const summaryElement = document.getElementById('executiveSummary');
-        if (!summaryElement) { showToast('لا يوجد تقرير تنفيذي لتصديره', 'error'); return; }
+        if (!summaryElement) {
+            showToast('لا يوجد تقرير تنفيذي لتصديره', 'error');
+            return;
+        }
+        // إذا كان العنصر مخفياً، نظهره مؤقتاً للتصدير ثم نعيد إخفاءه
+        const wasHidden = summaryElement.classList.contains('hidden');
+        if (wasHidden) summaryElement.classList.remove('hidden');
         showLoading(true);
         try {
             const { jsPDF } = window.jspdf;
@@ -595,8 +604,13 @@
             }
             pdf.save(`التقرير_التنفيذي_${document.getElementById('startDate').value}_إلى_${document.getElementById('endDate').value}.pdf`);
             showToast('✅ تم تصدير PDF بنجاح', 'success');
-        } catch(e) { showToast('خطأ في تصدير PDF: ' + e.message, 'error'); }
-        showLoading(false);
+        } catch(e) {
+            console.error(e);
+            showToast('خطأ في تصدير PDF: ' + e.message, 'error');
+        } finally {
+            if (wasHidden) summaryElement.classList.add('hidden');
+            showLoading(false);
+        }
     }
 
     function showToast(msg, type) { const c = document.getElementById('toastContainer'); const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg; c.appendChild(t); setTimeout(() => t.remove(), 3000); }
