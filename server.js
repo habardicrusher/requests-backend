@@ -345,6 +345,7 @@ app.post('/api/login', async (req, res) => {
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.role = user.role;
+        req.session.factory = user.factory; // ★ حفظ المصنع في الجلسة
         req.session.save(async (err) => {
             if (err) return res.status(500).json({ error: 'خطأ في إنشاء الجلسة' });
             await logAction(user.username, 'تسجيل دخول', 'تم تسجيل الدخول بنجاح', req);
@@ -361,8 +362,12 @@ app.post('/api/logout', async (req, res) => {
 
 app.get('/api/me', async (req, res) => {
     if (!req.session.userId) return res.status(401).json({ error: 'غير مصرح' });
-    const result = await query('SELECT id, username, role FROM users WHERE id = $1', [req.session.userId]);
+    const result = await query('SELECT id, username, role, factory FROM users WHERE id = $1', [req.session.userId]);
     if (!result.rows.length) return res.status(401).json({ error: 'غير مصرح' });
+    // تحديث الجلسة إذا تغير المصنع
+    if (result.rows[0].factory !== req.session.factory) {
+        req.session.factory = result.rows[0].factory;
+    }
     res.json({ user: result.rows[0] });
 });
 
@@ -424,19 +429,46 @@ app.delete('/api/products/:name', async (req, res) => {
     res.json({ success: true });
 });
 
-// ==================== بيانات اليوم ====================
+// ==================== بيانات اليوم (مع فلترة الصلاحيات) ====================
 app.get('/api/day/:date', async (req, res) => {
     const { date } = req.params;
     if (!date || isNaN(new Date(date).getTime())) return res.status(400).json({ error: 'تاريخ غير صالح' });
-    const data = await getDayData(date);
-    res.json(data);
+    
+    const result = await query('SELECT orders, distribution FROM day_data WHERE date = $1', [date]);
+    let orders = result.rows.length ? result.rows[0].orders : [];
+    let distribution = result.rows.length ? result.rows[0].distribution : [];
+    
+    // ★★★ فلترة الطلبات إذا كان المستخدم من نوع client ★★★
+    if (req.session.role === 'client' && req.session.factory) {
+        orders = orders.filter(order => order.factory === req.session.factory);
+        distribution = []; // العميل لا يرى التوزيع
+    }
+    
+    res.json({ orders, distribution });
 });
 
 app.put('/api/day/:date', async (req, res) => {
     const { date } = req.params;
-    const { orders, distribution } = req.body;
+    let { orders, distribution } = req.body;
+    
     if (!date || isNaN(new Date(date).getTime())) return res.status(400).json({ error: 'تاريخ غير صالح' });
     if (!Array.isArray(orders) || !Array.isArray(distribution)) return res.status(400).json({ error: 'بيانات غير صالحة' });
+    
+    // ★★★ التحقق من الصلاحيات: إذا كان المستخدم عميل مصنع ★★★
+    if (req.session.role === 'client' && req.session.factory) {
+        // تأكد من أن جميع الطلبات التي يحاول العميل حفظها تخص مصنعه فقط
+        const allOrdersBelongToClient = orders.every(order => order.factory === req.session.factory);
+        if (!allOrdersBelongToClient) {
+            return res.status(403).json({ error: 'غير مصرح لك بتعديل طلبات مصانع أخرى' });
+        }
+        // العميل لا يمكنه حفظ أي توزيع
+        if (distribution && distribution.length > 0) {
+            return res.status(403).json({ error: 'غير مصرح لك بحفظ بيانات التوزيع' });
+        }
+        // نسمح بحفظ طلبات العميل فقط، مع إفراغ التوزيع
+        distribution = [];
+    }
+    
     const ordersJson = JSON.stringify(orders);
     const distributionJson = JSON.stringify(distribution);
     await query(`INSERT INTO day_data (date, orders, distribution) VALUES ($1, $2::jsonb, $3::jsonb) ON CONFLICT (date) DO UPDATE SET orders = $2::jsonb, distribution = $3::jsonb`, [date, ordersJson, distributionJson]);
@@ -519,7 +551,6 @@ app.get('/api/scale-reports/:id', async (req, res) => {
 });
 
 app.post('/api/scale-reports', async (req, res) => {
-    // السماح لجميع المستخدمين بحفظ التقارير (يمكنك تقييده لاحقاً)
     try {
         const { reportName, reportDate, data } = req.body;
         if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
