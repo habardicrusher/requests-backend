@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
+        /* (جميع الأنماط السابقة كما هي - اختصاراً) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -297,12 +298,25 @@
         
         let manualOverridesHtml = '';
         if (allManualOverrides.length) {
-            manualOverridesHtml = `<div class="method-box" style="border-right-color:#f5576c;"><strong>⚠️ تدخلات يدوية مخالفة للعدالة</strong><p>تم رصد ${allManualOverrides.length} عملية توزيع يدوي خالفت توصيات النظام العادل.</p><table class="manual-overrides-table"><thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead><tbody>${allManualOverrides.map(m=>`<tr><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}</tbody></table></div>`;
+            manualOverridesHtml = `<div class="method-box" style="border-right-color:#f5576c;"><strong>⚠️ تدخلات يدوية مخالفة للعدالة</strong><p>تم رصد ${allManualOverrides.length} عملية توزيع يدوي خالفت توصيات النظام العادل.</p><table class="manual-overrides-table"><thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead><tbody>${allManualOverrides.map(m=>`<tr><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}</tbody></td></div>`;
         }
         
+        // ✅ القسم المهم: عرض قيود الحظر بالصيغة المطلوبة
         let restrictionHtml = '';
-        if (allRestrictionSkips.length) {
-            restrictionHtml = `<div class="method-box" style="border-right-color:#4facfe;"><strong>⛔ استبعاد سائقين بسبب قيود الحظر</strong><p>تم استبعاد السائقين التالية أسماؤهم من الذهاب إلى المصانع المحددة وفقاً لسياسات المنع، وذلك حرصاً على راحة العميل وضمان جودة الخدمة:</p><ul class="method-list">${allRestrictionSkips.map(s=>`<li>🚛 <strong>تم منع السائق ${s.driver} (رقم السيارة ${s.truckNumber})</strong> من الذهاب إلى مصنع <strong>${s.factory}</strong> بسبب: ${s.reason || 'لا يوجد سبب محدد'}.<br>ولذا تم استثناؤه من التوزيع على هذا المصنع حرصاً على راحة العميل.</li>`).join('')}</ul></div>`;
+        if (allRestrictionSkips.length > 0) {
+            restrictionHtml = `
+                <div class="method-box" style="border-right-color: #4facfe;">
+                    <strong>⛔ قيود الحظر المطبقة أثناء التوزيع</strong>
+                    <p style="margin-top:10px;">تم استبعاد السيارات التالية تلقائياً من الذهاب إلى المصانع المحددة وفقاً لسياسات المنع، وذلك حرصاً على راحة العميل وضمان جودة الخدمة:</p>
+                    <ul class="method-list">
+                        ${allRestrictionSkips.map(s => `
+                            <li>🚛 <strong>تم منع السائق ${s.driver} (رقم السيارة ${s.truckNumber})</strong> من الذهاب إلى مصنع <strong>${s.factory}</strong> بسبب: ${s.reason || 'لا يوجد سبب محدد'}.<br>
+                            📅 تم استبعاده تلقائياً أثناء التوزيع العادل في يوم ${s.date}.</li>
+                        `).join('')}
+                    </ul>
+                    <p style="margin-top:10px; font-size:0.9rem; color:#4facfe;">✅ هذه الميزة تُظهر ذكاء النظام في تطبيق سياسات المنع وحماية سمعة الشركة.</p>
+                </div>
+            `;
         }
         
         return `<div class="executive-summary" id="executiveSummary">
@@ -332,7 +346,14 @@
         report.trucks.forEach(t => {
             let roadsStr = t.roads.join(', ');
             let evaluation = t.trips >= 2 ? '<span class="badge badge-success">مستوفٍ</span>' : (t.trips === 1 ? '<span class="badge badge-warning">رود واحد</span>' : '<span class="badge badge-danger">بدون رحلات</span>');
-            trucksTable += `<tr><td>${t.number}</td><td>${t.driver}</td><td>${t.trips}</td><td>${roadsStr}</td><td>${t.totalDistance.toFixed(1)}</td><td>${evaluation}</td></tr>`;
+            trucksTable += `<tr>
+                <td>${t.number}</td>
+                <td>${t.driver}</td>
+                <td>${t.trips}</td>
+                <td>${roadsStr}</td>
+                <td>${t.totalDistance.toFixed(1)}</td>
+                <td>${evaluation}</td>
+            </tr>`;
         });
         trucksTable += `</tbody></table>`;
         let statsHtml = `<div class="stats-grid">
