@@ -77,7 +77,22 @@ async function initTables() {
         await query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', factory TEXT, created_at TIMESTAMP DEFAULT NOW())`);
         await query(`CREATE TABLE IF NOT EXISTS truck_violations (id SERIAL PRIMARY KEY, date DATE NOT NULL, truck_number TEXT NOT NULL, driver TEXT NOT NULL, trips INTEGER NOT NULL, reason TEXT, details TEXT, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(date, truck_number))`);
         await query(`CREATE TABLE IF NOT EXISTS logs (id SERIAL PRIMARY KEY, username TEXT NOT NULL, action TEXT NOT NULL, details TEXT, location TEXT, created_at TIMESTAMP DEFAULT NOW())`);
-
+        
+        // ✅ جدول القيود (restrictions)
+        await query(`
+            CREATE TABLE IF NOT EXISTS restrictions (
+                id SERIAL PRIMARY KEY,
+                truck_number TEXT NOT NULL,
+                driver_name TEXT NOT NULL,
+                restricted_factories TEXT[] NOT NULL,
+                reason TEXT,
+                active BOOLEAN DEFAULT TRUE,
+                created_by TEXT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        
         // المستخدمون الافتراضيون
         const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
         if (adminCheck.rows.length === 0) {
@@ -137,7 +152,7 @@ app.get('/api/me', async (req, res) => {
     res.json({ user: result.rows[0] });
 });
 
-// ==================== السجلات (Logs) ====================
+// ==================== السجلات ====================
 app.get('/api/logs', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const page = parseInt(req.query.page) || 1;
@@ -267,20 +282,12 @@ app.delete('/api/users/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// ==================== تقارير الميزان المحفوظة (المطلوبة لـ scale_report.html) ====================
+// ==================== تقارير الميزان المحفوظة ====================
 app.get('/api/scale-reports', async (req, res) => {
     try {
         const result = await query('SELECT id, report_name, report_date, created_at FROM scale_reports ORDER BY created_at DESC');
-        res.json(result.rows.map(r => ({
-            id: r.id,
-            reportName: r.report_name,
-            reportDate: r.report_date,
-            createdAt: r.created_at
-        })));
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في جلب قائمة التقارير' });
-    }
+        res.json(result.rows.map(r => ({ id: r.id, reportName: r.report_name, reportDate: r.report_date, createdAt: r.created_at })));
+    } catch (err) { res.status(500).json({ error: 'خطأ في جلب قائمة التقارير' }); }
 });
 
 app.get('/api/scale-reports/:id', async (req, res) => {
@@ -291,76 +298,47 @@ app.get('/api/scale-reports/:id', async (req, res) => {
         if (!result.rows.length) return res.status(404).json({ error: 'غير موجود' });
         const row = result.rows[0];
         let reportData = row.data;
-        if (typeof reportData === 'string') {
-            try { reportData = JSON.parse(reportData); } catch(e) { reportData = {}; }
-        }
+        if (typeof reportData === 'string') { try { reportData = JSON.parse(reportData); } catch(e) { reportData = {}; } }
         if (!reportData || typeof reportData !== 'object') reportData = {};
-        res.json({
-            id,
-            reportName: row.report_name,
-            reportDate: row.report_date,
-            data: reportData,
-            createdAt: row.created_at
-        });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في جلب التقرير' });
-    }
+        res.json({ id, reportName: row.report_name, reportDate: row.report_date, data: reportData, createdAt: row.created_at });
+    } catch (err) { res.status(500).json({ error: 'خطأ في جلب التقرير' }); }
 });
 
 app.post('/api/scale-reports', async (req, res) => {
-    // السماح لجميع المستخدمين (admin, user, client) بحفظ التقارير – يمكنك تقييده لاحقاً
-    // if (req.session.role !== 'admin' && req.session.role !== 'user') return res.status(403).json({ error: 'غير مصرح' });
     try {
         const { reportName, reportDate, data } = req.body;
         if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
         const dataJson = JSON.stringify(data);
-        await query(
-            'INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)',
-            [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]
-        );
+        await query('INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)', [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]);
         if (req.session.username) await logAction(req.session.username, 'حفظ تقرير', `حفظ تقرير "${reportName}"`, req);
         res.status(201).json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في حفظ التقرير: ' + err.message });
-    }
+    } catch (err) { res.status(500).json({ error: 'خطأ في حفظ التقرير: ' + err.message }); }
 });
 
 app.put('/api/scale-reports/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    try {
-        const id = parseInt(req.params.id);
-        const { reportName } = req.body;
-        if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
-        await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
-        await logAction(req.session.username, 'تعديل تقرير', `تعديل اسم التقرير إلى "${reportName}"`, req);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'خطأ في تعديل التقرير' });
-    }
+    const id = parseInt(req.params.id);
+    const { reportName } = req.body;
+    if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
+    await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
+    await logAction(req.session.username, 'تعديل تقرير', `تعديل اسم التقرير إلى "${reportName}"`, req);
+    res.json({ success: true });
 });
 
 app.delete('/api/scale-reports/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    try {
-        const id = parseInt(req.params.id);
-        await query('DELETE FROM scale_reports WHERE id = $1', [id]);
-        await logAction(req.session.username, 'حذف تقرير', `حذف تقرير برقم ${id}`, req);
-        res.json({ success: true });
-    } catch (err) {
-        res.status(500).json({ error: 'خطأ في حذف التقرير' });
-    }
+    const id = parseInt(req.params.id);
+    await query('DELETE FROM scale_reports WHERE id = $1', [id]);
+    await logAction(req.session.username, 'حذف تقرير', `حذف تقرير برقم ${id}`, req);
+    res.json({ success: true });
 });
 
-// ==================== بيانات الميزان الشهرية (الخام) ====================
+// ==================== بيانات الميزان الشهرية ====================
 app.get('/api/scale/monthly/:year/:month', async (req, res) => {
-    try {
-        const year = parseInt(req.params.year);
-        const month = parseInt(req.params.month);
-        const result = await query('SELECT data FROM scale_data WHERE year = $1 AND month = $2', [year, month]);
-        res.json(result.rows.length ? result.rows[0].data : {});
-    } catch (err) { res.status(500).json({ error: 'خطأ في جلب بيانات الميزان' }); }
+    const year = parseInt(req.params.year);
+    const month = parseInt(req.params.month);
+    const result = await query('SELECT data FROM scale_data WHERE year = $1 AND month = $2', [year, month]);
+    res.json(result.rows.length ? result.rows[0].data : {});
 });
 
 app.put('/api/scale/monthly/:year/:month', async (req, res) => {
@@ -459,14 +437,7 @@ app.get('/api/truck-violations/report/:startDate/:endDate', async (req, res) => 
             const distribution = dayData.distribution || [];
             const violations = analyzeTruckViolationsForDay(date, orders, distribution, trucksList);
             violations.forEach(v => {
-                report.push({
-                    report_date: date,
-                    truck_number: v.truck_number,
-                    driver_name: v.driver_name,
-                    trips_count: v.trips_count,
-                    reason: v.reason,
-                    details: v.details
-                });
+                report.push({ report_date: date, truck_number: v.truck_number, driver_name: v.driver_name, trips_count: v.trips_count, reason: v.reason, details: v.details });
             });
         }
         res.json(report);
@@ -495,8 +466,71 @@ app.post('/api/truck-violations/save', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'خطأ في حفظ الأسباب' }); }
 });
 
-// بدء الخادم
+// ==================== القيود (Restrictions) ====================
+// جلب جميع القيود
+app.get('/api/restrictions', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        const result = await query('SELECT * FROM restrictions ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في جلب القيود' });
+    }
+});
+
+// إضافة قيد جديد
+app.post('/api/restrictions', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    const { truckNumber, driverName, restrictedFactories, reason } = req.body;
+    if (!truckNumber || !driverName || !restrictedFactories || !restrictedFactories.length) {
+        return res.status(400).json({ error: 'بيانات ناقصة' });
+    }
+    try {
+        await query(
+            'INSERT INTO restrictions (truck_number, driver_name, restricted_factories, reason, created_by) VALUES ($1, $2, $3, $4, $5)',
+            [truckNumber, driverName, restrictedFactories, reason || '', req.session.username]
+        );
+        await logAction(req.session.username, 'إضافة قيد', `إضافة قيد على السيارة ${truckNumber} - المصانع: ${restrictedFactories.join(', ')}`, req);
+        res.status(201).json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في إضافة القيد' });
+    }
+});
+
+// تحديث حالة القيد (تفعيل/تعطيل)
+app.put('/api/restrictions/:id', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    const id = parseInt(req.params.id);
+    const { active } = req.body;
+    if (typeof active !== 'boolean') return res.status(400).json({ error: 'حالة القيد غير صالحة' });
+    try {
+        await query('UPDATE restrictions SET active = $1, updated_at = NOW() WHERE id = $2', [active, id]);
+        await logAction(req.session.username, active ? 'تفعيل قيد' : 'تعطيل قيد', `تغيير حالة القيد رقم ${id} إلى ${active ? 'نشط' : 'معطل'}`, req);
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في تحديث القيد' });
+    }
+});
+
+// حذف قيد
+app.delete('/api/restrictions/:id', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    const id = parseInt(req.params.id);
+    try {
+        await query('DELETE FROM restrictions WHERE id = $1', [id]);
+        await logAction(req.session.username, 'حذف قيد', `حذف القيد رقم ${id}`, req);
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في حذف القيد' });
+    }
+});
+
+// ==================== بدء الخادم ====================
 app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
-    console.log(`👤 بيانات الدخول: admin/admin , user/user , client/client`);
+    console.log(`👤 بيانات الدخول الافتراضية: admin/admin , user/user , client/client`);
 });
