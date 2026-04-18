@@ -175,28 +175,22 @@
 
     // تحليل اليوم مع جمع معلومات القيود من localStorage و distribution
     function analyzeDay(date, orders, distribution) {
-        const dateStr = formatDateForSheet(date);
-        const trucksMap = new Map();
-        const manualOverrides = [];
-        const restrictionSkips = [];
-
-        // أولاً: جلب سجل الاستبعادات من localStorage لهذا اليوم
-        try {
-            const log = localStorage.getItem(`excluded_log_${date}`);
-            if (log) {
-                const excluded = JSON.parse(log);
-                excluded.forEach(e => {
-                    restrictionSkips.push({
-                        truckNumber: e.truckNumber,
-                        driver: e.driver,
-                        factory: e.factory,
-                        road: '—',
-                        reason: e.reason,
-                        date: dateStr
-                    });
-                });
-            }
-        } catch(e) { console.warn('فشل تحميل سجل الاستبعادات', e); }
+     try {
+    const log = sessionStorage.getItem(`excluded_log_${dateStr}`);
+    if (log) {
+        const excluded = JSON.parse(log);
+        excluded.forEach(e => {
+            restrictionSkips.push({
+                truckNumber: e.truckNumber,
+                driver: e.driver,
+                factory: e.factory,
+                road: '—',
+                reason: e.reason,
+                date: dateStr
+            });
+        });
+    }
+} catch(e) { console.warn('فشل تحميل سجل الاستبعادات', e); }
 
         // أيضاً نتحقق من التوزيعات لمعرفة إذا كان هناك restrictionApplied مسجل (قد لا يكون موجوداً)
         distribution.forEach(d => {
