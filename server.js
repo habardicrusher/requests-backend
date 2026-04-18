@@ -345,7 +345,7 @@ app.post('/api/login', async (req, res) => {
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.role = user.role;
-        req.session.factory = user.factory; // ★ حفظ المصنع في الجلسة
+        req.session.factory = user.factory; // ★★★ تخزين المصنع في الجلسة
         req.session.save(async (err) => {
             if (err) return res.status(500).json({ error: 'خطأ في إنشاء الجلسة' });
             await logAction(user.username, 'تسجيل دخول', 'تم تسجيل الدخول بنجاح', req);
@@ -364,8 +364,8 @@ app.get('/api/me', async (req, res) => {
     if (!req.session.userId) return res.status(401).json({ error: 'غير مصرح' });
     const result = await query('SELECT id, username, role, factory FROM users WHERE id = $1', [req.session.userId]);
     if (!result.rows.length) return res.status(401).json({ error: 'غير مصرح' });
-    // تحديث الجلسة إذا تغير المصنع
-    if (result.rows[0].factory !== req.session.factory) {
+    // تحديث الجلسة في حالة تغير المصنع من قاعدة البيانات (نادر)
+    if (result.rows[0].factory && !req.session.factory) {
         req.session.factory = result.rows[0].factory;
     }
     res.json({ user: result.rows[0] });
@@ -429,14 +429,13 @@ app.delete('/api/products/:name', async (req, res) => {
     res.json({ success: true });
 });
 
-// ==================== بيانات اليوم (مع فلترة الصلاحيات) ====================
+// ==================== بيانات اليوم (مع صلاحيات client) ====================
 app.get('/api/day/:date', async (req, res) => {
     const { date } = req.params;
     if (!date || isNaN(new Date(date).getTime())) return res.status(400).json({ error: 'تاريخ غير صالح' });
-    
-    const result = await query('SELECT orders, distribution FROM day_data WHERE date = $1', [date]);
-    let orders = result.rows.length ? result.rows[0].orders : [];
-    let distribution = result.rows.length ? result.rows[0].distribution : [];
+    const data = await getDayData(date);
+    let orders = data.orders || [];
+    let distribution = data.distribution || [];
     
     // ★★★ فلترة الطلبات إذا كان المستخدم من نوع client ★★★
     if (req.session.role === 'client' && req.session.factory) {
@@ -450,23 +449,19 @@ app.get('/api/day/:date', async (req, res) => {
 app.put('/api/day/:date', async (req, res) => {
     const { date } = req.params;
     let { orders, distribution } = req.body;
-    
     if (!date || isNaN(new Date(date).getTime())) return res.status(400).json({ error: 'تاريخ غير صالح' });
     if (!Array.isArray(orders) || !Array.isArray(distribution)) return res.status(400).json({ error: 'بيانات غير صالحة' });
     
     // ★★★ التحقق من الصلاحيات: إذا كان المستخدم عميل مصنع ★★★
     if (req.session.role === 'client' && req.session.factory) {
-        // تأكد من أن جميع الطلبات التي يحاول العميل حفظها تخص مصنعه فقط
         const allOrdersBelongToClient = orders.every(order => order.factory === req.session.factory);
         if (!allOrdersBelongToClient) {
             return res.status(403).json({ error: 'غير مصرح لك بتعديل طلبات مصانع أخرى' });
         }
-        // العميل لا يمكنه حفظ أي توزيع
         if (distribution && distribution.length > 0) {
             return res.status(403).json({ error: 'غير مصرح لك بحفظ بيانات التوزيع' });
         }
-        // نسمح بحفظ طلبات العميل فقط، مع إفراغ التوزيع
-        distribution = [];
+        distribution = []; // إفراغ التوزيع
     }
     
     const ordersJson = JSON.stringify(orders);
