@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>التوزيع الجغرافي المتوازن - كسارة الحبردي</title>
     <style>
-        /* (نفس الأنماط السابقة - اختصاراً) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -99,35 +98,56 @@
         <div style="overflow-x: auto; margin-bottom: 30px;">
             <table id="undistributedTable">
                 <thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>وقت الإضافة</th><th>توزيع يدوي</th></tr></thead>
-                <tbody id="undistributedBody"><tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة<\/td><\/tr> <\/tbody>
-             <\/table>
-        <\/div>
+                <tbody id="undistributedBody"><tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة</td></tr></tbody>
+            </table>
+        </div>
 
-        <h2>📋 قائمة التوزيع (المنفذة)<\/h2>
+        <h2>📋 قائمة التوزيع (المنفذة)</h2>
         <div style="overflow-x: auto;">
             <table id="distributionTable">
-                <thead><tr><th>#<\/th><th>رقم السيارة<\/th><th>السائق<\/th><th>المصنع<\/th><th>نوع البحص<\/th><th>المسافة (كم)<\/th><th>الوقت<\/th><th>التوقيت<\/th><th>الرود<\/th><th>ملاحظات<\/th> <\/thead>
-                <tbody id="distributionBody"><tr><td colspan="10" style="text-align:center;">لا يوجد توزيع بعد<\/td><\/tr> <\/tbody>
-             <\/table>
-        <\/div>
-    <\/div>
+                <thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>الرود</th><th>ملاحظات</th></tr></thead>
+                <tbody id="distributionBody"><tr><td colspan="10" style="text-align:center;">لا يوجد توزيع بعد</td></tr></tbody>
+            </table>
+        </div>
+    </div>
 
     <div class="modal" id="manualDistributeModal">
         <div class="modal-content">
-            <h3 style="color:#667eea; margin-bottom:20px;">🖐️ توزيع يدوي<\/h3>
-            <div class="form-group"><label>🏭 المصنع<\/label><input type="text" id="manualFactory" readonly style="background:#3a3a5e;"><\/div>
-            <div class="form-group"><label>📦 نوع البحص<\/label><input type="text" id="manualMaterial" readonly style="background:#3a3a5e;"><\/div>
-            <div class="form-group"><label>🚛 اختر السيارة<\/label><select id="manualTruckSelect"><\/select><\/div>
-            <div class="form-group"><label>🔢 الرود<\/label><input type="number" id="manualRoad" min="1" value="1"><\/div>
+            <h3 style="color:#667eea; margin-bottom:20px;">🖐️ توزيع يدوي</h3>
+            <div class="form-group"><label>🏭 المصنع</label><input type="text" id="manualFactory" readonly style="background:#3a3a5e;"></div>
+            <div class="form-group"><label>📦 نوع البحص</label><input type="text" id="manualMaterial" readonly style="background:#3a3a5e;"></div>
+            <div class="form-group"><label>🚛 اختر السيارة</label><select id="manualTruckSelect"></select></div>
+            <div class="form-group"><label>🔢 الرود</label><input type="number" id="manualRoad" min="1" value="1"></div>
             <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-                <button class="btn btn-danger" onclick="closeManualModal()">إلغاء<\/button>
-                <button class="btn btn-success" onclick="confirmManualDistribute()">توزيع<\/button>
-            <\/div>
-        <\/div>
-    <\/div>
+                <button class="btn btn-danger" onclick="closeManualModal()">إلغاء</button>
+                <button class="btn btn-success" onclick="confirmManualDistribute()">توزيع</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        const FACTORY_DATA = { "مصنع الفهد": { distance: 337.99, time: "3 س و 30 د" }, "مصنع قوة معمارية": { distance: 339.87, time: "3 س و 29 د" }, "مصنع سارمكس النظيم": { distance: 352.64, time: "3 س و 45 د" }, "مصنع القيشان 3": { distance: 396.22, time: "4 س و 8 د" }, "مصنع القيشان 1": { distance: 396.22, time: "4 س و 8 د" }, "شركة الحارث للمنتجات الاسمنيه حي المنار": { distance: 401.37, time: "4 س و 7 د" }, "شركة برينسا للخرسانة الجاهزه": { distance: 403.21, time: "4 س و 19 د" }, "مصنع الاحجار الشرقية": { distance: 416.11, time: "4 س و 36 د" }, "شركة ابتك للخرسانة الجاهزه": { distance: 418.11, time: "4 س و 20 د" }, "شركةالحارث للمنتجات الاسمنتية": { distance: 420.4, time: "4 س و 31 د" }, "مصنع باسل أبو الرب وشريكه": { distance: 420.6, time: "4 س و 43 د" }, "شركة عبر الخليج": { distance: 427.48, time: "4 س و 42 د" }, "مصنع المعجل": { distance: 431.01, time: "4 س و 31 د" }, "مصنع نبراس2": { distance: 439.61, time: "4 س و 35 د" }, "مصنع دعم وحلول الدرعية": { distance: 441.05, time: "4 س و 47 د" }, "مصنع نبراس الخليج": { distance: 448.99, time: "5 س" }, "الحارث العزيزية": { distance: 475.49, time: "5 س و 3 د" }, "انشاءات دبي": { distance: 522.92, time: "6 س و 3 د" }, "الشركة الصينية": { distance: 605.51, time: "7 س و 40 د" }, "شركة اعمار": { distance: 662.14, time: "7 س و 38 د" } };
+        const FACTORY_DATA = {
+            "مصنع الفهد": { distance: 337.99, time: "3 س و 30 د" },
+            "مصنع قوة معمارية": { distance: 339.87, time: "3 س و 29 د" },
+            "مصنع سارمكس النظيم": { distance: 352.64, time: "3 س و 45 د" },
+            "مصنع القيشان 3": { distance: 396.22, time: "4 س و 8 د" },
+            "مصنع القيشان 1": { distance: 396.22, time: "4 س و 8 د" },
+            "شركة الحارث للمنتجات الاسمنيه حي المنار": { distance: 401.37, time: "4 س و 7 د" },
+            "شركة برينسا للخرسانة الجاهزه": { distance: 403.21, time: "4 س و 19 د" },
+            "مصنع الاحجار الشرقية": { distance: 416.11, time: "4 س و 36 د" },
+            "شركة ابتك للخرسانة الجاهزه": { distance: 418.11, time: "4 س و 20 د" },
+            "شركةالحارث للمنتجات الاسمنتية": { distance: 420.4, time: "4 س و 31 د" },
+            "مصنع باسل أبو الرب وشريكه": { distance: 420.6, time: "4 س و 43 د" },
+            "شركة عبر الخليج": { distance: 427.48, time: "4 س و 42 د" },
+            "مصنع المعجل": { distance: 431.01, time: "4 س و 31 د" },
+            "مصنع نبراس2": { distance: 439.61, time: "4 س و 35 د" },
+            "مصنع دعم وحلول الدرعية": { distance: 441.05, time: "4 س و 47 د" },
+            "مصنع نبراس الخليج": { distance: 448.99, time: "5 س" },
+            "الحارث العزيزية": { distance: 475.49, time: "5 س و 3 د" },
+            "انشاءات دبي": { distance: 522.92, time: "6 س و 3 د" },
+            "الشركة الصينية": { distance: 605.51, time: "7 س و 40 د" },
+            "شركة اعمار": { distance: 662.14, time: "7 س و 38 د" }
+        };
         function getFactoryDistance(f) { return FACTORY_DATA[f] ? FACTORY_DATA[f].distance : 150; }
         function getFactoryTime(f) { return FACTORY_DATA[f] ? FACTORY_DATA[f].time : "—"; }
 
@@ -180,7 +200,6 @@
                 renderDistribution();
                 updateStats(undistributed.length);
                 updateExcludedWarning(undistributed);
-                // تحميل سجل الاستبعادات من sessionStorage
                 const savedLog = sessionStorage.getItem(`excluded_log_${currentDate}`);
                 if (savedLog) excludedDriversLog = JSON.parse(savedLog);
                 else excludedDriversLog = [];
@@ -220,26 +239,28 @@
 
         function renderUndistributed(undistributed) {
             const tbody = document.getElementById('undistributedBody');
-            if (!undistributed.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة<\/td><\/tr>'; return; }
+            if (!undistributed.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة</td></tr>'; return; }
             tbody.innerHTML = undistributed.map((order, i) => {
                 const dist = getFactoryDistance(order.factory);
                 const time = getFactoryTime(order.factory);
                 const isExcluded = (order.factory === EXCLUDED_FACTORY && isRoadBlocked());
                 const rowStyle = isExcluded ? 'style="background: rgba(235,51,73,0.2);"' : '';
                 return `<tr ${rowStyle}>
-                    <td>${i+1}<\/td><td>${order.factory}<\/td><td>بحص ${order.material}<\/td>
-                    <td><span class="distance-badge">${dist} كم<\/span><\/td>
-                    <td><span class="time-badge">⏱️ ${time}<\/span><\/td>
-                    <td>${order.time && order.time !== 'undefined' ? order.time : '-'}<\/td>
-                    <td>${order.timestamp || '-'}<\/td>
-                    <td><button class="btn btn-sm btn-warning" onclick='openManualDistributeModalForOrder(${JSON.stringify(order).replace(/'/g, "&#39;")})'>🖐️ توزيع<\/button><\/td>
-                <\/tr>`;
+                    <td>${i+1}</td>
+                    <td>${order.factory}</td>
+                    <td>بحص ${order.material}</td>
+                    <td><span class="distance-badge">${dist} كم</span></td>
+                    <td><span class="time-badge">⏱️ ${time}</span></td>
+                    <td>${order.time && order.time !== 'undefined' ? order.time : '-'}</td>
+                    <td>${order.timestamp || '-'}</td>
+                    <td><button class="btn btn-sm btn-warning" onclick='openManualDistributeModalForOrder(${JSON.stringify(order).replace(/'/g, "&#39;")})'>🖐️ توزيع</button></td>
+                </tr>`;
             }).join('');
         }
 
         function renderDistribution() {
             const tbody = document.getElementById('distributionBody');
-            if (!distribution.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">لا يوجد توزيع بعد<\/td><\/tr>'; return; }
+            if (!distribution.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">لا يوجد توزيع بعد</td></tr>'; return; }
             const uniqueMap = new Map();
             distribution.forEach(d => { if (!uniqueMap.has(d.orderId)) uniqueMap.set(d.orderId, d); });
             const uniqueDistributions = Array.from(uniqueMap.values());
@@ -249,14 +270,17 @@
                 let note = d.manualOverride ? '⚠️ توزيع يدوي مخالف للعدالة' : '';
                 if (d.restrictionApplied) note = `⛔ تم تجنب سيارة ${d.skippedTruck} (ممنوع من المصنع) - السبب: ${d.restrictionReason || 'غير محدد'}`;
                 return `<tr>
-                    <td>${i+1}<\/td><td><strong>${d.truck?.number || '?'}<\/strong><\/td><td>${d.truck?.driver || '?'}<\/td>
-                    <td>${d.factory}<\/td><td>بحص ${d.material}<\/td>
-                    <td><span class="distance-badge">${dist} كم<\/span><\/td>
-                    <td><span class="time-badge">⏱️ ${time}<\/span><\/td>
-                    <td>${d.time && d.time !== 'undefined' ? `<span class="time-badge">⏰ ${d.time}<\/span>` : '-'}<\/td>
-                    <td><span class="road-badge road-${d.road}">رود ${d.road}<\/span><\/td>
-                    <td style="color:#f5576c;">${note}<\/td>
-                <\/tr>`;
+                    <td>${i+1}</td>
+                    <td><strong>${d.truck?.number || '?'}</strong></td>
+                    <td>${d.truck?.driver || '?'}</td>
+                    <td>${d.factory}</td>
+                    <td>بحص ${d.material}</td>
+                    <td><span class="distance-badge">${dist} كم</span></td>
+                    <td><span class="time-badge">⏱️ ${time}</span></td>
+                    <td>${d.time && d.time !== 'undefined' ? `<span class="time-badge">⏰ ${d.time}</span>` : '-'}</td>
+                    <td><span class="road-badge road-${d.road}">رود ${d.road}</span></td>
+                    <td style="color:#f5576c;">${note}</td>
+                </tr>`;
             }).join('');
         }
 
@@ -268,9 +292,9 @@
             list.innerHTML = excludedDriversLog.map(log => `
                 <li>
                     🚛 <strong>${log.truckNumber} (${log.driver})</strong> - ممنوع من الذهاب إلى <strong>${log.factory}</strong><br>
-                    <span class="reason-text">📝 السبب: ${log.reason}<\/span><br>
-                    <span style="font-size:0.8rem;">⏱️ تم استبعاده تلقائياً أثناء التوزيع العادل في يوم ${log.date}<\/span>
-                <\/li>
+                    <span class="reason-text">📝 السبب: ${log.reason}</span><br>
+                    <span style="font-size:0.8rem;">⏱️ تم استبعاده تلقائياً أثناء التوزيع العادل في يوم ${log.date}</span>
+                </li>
             `).join('');
         }
 
@@ -363,7 +387,6 @@
                 distribution.push(...newDistributions);
                 await saveData();
                 await loadData();
-                // دمج الاستبعادات الجديدة مع القديمة (تجنب التكرار)
                 for (let ex of tempExcluded) {
                     const exists = excludedDriversLog.some(e => e.truckNumber === ex.truckNumber && e.factory === ex.factory);
                     if (!exists) excludedDriversLog.push(ex);
@@ -399,9 +422,84 @@
             }
         }
 
-        function openManualDistributeModalForOrder(order) { currentOrderToDistribute = order; document.getElementById('manualFactory').value = order.factory; document.getElementById('manualMaterial').value = order.material; const select = document.getElementById('manualTruckSelect'); select.innerHTML = '<option value="">-- اختر سيارة --</option>' + trucks.map(t => `<option value="${t.number}">${t.number} - ${t.driver}</option>`).join(''); document.getElementById('manualRoad').value = 1; document.getElementById('manualDistributeModal').classList.add('active'); }
+        function openManualDistributeModalForOrder(order) {
+            currentOrderToDistribute = order;
+            document.getElementById('manualFactory').value = order.factory;
+            document.getElementById('manualMaterial').value = order.material;
+            const select = document.getElementById('manualTruckSelect');
+            select.innerHTML = '<option value="">-- اختر سيارة --</option>' + trucks.map(t => `<option value="${t.number}">${t.number} - ${t.driver}</option>`).join('');
+            document.getElementById('manualRoad').value = 1;
+            document.getElementById('manualDistributeModal').classList.add('active');
+        }
+
         function closeManualModal() { document.getElementById('manualDistributeModal').classList.remove('active'); currentOrderToDistribute = null; }
-        async function confirmManualDistribute() { /* نفس الكود السابق */ showToast('تم التوزيع اليدوي', 'success'); closeManualModal(); }
+
+        async function confirmManualDistribute() {
+            const truckNumber = document.getElementById('manualTruckSelect').value;
+            const road = parseInt(document.getElementById('manualRoad').value);
+            if (!truckNumber) { showToast('اختر سيارة', 'error'); return; }
+            const selectedTruck = trucks.find(t => t.number === truckNumber);
+            if (!selectedTruck) { showToast('سيارة غير موجودة', 'error'); return; }
+            if (!currentOrderToDistribute) { showToast('لا يوجد طلب محدد', 'error'); return; }
+            
+            let currentTrips = {}, currentDistances = {}, currentLastFactory = {};
+            trucks.forEach(t => { currentTrips[t.number] = 0; currentDistances[t.number] = 0; currentLastFactory[t.number] = null; });
+            distribution.forEach(d => {
+                if (d.truck) {
+                    currentTrips[d.truck.number]++;
+                    currentDistances[d.truck.number] += getFactoryDistance(d.factory);
+                    currentLastFactory[d.truck.number] = d.factory;
+                }
+            });
+            
+            let fairTruck = null;
+            let sorted = [...trucks].sort((a, b) => {
+                const tripsA = currentTrips[a.number] || 0;
+                const tripsB = currentTrips[b.number] || 0;
+                if (tripsA !== tripsB) return tripsA - tripsB;
+                const distA = currentDistances[a.number] || 0;
+                const distB = currentDistances[b.number] || 0;
+                return distB - distA;
+            });
+            for (let t of sorted) {
+                if (currentLastFactory[t.number] !== currentOrderToDistribute.factory) { fairTruck = t; break; }
+            }
+            if (!fairTruck) fairTruck = sorted[0];
+            const isFair = (fairTruck.number === selectedTruck.number);
+            let manualOverride = false, overrideReason = '';
+            if (!isFair) {
+                const confirmMsg = `⚠️ تحذير: التوزيع العادل يوصي بالسائق ${fairTruck.number} - ${fairTruck.driver} (عدد رحلاته: ${currentTrips[fairTruck.number]}، مسافة: ${currentDistances[fairTruck.number].toFixed(1)} كم).\nأنت تختار السائق ${selectedTruck.number} - ${selectedTruck.driver}.\n\nإذا واصلت، سيتم تسجيل هذا كتوزيع يدوي مخالف للعدالة وقد يظهر في تقرير الجودة.\n\nهل تريد المتابعة؟`;
+                if (!confirm(confirmMsg)) return;
+                manualOverride = true;
+                overrideReason = `تم اختيار السائق ${selectedTruck.number} (${selectedTruck.driver}) بدلاً من الموصى به ${fairTruck.number} (${fairTruck.driver})`;
+            }
+            
+            showLoading(true);
+            try {
+                const alreadyDistributed = distribution.some(d => d.orderId === currentOrderToDistribute.id);
+                if (alreadyDistributed) { showToast('هذا الطلب موزع بالفعل', 'warning'); closeManualModal(); showLoading(false); return; }
+                distribution.push({
+                    orderId: currentOrderToDistribute.id,
+                    orderIndex: distribution.length + 1,
+                    truck: selectedTruck,
+                    factory: currentOrderToDistribute.factory,
+                    material: currentOrderToDistribute.material,
+                    time: currentOrderToDistribute.time || '',
+                    road: road,
+                    manualOverride: manualOverride,
+                    overrideReason: overrideReason,
+                    recommendedTruck: fairTruck.number,
+                    timestamp: new Date().toISOString()
+                });
+                await saveData();
+                await loadData();
+                closeManualModal();
+                if (manualOverride) showToast(`⚠️ تم توزيع الطلب على السيارة ${truckNumber} (رود ${road}) مع مخالفة للتوزيع العادل. تم تسجيل المخالفة.`, 'warning');
+                else showToast(`✅ تم توزيع الطلب على السيارة ${truckNumber} - ${selectedTruck.driver} (رود ${road})`, 'success');
+                localStorage.setItem('pendingOrdersCount', '0');
+            } catch(e) { showToast('خطأ في التوزيع', 'error'); }
+            showLoading(false);
+        }
 
         function showToast(msg,type){ const c=document.getElementById('toastContainer'); const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerText=msg; c.appendChild(t); setTimeout(()=>t.remove(),3000); }
         function showLoading(show){ document.getElementById('loading').classList.toggle('active',show); }
@@ -441,7 +539,7 @@
             await loadData();
             showLoading(false);
         });
-    <\/script>
-    <script src="navbar.js"><\/script>
-<\/body>
-<\/html>
+    </script>
+    <script src="navbar.js"></script>
+</body>
+</html>
