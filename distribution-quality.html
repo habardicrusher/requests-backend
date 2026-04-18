@@ -22,6 +22,9 @@
         .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
         .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: #fff; }
         .btn-pdf { background: linear-gradient(135deg, #f5576c, #f093fb); color: #fff; }
+        .quick-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+        .quick-filter-btn { padding: 8px 16px; border: 1px solid rgba(102,126,234,0.5); background: rgba(102,126,234,0.1); color: #a8b2d1; border-radius: 20px; cursor: pointer; font-size: 0.85em; font-weight: 600; transition: all 0.3s; }
+        .quick-filter-btn:hover, .quick-filter-btn.active { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border-color: transparent; transform: translateY(-1px); }
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
         .stat-card { background: rgba(255,255,255,0.05); border-radius: 15px; padding: 20px; text-align: center; }
         .stat-card .number { font-size: 2em; font-weight: bold; color: #38ef7d; }
@@ -43,8 +46,6 @@
         @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .daily-section { margin-bottom: 40px; border: 1px solid rgba(255,255,255,0.2); border-radius: 15px; padding: 15px; background: rgba(0,0,0,0.2); }
         .daily-title { font-size: 1.5em; margin-bottom: 15px; color: #4facfe; }
-        
-        /* Executive Summary - Modern Design */
         .executive-summary {
             background: linear-gradient(145deg, rgba(102,126,234,0.15), rgba(118,75,162,0.15));
             backdrop-filter: blur(10px);
@@ -55,100 +56,28 @@
             transition: all 0.3s ease;
         }
         .executive-summary.hidden { display: none; }
-        .exec-summary-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid rgba(56,239,125,0.4);
-        }
-        .exec-summary-header h2 {
-            font-size: 1.8rem;
-            background: linear-gradient(135deg, #fff, #38ef7d);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            display: inline-flex;
-            align-items: center;
-            gap: 12px;
-        }
-        .period-badge {
-            background: rgba(56,239,125,0.2);
-            padding: 8px 18px;
-            border-radius: 40px;
-            font-size: 0.9rem;
-            font-weight: bold;
-            border: 1px solid rgba(56,239,125,0.5);
-        }
-        .kpi-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        .kpi-card {
-            background: rgba(0,0,0,0.35);
-            border-radius: 24px;
-            padding: 20px;
-            text-align: center;
-            backdrop-filter: blur(5px);
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: transform 0.2s;
-        }
+        .exec-summary-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid rgba(56,239,125,0.4); }
+        .exec-summary-header h2 { font-size: 1.8rem; background: linear-gradient(135deg, #fff, #38ef7d); -webkit-background-clip: text; background-clip: text; color: transparent; display: inline-flex; align-items: center; gap: 12px; }
+        .period-badge { background: rgba(56,239,125,0.2); padding: 8px 18px; border-radius: 40px; font-size: 0.9rem; font-weight: bold; border: 1px solid rgba(56,239,125,0.5); }
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .kpi-card { background: rgba(0,0,0,0.35); border-radius: 24px; padding: 20px; text-align: center; backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
         .kpi-card:hover { transform: translateY(-5px); background: rgba(0,0,0,0.45); }
         .kpi-icon { font-size: 2.2rem; margin-bottom: 12px; }
         .kpi-value { font-size: 2.2rem; font-weight: 800; color: #38ef7d; line-height: 1.2; }
         .kpi-label { font-size: 0.85rem; color: #a8b2d1; margin-top: 8px; }
         .compliance-card .kpi-value { color: #f6d365; }
         .improvement-card .kpi-value { color: #4facfe; }
-        
-        .method-box {
-            background: rgba(0,0,0,0.3);
-            border-radius: 20px;
-            padding: 20px;
-            margin: 20px 0;
-            border-right: 4px solid #38ef7d;
-        }
+        .method-box { background: rgba(0,0,0,0.3); border-radius: 20px; padding: 20px; margin: 20px 0; border-right: 4px solid #38ef7d; }
         .method-box strong { color: #38ef7d; font-size: 1.1rem; }
         .method-list { list-style: none; margin-top: 12px; }
         .method-list li { margin-bottom: 10px; padding-right: 20px; position: relative; }
         .method-list li::before { content: "✓"; color: #38ef7d; position: absolute; right: 0; }
-        
-        .priority-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 10px;
-            margin-bottom: 15px;
-        }
-        .priority-item {
-            background: rgba(56,239,125,0.12);
-            padding: 8px 16px;
-            border-radius: 40px;
-            font-size: 0.85rem;
-            border: 1px solid rgba(56,239,125,0.4);
-            font-weight: 500;
-        }
-        
-        .manual-overrides-table {
-            width: 100%;
-            margin-top: 20px;
-            border-collapse: collapse;
-            background: rgba(0,0,0,0.2);
-            border-radius: 16px;
-            overflow: hidden;
-        }
-        .manual-overrides-table th, .manual-overrides-table td {
-            border: 1px solid rgba(255,255,255,0.15);
-            padding: 12px;
-            text-align: center;
-        }
+        .priority-list { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; margin-bottom: 15px; }
+        .priority-item { background: rgba(56,239,125,0.12); padding: 8px 16px; border-radius: 40px; font-size: 0.85rem; border: 1px solid rgba(56,239,125,0.4); font-weight: 500; }
+        .manual-overrides-table { width: 100%; margin-top: 20px; border-collapse: collapse; background: rgba(0,0,0,0.2); border-radius: 16px; overflow: hidden; }
+        .manual-overrides-table th, .manual-overrides-table td { border: 1px solid rgba(255,255,255,0.15); padding: 12px; text-align: center; }
         .manual-overrides-table th { background: rgba(245,87,108,0.3); color: #ffb3b3; }
-        
         .toggle-summary-btn { margin-bottom: 20px; background: #4facfe; }
-        
         @media print {
             body * { visibility: hidden; }
             .executive-summary, .executive-summary * { visibility: visible; }
@@ -173,13 +102,21 @@
     <div class="nav-links" id="navLinks"></div>
     
     <div class="date-section">
-        <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
-        <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
+        <div>
+            <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
+            <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
+        </div>
         <div>
             <button class="btn btn-primary" onclick="loadQualityReport()">🔍 عرض التقرير</button>
             <button class="btn btn-success" onclick="exportToExcel()">📥 تصدير Excel</button>
             <button class="btn btn-pdf" onclick="exportExecutivePDF()">📄 تصدير PDF (التقرير التنفيذي)</button>
             <button class="btn btn-info toggle-summary-btn" id="toggleSummaryBtn">📋 إخفاء التقرير التنفيذي</button>
+        </div>
+        <div class="quick-filters">
+            <button class="quick-filter-btn active" onclick="setQuickFilter('today')">📅 اليوم</button>
+            <button class="quick-filter-btn" onclick="setQuickFilter('week')">📅 أسبوعي</button>
+            <button class="quick-filter-btn" onclick="setQuickFilter('month')">📅 شهري</button>
+            <button class="quick-filter-btn" onclick="setQuickFilter('custom')">📅 مخصص</button>
         </div>
     </div>
 
@@ -236,18 +173,24 @@
         return res.json();
     }
 
+    // تحليل اليوم مع جمع معلومات القيود
     function analyzeDay(date, orders, distribution) {
         const dateStr = formatDateForSheet(date);
         const trucksMap = new Map();
         const manualOverrides = [];
+        const restrictionSkips = [];
+
         distribution.forEach(d => {
             if (!d.truck) return;
             const num = d.truck.number;
-            if (!trucksMap.has(num)) trucksMap.set(num, { number: num, driver: d.truck.driver, trips: 0, totalDistance: 0, roads: [] });
+            if (!trucksMap.has(num)) {
+                trucksMap.set(num, { number: num, driver: d.truck.driver, trips: 0, totalDistance: 0, roads: [] });
+            }
             const rec = trucksMap.get(num);
             rec.trips++;
             rec.totalDistance += getFactoryDistance(d.factory);
             rec.roads.push(d.road);
+            
             if (d.manualOverride === true) {
                 manualOverrides.push({
                     truckNumber: d.truck.number,
@@ -259,7 +202,16 @@
                     recommendedTruck: d.recommendedTruck || 'غير محدد'
                 });
             }
+            if (d.restrictionApplied === true) {
+                restrictionSkips.push({
+                    truckNumber: d.truck.number,
+                    driver: d.truck.driver,
+                    factory: d.factory,
+                    road: d.road
+                });
+            }
         });
+
         const trucksArray = Array.from(trucksMap.values());
         const totalTrips = trucksArray.reduce((s, t) => s + t.trips, 0);
         const trucksWith2Plus = trucksArray.filter(t => t.trips >= 2).length;
@@ -275,7 +227,8 @@
             trucks: trucksArray,
             trucksWith2Plus, trucksWith1, trucksWith0: 0,
             avgDistance: avgDist, stdDevDistance: stdDev, totalTrips,
-            manualOverrides
+            manualOverrides,
+            restrictionSkips
         };
     }
 
@@ -306,6 +259,8 @@
         let totalTrucksWith2Plus = 0, totalTrucksWith1 = 0;
         let totalDistanceSum = 0, totalDistanceCount = 0;
         let allManualOverrides = [];
+        let allRestrictionSkips = [];
+        
         reports.forEach(r => {
             totalOrdersAll += r.totalOrders;
             totalTripsAll += r.totalTrips;
@@ -315,6 +270,7 @@
             totalDistanceSum += r.avgDistance * (r.trucks.length || 1);
             totalDistanceCount += (r.trucks.length || 1);
             if (r.manualOverrides && r.manualOverrides.length) allManualOverrides.push(...r.manualOverrides.map(m => ({ ...m, date: r.date })));
+            if (r.restrictionSkips && r.restrictionSkips.length) allRestrictionSkips.push(...r.restrictionSkips.map(s => ({ ...s, date: r.date })));
         });
         const totalUniqueTrucks = totalTrucksUnique.size;
         const avgDistanceOverall = totalDistanceCount ? (totalDistanceSum / totalDistanceCount).toFixed(1) : 0;
@@ -328,9 +284,7 @@
         const improvementColor = compliancePercent >= 85 ? '#38ef7d' : (compliancePercent >= 70 ? '#ffd966' : (compliancePercent >= 50 ? '#ffaa44' : '#ff9999'));
         
         const lastDayTrucks = reports.length ? reports[reports.length-1].trucks : [];
-        // الأعلى مسافة (للتعويض)
         const highestDistanceTrucks = [...lastDayTrucks].sort((a,b) => b.totalDistance - a.totalDistance).slice(0, 5);
-        // الأقل مسافة (لزيادة الفرص)
         const lowestDistanceTrucks = [...lastDayTrucks].sort((a,b) => a.totalDistance - b.totalDistance).slice(0, 5);
         
         const methodology = `
@@ -377,10 +331,24 @@
                     <table class="manual-overrides-table">
                         <thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead>
                         <tbody>
-                            ${allManualOverrides.map(m => `<td><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}
+                            ${allManualOverrides.map(m => `<tr><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}
                         </tbody>
                     </table>
                     <p style="margin-top:10px; color:#f5576c;">🔔 تنبيه: يُرجى من الإدارة مراجعة هذه الحالات والتأكد من عدم وجود محاباة.</p>
+                </div>
+            `;
+        }
+
+        let restrictionSkipsHtml = '';
+        if (allRestrictionSkips.length > 0) {
+            const skipDetails = allRestrictionSkips.map(s => `🚛 ${s.truckNumber} (${s.driver}) → تم تجنبه من ${s.factory} (رود ${s.road}) بتاريخ ${s.date}`);
+            restrictionSkipsHtml = `
+                <div class="method-box" style="border-right-color: #4facfe;">
+                    <strong>⛔ تطبيق قيود الحظر</strong>
+                    <p style="margin-top:10px;">تم تطبيق قيود الحظر <strong>${allRestrictionSkips.length}</strong> مرة، حيث تم تجنب السيارات الممنوعة من الذهاب إلى مصانع معينة تلقائياً أثناء التوزيع العادل.</p>
+                    <ul class="method-list" style="margin-top:8px;">
+                        ${skipDetails.map(d => `<li>${d}</li>`).join('')}
+                    </ul>
                 </div>
             `;
         }
@@ -404,6 +372,7 @@
                     <div class="kpi-card"><div class="kpi-icon">⚖️</div><div class="kpi-value">${(reports.reduce((s,r)=>s+parseFloat(r.stdDevDistance),0)/reports.length).toFixed(1)}</div><div class="kpi-label">انحراف معياري (كلما قلَّ، دلَّ على عدالة الأحمال)</div></div>
                 </div>
                 ${methodology}
+                ${restrictionSkipsHtml}
                 ${manualOverridesHtml}
                 <div class="method-box" style="margin-top: 20px;">
                     <strong>🎯 نتيجة التوزيع</strong>
@@ -434,7 +403,7 @@
                 <td>${evaluation}</td>
             </tr>`;
         });
-        trucksTable += `</tbody></tr>`;
+        trucksTable += `</tbody></table>`;
         let statsHtml = `<div class="stats-grid">
             <div class="stat-card"><h4>📦 إجمالي الطلبات</h4><div class="number">${report.totalOrders}</div></div>
             <div class="stat-card"><h4>✅ تم توزيعها</h4><div class="number">${report.totalDistributed}</div></div>
@@ -444,6 +413,30 @@
             <div class="stat-card"><h4>📉 انحراف معياري</h4><div class="number">${report.stdDevDistance.toFixed(1)}</div></div>
         </div>`;
         return `<div class="daily-section"><div class="daily-title">📅 ${report.date}</div>${statsHtml}<h3>تفاصيل السيارات</h3>${trucksTable}</div>`;
+    }
+
+    function setQuickFilter(type) {
+        const today = new Date();
+        let start, end;
+        switch(type) {
+            case 'today':
+                start = new Date(today);
+                end = new Date(today);
+                break;
+            case 'week':
+                start = new Date(today);
+                start.setDate(today.getDate() - 6);
+                end = new Date(today);
+                break;
+            case 'month':
+                start = new Date(today.getFullYear(), today.getMonth(), 1);
+                end = new Date(today);
+                break;
+            default: return;
+        }
+        document.getElementById('startDate').value = formatDateForSheet(start);
+        document.getElementById('endDate').value = formatDateForSheet(end);
+        loadQualityReport();
     }
 
     async function loadQualityReport() {
@@ -521,7 +514,7 @@
             summarySheet.getCell('A1').value = '📊 التقرير التنفيذي لجودة التوزيع';
             summarySheet.getCell('A1').font = { bold: true, size: 16 };
             summarySheet.getRow(1).height = 35;
-            let totalOrdersAll = 0, totalTripsAll = 0, totalUniqueTrucks = new Set(), totalTrucksWith2Plus = 0, totalTrucksWith1 = 0, totalDistanceSum = 0, totalDistanceCount = 0, allManualOverrides = [];
+            let totalOrdersAll = 0, totalTripsAll = 0, totalUniqueTrucks = new Set(), totalTrucksWith2Plus = 0, totalTrucksWith1 = 0, totalDistanceSum = 0, totalDistanceCount = 0, allManualOverrides = [], allRestrictionSkips = [];
             dailyDataStore.forEach(r => {
                 totalOrdersAll += r.totalOrders;
                 totalTripsAll += r.totalTrips;
@@ -531,6 +524,7 @@
                 totalDistanceSum += r.avgDistance * (r.trucks.length || 1);
                 totalDistanceCount += (r.trucks.length || 1);
                 if (r.manualOverrides && r.manualOverrides.length) allManualOverrides.push(...r.manualOverrides.map(m => ({ ...m, date: r.date })));
+                if (r.restrictionSkips && r.restrictionSkips.length) allRestrictionSkips.push(...r.restrictionSkips.map(s => ({ ...s, date: r.date })));
             });
             const avgDistanceOverall = totalDistanceCount ? (totalDistanceSum / totalDistanceCount).toFixed(1) : 0;
             const startDate = document.getElementById('startDate').value, endDate = document.getElementById('endDate').value;
@@ -539,7 +533,8 @@
                 ['الفترة', `${startDate} إلى ${endDate}`], ['إجمالي الطلبات', totalOrdersAll], ['إجمالي الرحلات المنفذة', totalTripsAll],
                 ['عدد السيارات العاملة', totalUniqueTrucks.size], ['سيارات حققت رودين+', totalTrucksWith2Plus], ['سيارات برود واحد', totalTrucksWith1],
                 ['نسبة الالتزام بالهدف', `${compliancePercent.toFixed(1)}%`], ['متوسط المسافة لكل سيارة (كم)', avgDistanceOverall],
-                ['عدد التدخلات اليدوية المخالفة', allManualOverrides.length], ['منهجية التوزيع', 'الأولوية للأقل رحلات، ثم الأعلى مسافة، مع تجنب تكرار المصنع']
+                ['عدد التدخلات اليدوية المخالفة', allManualOverrides.length], ['عدد تطبيقات قيود الحظر', allRestrictionSkips.length],
+                ['منهجية التوزيع', 'الأولوية للأقل رحلات، ثم الأعلى مسافة، مع تجنب تكرار المصنع واستثناء الدرعية أوقات الإغلاق']
             ];
             summaryRows.forEach((row, idx) => { const r = summarySheet.getRow(3 + idx); r.values = row; r.getCell(1).font = { bold: true }; });
             if (allManualOverrides.length) {
@@ -548,6 +543,13 @@
                 manualSheet.getRow(1).values = ['التاريخ', 'رقم السيارة', 'السائق', 'المصنع', 'الرود', 'التفاصيل', 'السائق الموصى به'];
                 manualSheet.getRow(1).font = { bold: true };
                 allManualOverrides.forEach((m, i) => { manualSheet.getRow(2 + i).values = [m.date, m.truckNumber, m.driver, m.factory, m.road, m.reason, m.recommendedTruck]; });
+            }
+            if (allRestrictionSkips.length) {
+                const skipSheet = workbook.addWorksheet('تطبيق قيود الحظر', { views: [{ rightToLeft: true }] });
+                skipSheet.columns = [{ width: 12 }, { width: 15 }, { width: 25 }, { width: 30 }, { width: 12 }];
+                skipSheet.getRow(1).values = ['التاريخ', 'رقم السيارة', 'السائق', 'المصنع', 'الرود'];
+                skipSheet.getRow(1).font = { bold: true };
+                allRestrictionSkips.forEach((s, i) => { skipSheet.getRow(2 + i).values = [s.date, s.truckNumber, s.driver, s.factory, s.road]; });
             }
             for (let report of dailyDataStore) {
                 const sheet = workbook.addWorksheet(report.date, { views: [{ rightToLeft: true }] });
@@ -604,21 +606,20 @@
         fetch('/api/me', { credentials: 'include' }).then(r=>r.json()).then(data=>{
             if(data.user) {
                 document.getElementById('navLinks').innerHTML = `
-                        <a href="index.html" class="nav-link">📊 الرئيسية</a>
-                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                        <a href="distribution.html" class="nav-link ">🚚 التوزيع</a>
-                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                        <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
-                        <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
-                        <a href="trucks-failed.html" class="nav-link">⚠️ السيارات الغير مستوفية</a>
-                        <a href="trucks-failed.html" class="nav-link">⚠️ تقرير الغير مستوفية</a>
-                        <a href="distribution-quality.html" class="nav-link active">📈 جودة التوزيع</a>
-                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                        <a href="logs.html" class="nav-link">📜 السجلات</a>
+                    <a href="index.html" class="nav-link">📊 الرئيسية</a>
+                    <a href="orders.html" class="nav-link">📝 الطلبات</a>
+                    <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
+                    <a href="trucks.html" class="nav-link">🚛 السيارات</a>
+                    <a href="products.html" class="nav-link">📦 أنواع البحص</a>
+                    <a href="factories.html" class="nav-link">🏭 المصانع</a>
+                    <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
+                    <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
+                    <a href="trucks-failed.html" class="nav-link">⚠️ السيارات غير المستوفية</a>
+                    <a href="distribution-quality.html" class="nav-link active">📈 جودة التوزيع</a>
+                    <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
+                    <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
+                    <a href="users.html" class="nav-link">👥 المستخدمين</a>
+                    <a href="logs.html" class="nav-link">📜 السجلات</a>
                 `;
             } else window.location.href = '/login.html';
         }).catch(()=>window.location.href='/login.html');
