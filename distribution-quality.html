@@ -9,6 +9,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
+        /* (جميع الأنماط السابقة كما هي - اختصاراً) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -79,64 +80,27 @@
         .manual-overrides-table th { background: rgba(245,87,108,0.3); color: #ffb3b3; }
         .toggle-summary-btn { margin-bottom: 20px; background: #4facfe; }
         
-        /* تحسين الطباعة: خلفية بيضاء، نصوص داكنة، ألوان مناسبة */
         @media print {
             body, .container, .executive-summary, .daily-section, .kpi-card, .method-box, table {
                 background: white !important;
                 color: black !important;
                 border-color: #ccc !important;
             }
-            .header, .nav-links, .date-section, .btn, .toast-container, .loading {
-                display: none !important;
-            }
-            .executive-summary {
-                padding: 15px !important;
-                margin: 0 !important;
-                box-shadow: none !important;
-                border: 1px solid #ccc !important;
-            }
-            .kpi-card {
-                background: #f9f9f9 !important;
-                border: 1px solid #ddd !important;
-                color: black !important;
-            }
-            .kpi-value {
-                color: #2c7a4d !important;
-            }
-            .method-box {
-                background: #f5f5f5 !important;
-                border-right-color: #2c7a4d !important;
-            }
-            .method-list li::before {
-                color: #2c7a4d !important;
-            }
-            .priority-item {
-                background: #e9e9e9 !important;
-                border-color: #aaa !important;
-                color: black !important;
-            }
-            table {
-                border-collapse: collapse !important;
-            }
-            th, td {
-                border: 1px solid #ccc !important;
-                color: black !important;
-            }
-            th {
-                background: #e0e0e0 !important;
-            }
-            .badge-success, .badge-warning, .badge-danger {
-                background: transparent !important;
-                border: 1px solid;
-                color: black !important;
-            }
+            .header, .nav-links, .date-section, .btn, .toast-container, .loading { display: none !important; }
+            .executive-summary { padding: 15px !important; margin: 0 !important; box-shadow: none !important; border: 1px solid #ccc !important; }
+            .kpi-card { background: #f9f9f9 !important; border: 1px solid #ddd !important; color: black !important; }
+            .kpi-value { color: #2c7a4d !important; }
+            .method-box { background: #f5f5f5 !important; border-right-color: #2c7a4d !important; }
+            .method-list li::before { color: #2c7a4d !important; }
+            .priority-item { background: #e9e9e9 !important; border-color: #aaa !important; color: black !important; }
+            table { border-collapse: collapse !important; }
+            th, td { border: 1px solid #ccc !important; color: black !important; }
+            th { background: #e0e0e0 !important; }
+            .badge-success, .badge-warning, .badge-danger { background: transparent !important; border: 1px solid; color: black !important; }
             .badge-success { border-color: green; }
             .badge-warning { border-color: orange; }
             .badge-danger { border-color: red; }
-            .road-badge {
-                background: #e0e0e0 !important;
-                color: black !important;
-            }
+            .road-badge { background: #e0e0e0 !important; color: black !important; }
         }
     </style>
 </head>
@@ -222,7 +186,6 @@
         return res.json();
     }
 
-    // تحليل اليوم مع جمع معلومات القيود والأسباب
     function analyzeDay(date, orders, distribution) {
         const dateStr = formatDateForSheet(date);
         const trucksMap = new Map();
@@ -320,7 +283,7 @@
             totalDistanceSum += r.avgDistance * (r.trucks.length || 1);
             totalDistanceCount += (r.trucks.length || 1);
             if (r.manualOverrides && r.manualOverrides.length) allManualOverrides.push(...r.manualOverrides.map(m => ({ ...m, date: r.date })));
-            if (r.restrictionSkips && r.restrictionSkips.length) allRestrictionSkips.push(...r.restrictionSkips.map(s => ({ ...s, date: r.date })));
+            if (r.restrictionSkips && r.restrictionSkips.length) allRestrictionSkips.push(...r.restrictionSkips.map(s => ({ ...s, date: r.date, reason: s.reason })));
         });
         const totalUniqueTrucks = totalTrucksUnique.size;
         const avgDistanceOverall = totalDistanceCount ? (totalDistanceSum / totalDistanceCount).toFixed(1) : 0;
@@ -382,7 +345,13 @@
                         <thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead>
                         <tbody>
                             ${allManualOverrides.map(m => `<tr>
-                                <td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td>
+                                <td>${m.date}</td>
+                                <td>${m.truckNumber}</td>
+                                <td>${m.driver}</td>
+                                <td>${m.factory}</td>
+                                <td>${m.road}</td>
+                                <td>${m.reason}</td>
+                                <td>${m.recommendedTruck}</td>
                             </tr>`).join('')}
                         </tbody>
                     </table>
@@ -391,21 +360,18 @@
             `;
         }
 
-        let restrictionSkipsHtml = '';
+        let restrictionDetailsHtml = '';
         if (allRestrictionSkips.length > 0) {
-            restrictionSkipsHtml = `
+            restrictionDetailsHtml = `
                 <div class="method-box" style="border-right-color: #4facfe;">
-                    <strong>⛔ تطبيق قيود الحظر (استبعاد سائقين بسبب منعهم من مصانع معينة)</strong>
-                    <p style="margin-top:10px;">تم تطبيق قيود الحظر <strong>${allRestrictionSkips.length}</strong> مرة، حيث تم تجنب السيارات الممنوعة من الذهاب إلى مصانع معينة تلقائياً أثناء التوزيع العادل. التفاصيل:</p>
-                    <table class="manual-overrides-table" style="background: rgba(79,172,254,0.1);">
-                        <thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>سبب المنع</th></tr></thead>
-                        <tbody>
-                            ${allRestrictionSkips.map(s => `<tr>
-                                <td>${s.date}</td><td>${s.truckNumber}</td><td>${s.driver}</td><td>${s.factory}</td><td>${s.road}</td><td>${s.reason}</td>
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
-                    <p style="margin-top:10px; color:#4facfe;">ℹ️ تم استبعاد هذه السيارات تلقائياً للحفاظ على سياسات المنع المحددة في نظام القيود.</p>
+                    <strong>⛔ تفاصيل استبعاد السائقين بسبب قيود الحظر</strong>
+                    <p style="margin-top:10px;">تم استبعاد السائقين التالية أسماؤهم من الذهاب إلى المصانع المحددة وفقاً لسياسات المنع، وذلك حرصاً على راحة العميل وضمان جودة الخدمة:</p>
+                    <ul class="method-list" style="margin-top:8px;">
+                        ${allRestrictionSkips.map(s => `
+                            <li>🚛 <strong>تم منع السائق ${s.driver} (رقم السيارة ${s.truckNumber})</strong> من الذهاب إلى مصنع <strong>${s.factory}</strong> بسبب: ${s.reason || 'لا يوجد سبب محدد'}.<br>
+                            ولذا تم استثناؤه من التوزيع على هذا المصنع حرصاً على راحة العميل.</li>
+                        `).join('')}
+                    </ul>
                 </div>
             `;
         }
@@ -429,7 +395,7 @@
                     <div class="kpi-card"><div class="kpi-icon">⚖️</div><div class="kpi-value">${(reports.reduce((s,r)=>s+parseFloat(r.stdDevDistance),0)/reports.length).toFixed(1)}</div><div class="kpi-label">انحراف معياري (كلما قلَّ، دلَّ على عدالة الأحمال)</div></div>
                 </div>
                 ${methodology}
-                ${restrictionSkipsHtml}
+                ${restrictionDetailsHtml}
                 ${manualOverridesHtml}
                 <div class="method-box" style="margin-top: 20px;">
                     <strong>🎯 نتيجة التوزيع</strong>
@@ -447,15 +413,20 @@
     }
 
     function renderDailyReport(report) {
-        let trucksTable = `<table><thead><tr><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>الروودات</th><th>المسافة الكلية (كم)</th><th>التقييم</th></tr></thead><tbody>`;
+        let trucksTable = `</table><thead><tr><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>الروودات</th><th>المسافة الكلية (كم)</th><th>التقييم</th></tr></thead><tbody>`;
         report.trucks.forEach(t => {
             let roadsStr = t.roads.join(', ');
             let evaluation = t.trips >= 2 ? '<span class="badge badge-success">مستوفٍ</span>' : (t.trips === 1 ? '<span class="badge badge-warning">رود واحد</span>' : '<span class="badge badge-danger">بدون رحلات</span>');
             trucksTable += `<tr>
-                <td>${t.number}</td><td>${t.driver}</td><td>${t.trips}</td><td>${roadsStr}</td><td>${t.totalDistance.toFixed(1)}</td><td>${evaluation}</td>
+                <td>${t.number}</td>
+                <td>${t.driver}</td>
+                <td>${t.trips}</td>
+                <td>${roadsStr}</td>
+                <td>${t.totalDistance.toFixed(1)}</td>
+                <td>${evaluation}</td>
             </tr>`;
         });
-        trucksTable += `</tbody></table>`;
+        trucksTable += `</tbody></tr>`;
         let statsHtml = `<div class="stats-grid">
             <div class="stat-card"><h4>📦 إجمالي الطلبات</h4><div class="number">${report.totalOrders}</div></div>
             <div class="stat-card"><h4>✅ تم توزيعها</h4><div class="number">${report.totalDistributed}</div></div>
@@ -471,19 +442,9 @@
         const today = new Date();
         let start, end;
         switch(type) {
-            case 'today':
-                start = new Date(today);
-                end = new Date(today);
-                break;
-            case 'week':
-                start = new Date(today);
-                start.setDate(today.getDate() - 6);
-                end = new Date(today);
-                break;
-            case 'month':
-                start = new Date(today.getFullYear(), today.getMonth(), 1);
-                end = new Date(today);
-                break;
+            case 'today': start = new Date(today); end = new Date(today); break;
+            case 'week': start = new Date(today); start.setDate(today.getDate() - 6); end = new Date(today); break;
+            case 'month': start = new Date(today.getFullYear(), today.getMonth(), 1); end = new Date(today); break;
             default: return;
         }
         document.getElementById('startDate').value = formatDateForSheet(start);
