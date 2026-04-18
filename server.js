@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ==================== إعداد قاعدة البيانات ====================
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
@@ -16,10 +17,15 @@ const pool = new Pool({
 });
 
 pool.connect((err, client, release) => {
-    if (err) console.error('❌ فشل الاتصال بقاعدة البيانات:', err.message);
-    else { console.log('✅ تم الاتصال بقاعدة البيانات بنجاح'); release(); }
+    if (err) {
+        console.error('❌ فشل الاتصال بقاعدة البيانات:', err.message);
+    } else {
+        console.log('✅ تم الاتصال بقاعدة البيانات بنجاح');
+        release();
+    }
 });
 
+// ==================== إعداد الجلسة ====================
 app.set('trust proxy', 1);
 app.use(express.json());
 app.use(express.static(__dirname));
@@ -69,30 +75,100 @@ async function logAction(username, action, details, req = null) {
 // ==================== إنشاء الجداول ====================
 async function initTables() {
     try {
-        await query(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value JSONB NOT NULL)`);
-        await query(`CREATE TABLE IF NOT EXISTS products (id SERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
-        await query(`CREATE TABLE IF NOT EXISTS scale_data (id SERIAL PRIMARY KEY, year INTEGER NOT NULL, month INTEGER NOT NULL, data JSONB NOT NULL, updated_at TIMESTAMP DEFAULT NOW(), UNIQUE(year, month))`);
-        await query(`CREATE TABLE IF NOT EXISTS scale_reports (id SERIAL PRIMARY KEY, report_name TEXT NOT NULL, report_date TEXT NOT NULL, data JSONB NOT NULL, created_at TIMESTAMP DEFAULT NOW())`);
-        await query(`CREATE TABLE IF NOT EXISTS day_data (date DATE PRIMARY KEY, orders JSONB NOT NULL, distribution JSONB NOT NULL)`);
-        await query(`CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'user', factory TEXT, created_at TIMESTAMP DEFAULT NOW())`);
-        await query(`CREATE TABLE IF NOT EXISTS truck_violations (id SERIAL PRIMARY KEY, date DATE NOT NULL, truck_number TEXT NOT NULL, driver TEXT NOT NULL, trips INTEGER NOT NULL, reason TEXT, details TEXT, created_at TIMESTAMP DEFAULT NOW(), UNIQUE(date, truck_number))`);
-        await query(`CREATE TABLE IF NOT EXISTS logs (id SERIAL PRIMARY KEY, username TEXT NOT NULL, action TEXT NOT NULL, details TEXT, location TEXT, created_at TIMESTAMP DEFAULT NOW())`);
-        
-        // ✅ جدول القيود (restrictions)
+        await query(`
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value JSONB NOT NULL
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS scale_data (
+                id SERIAL PRIMARY KEY,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                data JSONB NOT NULL,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(year, month)
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS scale_reports (
+                id SERIAL PRIMARY KEY,
+                report_name TEXT NOT NULL,
+                report_date TEXT NOT NULL,
+                data JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS day_data (
+                date DATE PRIMARY KEY,
+                orders JSONB NOT NULL,
+                distribution JSONB NOT NULL
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user',
+                factory TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS truck_violations (
+                id SERIAL PRIMARY KEY,
+                date DATE NOT NULL,
+                truck_number TEXT NOT NULL,
+                driver TEXT NOT NULL,
+                trips INTEGER NOT NULL,
+                reason TEXT,
+                details TEXT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(date, truck_number)
+            )
+        `);
+        await query(`
+            CREATE TABLE IF NOT EXISTS logs (
+                id SERIAL PRIMARY KEY,
+                username TEXT NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT,
+                location TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
         await query(`
             CREATE TABLE IF NOT EXISTS restrictions (
                 id SERIAL PRIMARY KEY,
                 truck_number TEXT NOT NULL,
                 driver_name TEXT NOT NULL,
-                restricted_factories TEXT[] NOT NULL,
+                restricted_factories JSONB NOT NULL,
                 reason TEXT,
-                active BOOLEAN DEFAULT TRUE,
+                active BOOLEAN DEFAULT true,
                 created_by TEXT,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         `);
-        
+        await query(`
+            CREATE TABLE IF NOT EXISTS backup_metadata (
+                id SERIAL PRIMARY KEY,
+                backup_date TIMESTAMP DEFAULT NOW(),
+                backup_type TEXT,
+                description TEXT
+            )
+        `);
+
         // المستخدمون الافتراضيون
         const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
         if (adminCheck.rows.length === 0) {
@@ -102,20 +178,158 @@ async function initTables() {
             console.log('✅ تم إنشاء المستخدمين الافتراضيين');
         }
         console.log('✅ جميع الجداول جاهزة');
-    } catch (err) { console.error('❌ فشل إنشاء الجداول:', err.message); }
+    } catch (err) {
+        console.error('❌ فشل إنشاء الجداول:', err.message);
+    }
 }
 initTables().catch(console.error);
 
+// ==================== دوال تحميل البيانات الأساسية ====================
 async function loadSettings() {
     try {
         const result = await query(`SELECT value FROM settings WHERE key = 'settings'`);
         return result.rows.length ? result.rows[0].value : { trucks: [], factories: [], materials: [] };
-    } catch (err) { return { trucks: [], factories: [], materials: [] }; }
+    } catch (err) {
+        console.error('فشل تحميل الإعدادات:', err);
+        return { trucks: [], factories: [], materials: [] };
+    }
 }
 
 async function getDayData(date) {
     const result = await query('SELECT orders, distribution FROM day_data WHERE date = $1', [date]);
     return result.rows.length ? result.rows[0] : { orders: [], distribution: [] };
+}
+
+// ==================== دوال القيود ====================
+async function getRestrictions() {
+    const result = await query('SELECT * FROM restrictions ORDER BY created_at DESC');
+    return result.rows;
+}
+
+async function getRestrictionById(id) {
+    const result = await query('SELECT * FROM restrictions WHERE id = $1', [id]);
+    return result.rows[0];
+}
+
+async function createRestriction(truckNumber, driverName, restrictedFactories, reason, createdBy) {
+    const result = await query(
+        `INSERT INTO restrictions (truck_number, driver_name, restricted_factories, reason, created_by)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [truckNumber, driverName, JSON.stringify(restrictedFactories), reason, createdBy]
+    );
+    return result.rows[0];
+}
+
+async function updateRestriction(id, updates) {
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    if (updates.active !== undefined) {
+        fields.push(`active = $${idx++}`);
+        values.push(updates.active);
+    }
+    if (updates.restricted_factories !== undefined) {
+        fields.push(`restricted_factories = $${idx++}`);
+        values.push(JSON.stringify(updates.restricted_factories));
+    }
+    if (updates.reason !== undefined) {
+        fields.push(`reason = $${idx++}`);
+        values.push(updates.reason);
+    }
+    if (fields.length === 0) return null;
+    fields.push(`updated_at = NOW()`);
+    values.push(id);
+    const queryStr = `UPDATE restrictions SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`;
+    const result = await query(queryStr, values);
+    return result.rows[0];
+}
+
+async function deleteRestriction(id) {
+    await query('DELETE FROM restrictions WHERE id = $1', [id]);
+}
+
+// ==================== دوال النسخ الاحتياطي والاستعادة ====================
+async function getFullBackup() {
+    const settings = await loadSettings();
+    const daysResult = await query('SELECT date, orders, distribution FROM day_data ORDER BY date');
+    const days = {};
+    daysResult.rows.forEach(row => {
+        days[row.date] = { orders: row.orders, distribution: row.distribution };
+    });
+    const usersResult = await query('SELECT id, username, role, factory, created_at FROM users');
+    const restrictionsResult = await query('SELECT * FROM restrictions ORDER BY id');
+    return {
+        version: '1.0',
+        exported_at: new Date().toISOString(),
+        settings,
+        days,
+        users: usersResult.rows,
+        restrictions: restrictionsResult.rows
+    };
+}
+
+async function restoreFullBackup(backupData) {
+    await query('BEGIN');
+    try {
+        if (backupData.settings) {
+            await query(`INSERT INTO settings (key, value) VALUES ('settings', $1) ON CONFLICT (key) DO UPDATE SET value = $1`, [backupData.settings]);
+        }
+        await query('DELETE FROM day_data');
+        if (backupData.days) {
+            for (const [date, data] of Object.entries(backupData.days)) {
+                await query(
+                    'INSERT INTO day_data (date, orders, distribution) VALUES ($1, $2, $3)',
+                    [date, JSON.stringify(data.orders || []), JSON.stringify(data.distribution || [])]
+                );
+            }
+        }
+        if (backupData.users) {
+            for (const user of backupData.users) {
+                if (user.username === 'admin') continue;
+                await query(
+                    `INSERT INTO users (id, username, role, factory, created_at)
+                     VALUES ($1, $2, $3, $4, $5)
+                     ON CONFLICT (username) DO UPDATE SET role = $3, factory = $4`,
+                    [user.id, user.username, user.role, user.factory, user.created_at]
+                );
+            }
+        }
+        await query('DELETE FROM restrictions');
+        if (backupData.restrictions && backupData.restrictions.length) {
+            for (const r of backupData.restrictions) {
+                await query(
+                    `INSERT INTO restrictions (id, truck_number, driver_name, restricted_factories, reason, active, created_by, created_at, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                     ON CONFLICT (id) DO UPDATE SET
+                        truck_number = $2, driver_name = $3, restricted_factories = $4,
+                        reason = $5, active = $6, created_by = $7, updated_at = $9`,
+                    [r.id, r.truck_number, r.driver_name, r.restricted_factories, r.reason, r.active, r.created_by, r.created_at, r.updated_at || new Date()]
+                );
+            }
+        }
+        await query(`INSERT INTO backup_metadata (backup_type, description) VALUES ('restore', 'تم استعادة البيانات من نسخة احتياطية')`);
+        await query('COMMIT');
+        return true;
+    } catch (err) {
+        await query('ROLLBACK');
+        throw err;
+    }
+}
+
+async function clearAllData() {
+    await query('BEGIN');
+    try {
+        await query('DELETE FROM day_data');
+        await query('DELETE FROM scale_reports');
+        await query('DELETE FROM scale_data');
+        await query('DELETE FROM truck_violations');
+        await query('DELETE FROM restrictions');
+        await query(`INSERT INTO settings (key, value) VALUES ('settings', $1) ON CONFLICT (key) DO UPDATE SET value = $1`, [{ trucks: [], factories: [], materials: [] }]);
+        await query('COMMIT');
+    } catch (err) {
+        await query('ROLLBACK');
+        throw err;
+    }
 }
 
 // ==================== Endpoints العامة ====================
@@ -305,11 +519,15 @@ app.get('/api/scale-reports/:id', async (req, res) => {
 });
 
 app.post('/api/scale-reports', async (req, res) => {
+    // السماح لجميع المستخدمين بحفظ التقارير (يمكنك تقييده لاحقاً)
     try {
         const { reportName, reportDate, data } = req.body;
         if (!reportName || !data) return res.status(400).json({ error: 'اسم التقرير والبيانات مطلوبة' });
         const dataJson = JSON.stringify(data);
-        await query('INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)', [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]);
+        await query(
+            'INSERT INTO scale_reports (report_name, report_date, data) VALUES ($1, $2, $3::jsonb)',
+            [reportName, reportDate || new Date().toISOString().split('T')[0], dataJson]
+        );
         if (req.session.username) await logAction(req.session.username, 'حفظ تقرير', `حفظ تقرير "${reportName}"`, req);
         res.status(201).json({ success: true });
     } catch (err) { res.status(500).json({ error: 'خطأ في حفظ التقرير: ' + err.message }); }
@@ -317,28 +535,34 @@ app.post('/api/scale-reports', async (req, res) => {
 
 app.put('/api/scale-reports/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    const id = parseInt(req.params.id);
-    const { reportName } = req.body;
-    if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
-    await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
-    await logAction(req.session.username, 'تعديل تقرير', `تعديل اسم التقرير إلى "${reportName}"`, req);
-    res.json({ success: true });
+    try {
+        const id = parseInt(req.params.id);
+        const { reportName } = req.body;
+        if (!reportName) return res.status(400).json({ error: 'اسم التقرير مطلوب' });
+        await query('UPDATE scale_reports SET report_name = $1 WHERE id = $2', [reportName, id]);
+        await logAction(req.session.username, 'تعديل تقرير', `تعديل اسم التقرير إلى "${reportName}"`, req);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'خطأ في تعديل التقرير' }); }
 });
 
 app.delete('/api/scale-reports/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    const id = parseInt(req.params.id);
-    await query('DELETE FROM scale_reports WHERE id = $1', [id]);
-    await logAction(req.session.username, 'حذف تقرير', `حذف تقرير برقم ${id}`, req);
-    res.json({ success: true });
+    try {
+        const id = parseInt(req.params.id);
+        await query('DELETE FROM scale_reports WHERE id = $1', [id]);
+        await logAction(req.session.username, 'حذف تقرير', `حذف تقرير برقم ${id}`, req);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'خطأ في حذف التقرير' }); }
 });
 
-// ==================== بيانات الميزان الشهرية ====================
+// ==================== بيانات الميزان الشهرية (الخام) ====================
 app.get('/api/scale/monthly/:year/:month', async (req, res) => {
-    const year = parseInt(req.params.year);
-    const month = parseInt(req.params.month);
-    const result = await query('SELECT data FROM scale_data WHERE year = $1 AND month = $2', [year, month]);
-    res.json(result.rows.length ? result.rows[0].data : {});
+    try {
+        const year = parseInt(req.params.year);
+        const month = parseInt(req.params.month);
+        const result = await query('SELECT data FROM scale_data WHERE year = $1 AND month = $2', [year, month]);
+        res.json(result.rows.length ? result.rows[0].data : {});
+    } catch (err) { res.status(500).json({ error: 'خطأ في جلب بيانات الميزان' }); }
 });
 
 app.put('/api/scale/monthly/:year/:month', async (req, res) => {
@@ -350,7 +574,7 @@ app.put('/api/scale/monthly/:year/:month', async (req, res) => {
     res.json({ success: true });
 });
 
-// ==================== تقارير المخالفات ====================
+// ==================== تقارير المخالفات (السيارات غير المستوفية) ====================
 function analyzeTruckViolationsForDay(date, orders, distribution, trucksList) {
     const truckTrips = new Map();
     distribution.forEach(d => {
@@ -437,7 +661,14 @@ app.get('/api/truck-violations/report/:startDate/:endDate', async (req, res) => 
             const distribution = dayData.distribution || [];
             const violations = analyzeTruckViolationsForDay(date, orders, distribution, trucksList);
             violations.forEach(v => {
-                report.push({ report_date: date, truck_number: v.truck_number, driver_name: v.driver_name, trips_count: v.trips_count, reason: v.reason, details: v.details });
+                report.push({
+                    report_date: date,
+                    truck_number: v.truck_number,
+                    driver_name: v.driver_name,
+                    trips_count: v.trips_count,
+                    reason: v.reason,
+                    details: v.details
+                });
             });
         }
         res.json(report);
@@ -467,70 +698,80 @@ app.post('/api/truck-violations/save', async (req, res) => {
 });
 
 // ==================== القيود (Restrictions) ====================
-// جلب جميع القيود
 app.get('/api/restrictions', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin' && req.session.role !== 'user') return res.status(403).json({ error: 'غير مصرح' });
     try {
-        const result = await query('SELECT * FROM restrictions ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في جلب القيود' });
-    }
+        const restrictions = await getRestrictions();
+        res.json(restrictions);
+    } catch (err) { res.status(500).json({ error: 'خطأ في جلب القيود' }); }
 });
 
-// إضافة قيد جديد
 app.post('/api/restrictions', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin' && req.session.role !== 'user') return res.status(403).json({ error: 'غير مصرح' });
     const { truckNumber, driverName, restrictedFactories, reason } = req.body;
-    if (!truckNumber || !driverName || !restrictedFactories || !restrictedFactories.length) {
-        return res.status(400).json({ error: 'بيانات ناقصة' });
-    }
+    if (!truckNumber || !restrictedFactories || !restrictedFactories.length) return res.status(400).json({ error: 'بيانات ناقصة' });
     try {
-        await query(
-            'INSERT INTO restrictions (truck_number, driver_name, restricted_factories, reason, created_by) VALUES ($1, $2, $3, $4, $5)',
-            [truckNumber, driverName, restrictedFactories, reason || '', req.session.username]
-        );
-        await logAction(req.session.username, 'إضافة قيد', `إضافة قيد على السيارة ${truckNumber} - المصانع: ${restrictedFactories.join(', ')}`, req);
-        res.status(201).json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في إضافة القيد' });
-    }
+        const newRestriction = await createRestriction(truckNumber, driverName, restrictedFactories, reason, req.session.username || 'system');
+        await logAction(req.session.username, 'إضافة قيد', `إضافة قيد على السيارة ${truckNumber}`, req);
+        res.status(201).json(newRestriction);
+    } catch (err) { res.status(500).json({ error: 'خطأ في إضافة القيد' }); }
 });
 
-// تحديث حالة القيد (تفعيل/تعطيل)
 app.put('/api/restrictions/:id', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin' && req.session.role !== 'user') return res.status(403).json({ error: 'غير مصرح' });
     const id = parseInt(req.params.id);
-    const { active } = req.body;
-    if (typeof active !== 'boolean') return res.status(400).json({ error: 'حالة القيد غير صالحة' });
+    const { active, restricted_factories, reason } = req.body;
     try {
-        await query('UPDATE restrictions SET active = $1, updated_at = NOW() WHERE id = $2', [active, id]);
-        await logAction(req.session.username, active ? 'تفعيل قيد' : 'تعطيل قيد', `تغيير حالة القيد رقم ${id} إلى ${active ? 'نشط' : 'معطل'}`, req);
-        res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في تحديث القيد' });
-    }
+        const updated = await updateRestriction(id, { active, restricted_factories, reason });
+        if (!updated) return res.status(404).json({ error: 'القيد غير موجود' });
+        await logAction(req.session.username, 'تعديل قيد', `تعديل قيد السيارة ${updated.truck_number}`, req);
+        res.json(updated);
+    } catch (err) { res.status(500).json({ error: 'خطأ في تعديل القيد' }); }
 });
 
-// حذف قيد
 app.delete('/api/restrictions/:id', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (req.session.role !== 'admin' && req.session.role !== 'user') return res.status(403).json({ error: 'غير مصرح' });
     const id = parseInt(req.params.id);
     try {
-        await query('DELETE FROM restrictions WHERE id = $1', [id]);
-        await logAction(req.session.username, 'حذف قيد', `حذف القيد رقم ${id}`, req);
+        const restriction = await getRestrictionById(id);
+        if (!restriction) return res.status(404).json({ error: 'القيد غير موجود' });
+        await deleteRestriction(id);
+        await logAction(req.session.username, 'حذف قيد', `حذف قيد السيارة ${restriction.truck_number}`, req);
         res.json({ success: true });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'خطأ في حذف القيد' });
-    }
+    } catch (err) { res.status(500).json({ error: 'خطأ في حذف القيد' }); }
+});
+
+// ==================== النسخ الاحتياطي والإعدادات ====================
+app.get('/api/backup', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        const backup = await getFullBackup();
+        res.json(backup);
+    } catch (err) { res.status(500).json({ error: 'خطأ في إنشاء النسخة الاحتياطية' }); }
+});
+
+app.post('/api/restore', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        await restoreFullBackup(req.body);
+        await logAction(req.session.username, 'استعادة نسخة احتياطية', 'تم استعادة البيانات من ملف JSON', req);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'خطأ في استعادة البيانات: ' + err.message }); }
+});
+
+app.delete('/api/clear-all', async (req, res) => {
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    try {
+        await clearAllData();
+        await logAction(req.session.username, 'مسح جميع البيانات', 'تم مسح جميع بيانات النظام', req);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: 'خطأ في مسح البيانات: ' + err.message }); }
 });
 
 // ==================== بدء الخادم ====================
 app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
+    console.log(`🔗 http://localhost:${PORT}`);
     console.log(`👤 بيانات الدخول الافتراضية: admin/admin , user/user , client/client`);
+    console.log(`📝 ملاحظة: تسجيل الدخول غير حساس لحالة الأحرف`);
 });
