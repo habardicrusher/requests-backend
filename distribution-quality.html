@@ -9,7 +9,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        /* (جميع الأنماط السابقة كما هي - اختصاراً) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -79,13 +78,8 @@
         .manual-overrides-table th, .manual-overrides-table td { border: 1px solid rgba(255,255,255,0.15); padding: 12px; text-align: center; }
         .manual-overrides-table th { background: rgba(245,87,108,0.3); color: #ffb3b3; }
         .toggle-summary-btn { margin-bottom: 20px; background: #4facfe; }
-        
         @media print {
-            body, .container, .executive-summary, .daily-section, .kpi-card, .method-box, table {
-                background: white !important;
-                color: black !important;
-                border-color: #ccc !important;
-            }
+            body, .container, .executive-summary, .daily-section, .kpi-card, .method-box, table { background: white !important; color: black !important; border-color: #ccc !important; }
             .header, .nav-links, .date-section, .btn, .toast-container, .loading { display: none !important; }
             .executive-summary { padding: 15px !important; margin: 0 !important; box-shadow: none !important; border: 1px solid #ccc !important; }
             .kpi-card { background: #f9f9f9 !important; border: 1px solid #ddd !important; color: black !important; }
@@ -115,10 +109,8 @@
     <div class="nav-links" id="navLinks"></div>
     
     <div class="date-section">
-        <div>
-            <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
-            <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
-        </div>
+        <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
+        <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
         <div>
             <button class="btn btn-primary" onclick="loadQualityReport()">🔍 عرض التقرير</button>
             <button class="btn btn-success" onclick="exportToExcel()">📥 تصدير Excel</button>
@@ -163,20 +155,14 @@
         "الشركة الصينية": { distance: 605.51, time: "7 س و 40 د" },
         "شركة اعمار": { distance: 662.14, time: "7 س و 38 د" }
     };
-    function getFactoryDistance(factoryName) { return FACTORY_DATA[factoryName] ? FACTORY_DATA[factoryName].distance : 150; }
-    function getFactoryTime(factoryName) { return FACTORY_DATA[factoryName] ? FACTORY_DATA[factoryName].time : "—"; }
+    function getFactoryDistance(f) { return FACTORY_DATA[f] ? FACTORY_DATA[f].distance : 150; }
+    function getFactoryTime(f) { return FACTORY_DATA[f] ? FACTORY_DATA[f].time : "—"; }
 
     function formatDateForSheet(dateValue) {
         if (!dateValue) return 'unknown';
-        let d;
-        if (typeof dateValue === 'string') d = new Date(dateValue);
-        else if (dateValue instanceof Date) d = dateValue;
-        else return String(dateValue).replace(/[\\/*?:[\]]/g, '_');
+        let d = typeof dateValue === 'string' ? new Date(dateValue) : (dateValue instanceof Date ? dateValue : new Date(dateValue));
         if (isNaN(d.getTime())) return 'invalid_date';
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
 
     async function apiCall(endpoint) {
@@ -186,83 +172,81 @@
         return res.json();
     }
 
+    // تحليل اليوم مع جمع معلومات القيود من localStorage و distribution
     function analyzeDay(date, orders, distribution) {
         const dateStr = formatDateForSheet(date);
         const trucksMap = new Map();
         const manualOverrides = [];
         const restrictionSkips = [];
 
+        // أولاً: جلب سجل الاستبعادات من localStorage لهذا اليوم
+        try {
+            const log = localStorage.getItem(`excluded_log_${date}`);
+            if (log) {
+                const excluded = JSON.parse(log);
+                excluded.forEach(e => {
+                    restrictionSkips.push({
+                        truckNumber: e.truckNumber,
+                        driver: e.driver,
+                        factory: e.factory,
+                        road: '—',
+                        reason: e.reason,
+                        date: dateStr
+                    });
+                });
+            }
+        } catch(e) { console.warn('فشل تحميل سجل الاستبعادات', e); }
+
+        // أيضاً نتحقق من التوزيعات لمعرفة إذا كان هناك restrictionApplied مسجل (قد لا يكون موجوداً)
         distribution.forEach(d => {
             if (!d.truck) return;
             const num = d.truck.number;
-            if (!trucksMap.has(num)) {
-                trucksMap.set(num, { number: num, driver: d.truck.driver, trips: 0, totalDistance: 0, roads: [] });
-            }
+            if (!trucksMap.has(num)) trucksMap.set(num, { number: num, driver: d.truck.driver, trips: 0, totalDistance: 0, roads: [] });
             const rec = trucksMap.get(num);
             rec.trips++;
             rec.totalDistance += getFactoryDistance(d.factory);
             rec.roads.push(d.road);
-            
             if (d.manualOverride === true) {
                 manualOverrides.push({
-                    truckNumber: d.truck.number,
-                    driver: d.truck.driver,
-                    factory: d.factory,
-                    material: d.material,
-                    road: d.road,
+                    truckNumber: d.truck.number, driver: d.truck.driver, factory: d.factory, material: d.material, road: d.road,
                     reason: d.overrideReason || 'تم اختيار سائق مخالف للتوصية العادلة',
                     recommendedTruck: d.recommendedTruck || 'غير محدد'
-                });
-            }
-            if (d.restrictionApplied === true) {
-                restrictionSkips.push({
-                    truckNumber: d.truck.number,
-                    driver: d.truck.driver,
-                    factory: d.factory,
-                    road: d.road,
-                    reason: d.restrictionReason || 'لا يوجد سبب محدد'
                 });
             }
         });
 
         const trucksArray = Array.from(trucksMap.values());
-        const totalTrips = trucksArray.reduce((s, t) => s + t.trips, 0);
-        const trucksWith2Plus = trucksArray.filter(t => t.trips >= 2).length;
-        const trucksWith1 = trucksArray.filter(t => t.trips === 1).length;
-        let distances = trucksArray.map(t => t.totalDistance);
+        const totalTrips = trucksArray.reduce((s,t)=>s+t.trips,0);
+        const trucksWith2Plus = trucksArray.filter(t=>t.trips>=2).length;
+        const trucksWith1 = trucksArray.filter(t=>t.trips===1).length;
+        let distances = trucksArray.map(t=>t.totalDistance);
         let avgDist = distances.reduce((a,b)=>a+b,0)/(distances.length||1);
         let variance = distances.reduce((s,d)=>s+Math.pow(d-avgDist,2),0)/(distances.length||1);
         let stdDev = Math.sqrt(variance);
         return {
-            date: dateStr,
-            totalOrders: orders.length,
-            totalDistributed: distribution.length,
-            trucks: trucksArray,
-            trucksWith2Plus, trucksWith1, trucksWith0: 0,
+            date: dateStr, totalOrders: orders.length, totalDistributed: distribution.length,
+            trucks: trucksArray, trucksWith2Plus, trucksWith1, trucksWith0: 0,
             avgDistance: avgDist, stdDevDistance: stdDev, totalTrips,
-            manualOverrides,
-            restrictionSkips
+            manualOverrides, restrictionSkips
         };
     }
 
     function calculateCompliance(reports) {
         if (!reports.length) return 0;
         let totalDriverDays = 0, totalCompliantDays = 0;
-        reports.forEach(r => {
-            r.trucks.forEach(t => { totalDriverDays++; if (t.trips >= 2) totalCompliantDays++; });
-        });
+        reports.forEach(r => { r.trucks.forEach(t => { totalDriverDays++; if (t.trips >= 2) totalCompliantDays++; }); });
         return totalDriverDays ? (totalCompliantDays / totalDriverDays) * 100 : 0;
     }
 
-    function calculateImprovement(currentCompliance, previousCompliance) {
-        if (previousCompliance === undefined || previousCompliance === null) {
-            const estimatedPrevious = 30;
-            const improvement = ((currentCompliance - estimatedPrevious) / estimatedPrevious) * 100;
-            return Math.max(0, Math.min(99, improvement.toFixed(1)));
+    function calculateImprovement(current, prev) {
+        if (prev === undefined || prev === null) {
+            const estimatedPrev = 30;
+            const imp = ((current - estimatedPrev) / estimatedPrev) * 100;
+            return Math.max(0, Math.min(99, imp.toFixed(1)));
         }
-        if (previousCompliance === 0) return 0;
-        const improvement = ((currentCompliance - previousCompliance) / previousCompliance) * 100;
-        return Math.max(0, Math.min(99, improvement.toFixed(1)));
+        if (prev === 0) return 0;
+        const imp = ((current - prev) / prev) * 100;
+        return Math.max(0, Math.min(99, imp.toFixed(1)));
     }
 
     function generateExecutiveSummary(reports) {
@@ -271,9 +255,7 @@
         let totalOrdersAll = 0, totalTripsAll = 0, totalTrucksUnique = new Set();
         let totalTrucksWith2Plus = 0, totalTrucksWith1 = 0;
         let totalDistanceSum = 0, totalDistanceCount = 0;
-        let allManualOverrides = [];
-        let allRestrictionSkips = [];
-        
+        let allManualOverrides = [], allRestrictionSkips = [];
         reports.forEach(r => {
             totalOrdersAll += r.totalOrders;
             totalTripsAll += r.totalTrips;
@@ -282,151 +264,77 @@
             r.trucks.forEach(t => totalTrucksUnique.add(t.number));
             totalDistanceSum += r.avgDistance * (r.trucks.length || 1);
             totalDistanceCount += (r.trucks.length || 1);
-            if (r.manualOverrides && r.manualOverrides.length) allManualOverrides.push(...r.manualOverrides.map(m => ({ ...m, date: r.date })));
-            if (r.restrictionSkips && r.restrictionSkips.length) allRestrictionSkips.push(...r.restrictionSkips.map(s => ({ ...s, date: r.date, reason: s.reason })));
+            if (r.manualOverrides) allManualOverrides.push(...r.manualOverrides.map(m=>({...m, date: r.date})));
+            if (r.restrictionSkips) allRestrictionSkips.push(...r.restrictionSkips.map(s=>({...s, date: r.date})));
         });
         const totalUniqueTrucks = totalTrucksUnique.size;
         const avgDistanceOverall = totalDistanceCount ? (totalDistanceSum / totalDistanceCount).toFixed(1) : 0;
         const compliancePercent = calculateCompliance(reports);
-        let previousCompliance = parseFloat(localStorage.getItem('previousCompliance')) || null;
-        let improvementPercent = calculateImprovement(compliancePercent, previousCompliance);
+        let previous = parseFloat(localStorage.getItem('previousCompliance')) || null;
+        let improvement = calculateImprovement(compliancePercent, previous);
         localStorage.setItem('previousCompliance', compliancePercent);
-        let displayedImprovement = Math.min(99, Math.max(50, improvementPercent));
+        let displayedImprovement = Math.min(99, Math.max(50, improvement));
         
-        const improvementMessage = compliancePercent >= 85 ? 'تحسن ملحوظ جداً' : (compliancePercent >= 70 ? 'تحسن ملحوظ' : (compliancePercent >= 50 ? 'تحسن متوسط' : 'تحسن طفيف'));
+        const improvementMsg = compliancePercent >= 85 ? 'تحسن ملحوظ جداً' : (compliancePercent >= 70 ? 'تحسن ملحوظ' : (compliancePercent >= 50 ? 'تحسن متوسط' : 'تحسن طفيف'));
         const improvementColor = compliancePercent >= 85 ? '#38ef7d' : (compliancePercent >= 70 ? '#ffd966' : (compliancePercent >= 50 ? '#ffaa44' : '#ff9999'));
         
         const lastDayTrucks = reports.length ? reports[reports.length-1].trucks : [];
-        const highestDistanceTrucks = [...lastDayTrucks].sort((a,b) => b.totalDistance - a.totalDistance).slice(0, 5);
-        const lowestDistanceTrucks = [...lastDayTrucks].sort((a,b) => a.totalDistance - b.totalDistance).slice(0, 5);
+        const highestDistance = [...lastDayTrucks].sort((a,b)=>b.totalDistance-a.totalDistance).slice(0,5);
+        const lowestDistance = [...lastDayTrucks].sort((a,b)=>a.totalDistance-b.totalDistance).slice(0,5);
         
-        const methodology = `
-            <div class="method-box">
-                <strong>📌 منهجية التوزيع العادل (الخوارزمية الذكية)</strong>
-                <ul class="method-list">
-                    <li>الأولوية للسائقين الأقل عدد رحلات في اليوم (قاعدة "الأقل رحلات أولاً")</li>
-                    <li>عند تساوي الرحلات، يُفضَّل السائق الذي قطع مسافة أكبر لتعويضه برحلة أقرب</li>
-                    <li>تجنب توزيع نفس المصنع على نفس السائق مرتين متتاليتين</li>
-                    <li>إعادة ترتيب الأولويات ديناميكياً بعد كل رحلة</li>
-                    <li>استثناء طلبات "مصنع دعم وحلول الدرعية" في أوقات إغلاق الطريق (7ص - 11م)</li>
-                </ul>
-            </div>
-        `;
+        const methodology = `<div class="method-box"><strong>📌 منهجية التوزيع العادل (الخوارزمية الذكية)</strong><ul class="method-list">
+            <li>الأولوية للسائقين الأقل عدد رحلات في اليوم (قاعدة "الأقل رحلات أولاً")</li>
+            <li>عند تساوي الرحلات، يُفضَّل السائق الذي قطع مسافة أكبر لتعويضه برحلة أقرب</li>
+            <li>تجنب توزيع نفس المصنع على نفس السائق مرتين متتاليتين</li>
+            <li>إعادة ترتيب الأولويات ديناميكياً بعد كل رحلة</li>
+            <li>استثناء طلبات "مصنع دعم وحلول الدرعية" في أوقات إغلاق الطريق (7ص - 11م)</li>
+        </ul></div>`;
         
-        const futurePriorities = `
-            <div style="margin-bottom: 15px;">
-                <strong>🏆 الأعلى مسافة (للتعويض):</strong>
-                <div class="priority-list">
-                    ${highestDistanceTrucks.map(t => `<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('') || '<span class="priority-item">لا توجد بيانات كافية</span>'}
-                </div>
-            </div>
-            <div>
-                <strong>📌 الأقل مسافة (لزيادة الفرص):</strong>
-                <div class="priority-list">
-                    ${lowestDistanceTrucks.map(t => `<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('') || '<span class="priority-item">لا توجد بيانات كافية</span>'}
-                </div>
-            </div>
-        `;
+        const futurePriorities = `<div style="margin-bottom:15px;"><strong>🏆 الأعلى مسافة (للتعويض):</strong><div class="priority-list">${highestDistance.map(t=>`<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('')||'<span>لا توجد بيانات</span>'}</div></div>
+        <div><strong>📌 الأقل مسافة (لزيادة الفرص):</strong><div class="priority-list">${lowestDistance.map(t=>`<span class="priority-item">🚛 ${t.number} (${t.driver}) - رحلات: ${t.trips} - مسافة: ${t.totalDistance.toFixed(1)} كم</span>`).join('')||'<span>لا توجد بيانات</span>'}</div></div>`;
         
-        let improvementText = '';
-        if (displayedImprovement > 0) {
-            improvementText = `بالمقارنة مع التوزيع العشوائي اليدوي السابق، ساهم النظام في رفع نسبة العدالة بنحو <span class="highlight" style="color: #38ef7d; font-weight: bold;">${displayedImprovement}%</span>، مما أدى إلى تقليل الفجوة بين السائقين وتحسين الروح المعنوية بشكل ملحوظ.`;
-        } else {
-            improvementText = `النظام يحقق أداءً متميزاً حيث أن ${compliancePercent.toFixed(1)}% من أيام عمل السائقين حققت الهدف (رودين). هذا يعد تحسناً كبيراً مقارنة بالطرق التقليدية.`;
-        }
+        let improvementText = displayedImprovement > 0 ? `بالمقارنة مع التوزيع العشوائي اليدوي السابق، ساهم النظام في رفع نسبة العدالة بنحو <span class="highlight" style="color:#38ef7d;font-weight:bold;">${displayedImprovement}%</span>.` : `النظام يحقق أداءً متميزاً حيث أن ${compliancePercent.toFixed(1)}% من أيام عمل السائقين حققت الهدف (رودين).`;
         
         let manualOverridesHtml = '';
-        if (allManualOverrides.length > 0) {
-            manualOverridesHtml = `
-                <div class="method-box" style="border-right-color: #f5576c; margin-top: 20px;">
-                    <strong>⚠️ تدخلات يدوية مخالفة للعدالة</strong>
-                    <p style="margin-top:10px;">تم رصد <strong>${allManualOverrides.length}</strong> عملية توزيع يدوي خالفت توصيات النظام العادل. يُرجى مراجعة التفاصيل أدناه، ففي حال تكرارها قد تشير إلى محاباة أو تجاوز للقواعد.</p>
-                    <table class="manual-overrides-table">
-                        <thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead>
-                        <tbody>
-                            ${allManualOverrides.map(m => `<tr>
-                                <td>${m.date}</td>
-                                <td>${m.truckNumber}</td>
-                                <td>${m.driver}</td>
-                                <td>${m.factory}</td>
-                                <td>${m.road}</td>
-                                <td>${m.reason}</td>
-                                <td>${m.recommendedTruck}</td>
-                            </tr>`).join('')}
-                        </tbody>
-                    </table>
-                    <p style="margin-top:10px; color:#f5576c;">🔔 تنبيه: يُرجى من الإدارة مراجعة هذه الحالات والتأكد من عدم وجود محاباة.</p>
-                </div>
-            `;
-        }
-
-        let restrictionDetailsHtml = '';
-        if (allRestrictionSkips.length > 0) {
-            restrictionDetailsHtml = `
-                <div class="method-box" style="border-right-color: #4facfe;">
-                    <strong>⛔ تفاصيل استبعاد السائقين بسبب قيود الحظر</strong>
-                    <p style="margin-top:10px;">تم استبعاد السائقين التالية أسماؤهم من الذهاب إلى المصانع المحددة وفقاً لسياسات المنع، وذلك حرصاً على راحة العميل وضمان جودة الخدمة:</p>
-                    <ul class="method-list" style="margin-top:8px;">
-                        ${allRestrictionSkips.map(s => `
-                            <li>🚛 <strong>تم منع السائق ${s.driver} (رقم السيارة ${s.truckNumber})</strong> من الذهاب إلى مصنع <strong>${s.factory}</strong> بسبب: ${s.reason || 'لا يوجد سبب محدد'}.<br>
-                            ولذا تم استثناؤه من التوزيع على هذا المصنع حرصاً على راحة العميل.</li>
-                        `).join('')}
-                    </ul>
-                </div>
-            `;
+        if (allManualOverrides.length) {
+            manualOverridesHtml = `<div class="method-box" style="border-right-color:#f5576c;"><strong>⚠️ تدخلات يدوية مخالفة للعدالة</strong><p>تم رصد ${allManualOverrides.length} عملية توزيع يدوي خالفت توصيات النظام العادل.</p><table class="manual-overrides-table"><thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>الرود</th><th>التفاصيل</th><th>السائق الموصى به</th></tr></thead><tbody>${allManualOverrides.map(m=>`<tr><td>${m.date}</td><td>${m.truckNumber}</td><td>${m.driver}</td><td>${m.factory}</td><td>${m.road}</td><td>${m.reason}</td><td>${m.recommendedTruck}</td></tr>`).join('')}</tbody></table></div>`;
         }
         
-        return `
-            <div class="executive-summary" id="executiveSummary">
-                <div class="exec-summary-header">
-                    <h2>📊 ملخص الأداء التنفيذي</h2>
-                    <div class="period-badge">📅 ${document.getElementById('startDate').value} → ${document.getElementById('endDate').value}</div>
-                </div>
-                <div class="kpi-grid">
-                    <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-value">${totalOrdersAll}</div><div class="kpi-label">إجمالي الطلبات</div></div>
-                    <div class="kpi-card"><div class="kpi-icon">🚚</div><div class="kpi-value">${totalTripsAll}</div><div class="kpi-label">الرحلات المنفذة</div></div>
-                    <div class="kpi-card"><div class="kpi-icon">🚛</div><div class="kpi-value">${totalUniqueTrucks}</div><div class="kpi-label">سيارات عاملة</div></div>
-                    <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-value">${totalTrucksWith2Plus}</div><div class="kpi-label">حققت رودين+</div></div>
-                    <div class="kpi-card compliance-card"><div class="kpi-icon">🎯</div><div class="kpi-value" style="color: #ffd966;">${compliancePercent.toFixed(1)}%</div><div class="kpi-label">نسبة الالتزام بالهدف</div></div>
-                    <div class="kpi-card improvement-card"><div class="kpi-icon">📈</div><div class="kpi-value" style="color: #4facfe;">${displayedImprovement}%</div><div class="kpi-label">تحسن جودة التشغيل</div></div>
-                </div>
-                <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px,1fr));">
-                    <div class="kpi-card"><div class="kpi-icon">📏</div><div class="kpi-value">${avgDistanceOverall} كم</div><div class="kpi-label">متوسط المسافة/سيارة</div></div>
-                    <div class="kpi-card"><div class="kpi-icon">⚖️</div><div class="kpi-value">${(reports.reduce((s,r)=>s+parseFloat(r.stdDevDistance),0)/reports.length).toFixed(1)}</div><div class="kpi-label">انحراف معياري (كلما قلَّ، دلَّ على عدالة الأحمال)</div></div>
-                </div>
-                ${methodology}
-                ${restrictionDetailsHtml}
-                ${manualOverridesHtml}
-                <div class="method-box" style="margin-top: 20px;">
-                    <strong>🎯 نتيجة التوزيع</strong>
-                    <p>تم توزيع الطلبات بنجاح مع تحقيق <strong>${totalTrucksWith2Plus}</strong> سيارة للهدف (رودين فأكثر)، بينما سجلت <strong>${totalTrucksWith1}</strong> سيارة روداً واحداً فقط، و <strong>${totalUniqueTrucks - (totalTrucksWith2Plus+totalTrucksWith1)}</strong> سيارة بدون رحلات (غير مستخدمة في هذه الفترة).</p>
-                    <p style="margin-top: 10px;"><strong>⚙️ كيف تم التوزيع؟</strong> اعتمد النظام على خوارزمية ذكية تراعي المسافة الفعلية لكل مصنع (ذهاباً وإياباً) وتوزع الرحلات بالتناوب مع إعطاء الأولوية للسائقين الأقل حظاً في الرحلات. هذا يضمن عدم هيمنة سائق واحد على العديد من الطلبات ويخلق بيئة عمل عادلة.</p>
-                    <p><strong>📈 تطور جودة التشغيل:</strong> ${improvementText}</p>
-                </div>
-                <div class="method-box">
-                    <strong>🔮 أولويات الغد (التوصيات)</strong>
-                    ${futurePriorities}
-                    <p style="margin-top:15px; font-size:0.9rem; color:#a8b2d1;">✍️ هذا التقرير يُظهر التزام النظام بالعدالة ويُسهل على الإدارة اتخاذ قرارات مبنية على بيانات دقيقة.</p>
-                </div>
+        let restrictionHtml = '';
+        if (allRestrictionSkips.length) {
+            restrictionHtml = `<div class="method-box" style="border-right-color:#4facfe;"><strong>⛔ استبعاد سائقين بسبب قيود الحظر</strong><p>تم استبعاد السائقين التالية أسماؤهم من الذهاب إلى المصانع المحددة وفقاً لسياسات المنع، وذلك حرصاً على راحة العميل وضمان جودة الخدمة:</p><ul class="method-list">${allRestrictionSkips.map(s=>`<li>🚛 <strong>تم منع السائق ${s.driver} (رقم السيارة ${s.truckNumber})</strong> من الذهاب إلى مصنع <strong>${s.factory}</strong> بسبب: ${s.reason || 'لا يوجد سبب محدد'}.<br>ولذا تم استثناؤه من التوزيع على هذا المصنع حرصاً على راحة العميل.</li>`).join('')}</ul></div>`;
+        }
+        
+        return `<div class="executive-summary" id="executiveSummary">
+            <div class="exec-summary-header"><h2>📊 ملخص الأداء التنفيذي</h2><div class="period-badge">📅 ${document.getElementById('startDate').value} → ${document.getElementById('endDate').value}</div></div>
+            <div class="kpi-grid">
+                <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-value">${totalOrdersAll}</div><div class="kpi-label">إجمالي الطلبات</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🚚</div><div class="kpi-value">${totalTripsAll}</div><div class="kpi-label">الرحلات المنفذة</div></div>
+                <div class="kpi-card"><div class="kpi-icon">🚛</div><div class="kpi-value">${totalUniqueTrucks}</div><div class="kpi-label">سيارات عاملة</div></div>
+                <div class="kpi-card"><div class="kpi-icon">✅</div><div class="kpi-value">${totalTrucksWith2Plus}</div><div class="kpi-label">حققت رودين+</div></div>
+                <div class="kpi-card compliance-card"><div class="kpi-icon">🎯</div><div class="kpi-value" style="color:#ffd966;">${compliancePercent.toFixed(1)}%</div><div class="kpi-label">نسبة الالتزام بالهدف</div></div>
+                <div class="kpi-card improvement-card"><div class="kpi-icon">📈</div><div class="kpi-value" style="color:#4facfe;">${displayedImprovement}%</div><div class="kpi-label">تحسن جودة التشغيل</div></div>
             </div>
-        `;
+            <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));">
+                <div class="kpi-card"><div class="kpi-icon">📏</div><div class="kpi-value">${avgDistanceOverall} كم</div><div class="kpi-label">متوسط المسافة/سيارة</div></div>
+                <div class="kpi-card"><div class="kpi-icon">⚖️</div><div class="kpi-value">${(reports.reduce((s,r)=>s+parseFloat(r.stdDevDistance),0)/reports.length).toFixed(1)}</div><div class="kpi-label">انحراف معياري (كلما قلَّ، دلَّ على عدالة الأحمال)</div></div>
+            </div>
+            ${methodology}
+            ${restrictionHtml}
+            ${manualOverridesHtml}
+            <div class="method-box"><strong>🎯 نتيجة التوزيع</strong><p>تم توزيع الطلبات بنجاح مع تحقيق <strong>${totalTrucksWith2Plus}</strong> سيارة للهدف (رودين فأكثر)، بينما سجلت <strong>${totalTrucksWith1}</strong> سيارة روداً واحداً فقط، و <strong>${totalUniqueTrucks - (totalTrucksWith2Plus+totalTrucksWith1)}</strong> سيارة بدون رحلات.</p><p><strong>⚙️ كيف تم التوزيع؟</strong> اعتمد النظام على خوارزمية ذكية تراعي المسافة الفعلية لكل مصنع وتوزع الرحلات بالتناوب مع إعطاء الأولوية للسائقين الأقل حظاً.</p><p><strong>📈 تطور جودة التشغيل:</strong> ${improvementText}</p></div>
+            <div class="method-box"><strong>🔮 أولويات الغد (التوصيات)</strong>${futurePriorities}<p style="margin-top:15px;font-size:0.9rem;color:#a8b2d1;">✍️ هذا التقرير يُظهر التزام النظام بالعدالة ويُسهل على الإدارة اتخاذ قرارات مبنية على بيانات دقيقة.</p></div>
+        </div>`;
     }
 
     function renderDailyReport(report) {
-        let trucksTable = `</table><thead><tr><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>الروودات</th><th>المسافة الكلية (كم)</th><th>التقييم</th></tr></thead><tbody>`;
+        let trucksTable = `<table><thead><tr><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>الروودات</th><th>المسافة الكلية (كم)</th><th>التقييم</th></tr></thead><tbody>`;
         report.trucks.forEach(t => {
             let roadsStr = t.roads.join(', ');
             let evaluation = t.trips >= 2 ? '<span class="badge badge-success">مستوفٍ</span>' : (t.trips === 1 ? '<span class="badge badge-warning">رود واحد</span>' : '<span class="badge badge-danger">بدون رحلات</span>');
-            trucksTable += `<tr>
-                <td>${t.number}</td>
-                <td>${t.driver}</td>
-                <td>${t.trips}</td>
-                <td>${roadsStr}</td>
-                <td>${t.totalDistance.toFixed(1)}</td>
-                <td>${evaluation}</td>
-            </tr>`;
+            trucksTable += `<tr><td>${t.number}</td><td>${t.driver}</td><td>${t.trips}</td><td>${roadsStr}</td><td>${t.totalDistance.toFixed(1)}</td><td>${evaluation}</td></tr>`;
         });
-        trucksTable += `</tbody></tr>`;
+        trucksTable += `</tbody></table>`;
         let statsHtml = `<div class="stats-grid">
             <div class="stat-card"><h4>📦 إجمالي الطلبات</h4><div class="number">${report.totalOrders}</div></div>
             <div class="stat-card"><h4>✅ تم توزيعها</h4><div class="number">${report.totalDistributed}</div></div>
@@ -443,7 +351,7 @@
         let start, end;
         switch(type) {
             case 'today': start = new Date(today); end = new Date(today); break;
-            case 'week': start = new Date(today); start.setDate(today.getDate() - 6); end = new Date(today); break;
+            case 'week': start = new Date(today); start.setDate(today.getDate()-6); end = new Date(today); break;
             case 'month': start = new Date(today.getFullYear(), today.getMonth(), 1); end = new Date(today); break;
             default: return;
         }
@@ -468,12 +376,12 @@
                 for (const [date, data] of Object.entries(rangeData)) {
                     reports.push(analyzeDay(date, data.orders || [], data.distribution || []));
                 }
-                reports.sort((a,b) => a.date.localeCompare(b.date));
+                reports.sort((a,b)=>a.date.localeCompare(b.date));
             } else {
                 let dates = [];
                 let current = new Date(startDate);
                 let end = new Date(endDate);
-                while (current <= end) { dates.push(current.toISOString().split('T')[0]); current.setDate(current.getDate() + 1); }
+                while (current <= end) { dates.push(current.toISOString().split('T')[0]); current.setDate(current.getDate()+1); }
                 for (let date of dates) {
                     try {
                         const data = await apiCall(`/day/${date}`);
@@ -536,8 +444,8 @@
                 r.trucks.forEach(t => totalUniqueTrucks.add(t.number));
                 totalDistanceSum += r.avgDistance * (r.trucks.length || 1);
                 totalDistanceCount += (r.trucks.length || 1);
-                if (r.manualOverrides && r.manualOverrides.length) allManualOverrides.push(...r.manualOverrides.map(m => ({ ...m, date: r.date })));
-                if (r.restrictionSkips && r.restrictionSkips.length) allRestrictionSkips.push(...r.restrictionSkips.map(s => ({ ...s, date: r.date, reason: s.reason })));
+                if (r.manualOverrides) allManualOverrides.push(...r.manualOverrides.map(m=>({...m, date: r.date})));
+                if (r.restrictionSkips) allRestrictionSkips.push(...r.restrictionSkips.map(s=>({...s, date: r.date, reason: s.reason})));
             });
             const avgDistanceOverall = totalDistanceCount ? (totalDistanceSum / totalDistanceCount).toFixed(1) : 0;
             const startDate = document.getElementById('startDate').value, endDate = document.getElementById('endDate').value;
@@ -547,7 +455,7 @@
                 ['عدد السيارات العاملة', totalUniqueTrucks.size], ['سيارات حققت رودين+', totalTrucksWith2Plus], ['سيارات برود واحد', totalTrucksWith1],
                 ['نسبة الالتزام بالهدف', `${compliancePercent.toFixed(1)}%`], ['متوسط المسافة لكل سيارة (كم)', avgDistanceOverall],
                 ['عدد التدخلات اليدوية المخالفة', allManualOverrides.length], ['عدد تطبيقات قيود الحظر', allRestrictionSkips.length],
-                ['منهجية التوزيع', 'الأولوية للأقل رحلات، ثم الأعلى مسافة، مع تجنب تكرار المصنع واستثناء الدرعية أوقات الإغلاق']
+                ['منهجية التوزيع', 'الأولوية للأقل رحلات، ثم الأعلى مسافة، مع تجنب تكرار المصنع']
             ];
             summaryRows.forEach((row, idx) => { const r = summarySheet.getRow(3 + idx); r.values = row; r.getCell(1).font = { bold: true }; });
             if (allManualOverrides.length) {
@@ -617,9 +525,8 @@
 
     function loadNav() {
         fetch('/api/me', { credentials: 'include' }).then(r=>r.json()).then(data=>{
-            if(data.user) {
-                document.getElementById('navLinks').innerHTML = `
-                    <a href="index.html" class="nav-link">📊 الرئيسية</a>
+            if (data.user) {
+                document.getElementById('navLinks').innerHTML = `<a href="index.html" class="nav-link">📊 الرئيسية</a>
                     <a href="orders.html" class="nav-link">📝 الطلبات</a>
                     <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
                     <a href="trucks.html" class="nav-link">🚛 السيارات</a>
@@ -632,8 +539,7 @@
                     <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
                     <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
                     <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                    <a href="logs.html" class="nav-link">📜 السجلات</a>
-                `;
+                    <a href="logs.html" class="nav-link">📜 السجلات</a>`;
             } else window.location.href = '/login.html';
         }).catch(()=>window.location.href='/login.html');
     }
