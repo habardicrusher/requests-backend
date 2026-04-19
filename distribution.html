@@ -98,7 +98,8 @@
         <div style="overflow-x: auto; margin-bottom: 30px;">
             <table id="undistributedTable">
                 <thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>وقت الإضافة</th><th>توزيع يدوي</th></tr></thead>
-                <tbody id="undistributedBody"><tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة</td></tr></tbody>
+                <tbody id="undistributedBody"><tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة</td></tr>
+                </tbody>
             </table>
         </div>
 
@@ -106,7 +107,8 @@
         <div style="overflow-x: auto;">
             <table id="distributionTable">
                 <thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>الرود</th><th>ملاحظات</th></tr></thead>
-                <tbody id="distributionBody"><tr><td colspan="10" style="text-align:center;">لا يوجد توزيع بعد</td></tr></tbody>
+                <tbody id="distributionBody"><tr><td colspan="10" style="text-align:center;">لا يوجد توزيع بعد</td></tr>
+                </tbody>
             </table>
         </div>
     </div>
@@ -126,6 +128,7 @@
     </div>
 
     <script>
+        // التعديل الوحيد: تحديث مسافة مصنع "شركة الحارث للمنتجات الاسمنيه" من 150 كم إلى 401.37 كم والوقت المناسب
         const FACTORY_DATA = {
             "مصنع الفهد": { distance: 337.99, time: "3 س و 30 د" },
             "مصنع قوة معمارية": { distance: 339.87, time: "3 س و 29 د" },
@@ -146,7 +149,9 @@
             "الحارث العزيزية": { distance: 475.49, time: "5 س و 3 د" },
             "انشاءات دبي": { distance: 522.92, time: "6 س و 3 د" },
             "الشركة الصينية": { distance: 605.51, time: "7 س و 40 د" },
-            "شركة اعمار": { distance: 662.14, time: "7 س و 38 د" }
+            "شركة اعمار": { distance: 662.14, time: "7 س و 38 د" },
+            // المصنع المطلوب تعديل مسافته (كان 150 كم سابقاً)
+            "شركة الحارث للمنتجات الاسمنيه": { distance: 401.37, time: "4 س و 7 د" }
         };
         function getFactoryDistance(f) { return FACTORY_DATA[f] ? FACTORY_DATA[f].distance : 150; }
         function getFactoryTime(f) { return FACTORY_DATA[f] ? FACTORY_DATA[f].time : "—"; }
