@@ -72,7 +72,7 @@ async function logAction(username, action, details, req = null) {
     } catch (err) { console.error('فشل تسجيل السجل:', err); }
 }
 
-// ==================== إنشاء الجداول ====================
+// ==================== إنشاء الجداول (مع إضافة permissions) ====================
 async function initTables() {
     try {
         await query(`
@@ -114,6 +114,7 @@ async function initTables() {
                 distribution JSONB NOT NULL
             )
         `);
+        // جدول users مع إضافة عمود permissions
         await query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -121,9 +122,15 @@ async function initTables() {
                 password TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'user',
                 factory TEXT,
+                permissions JSONB DEFAULT '[]',
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        // إذا كان الجدول موجوداً مسبقاً ولكن بدون عمود permissions، نضيفه
+        try {
+            await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '[]'`);
+        } catch(e) { console.log('عمود permissions موجود مسبقاً أو لا حاجة لإضافته'); }
+        
         await query(`
             CREATE TABLE IF NOT EXISTS truck_violations (
                 id SERIAL PRIMARY KEY,
@@ -169,13 +176,16 @@ async function initTables() {
             )
         `);
 
-        // المستخدمون الافتراضيون
+        // المستخدمون الافتراضيون مع صلاحيات تجريبية
         const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
         if (adminCheck.rows.length === 0) {
-            await query("INSERT INTO users (username, password, role) VALUES ($1, $2, $3)", ['admin', bcrypt.hashSync('admin', 10), 'admin']);
-            await query("INSERT INTO users (username, password, role) VALUES ($1, $2, $3)", ['user', bcrypt.hashSync('user', 10), 'user']);
-            await query("INSERT INTO users (username, password, role, factory) VALUES ($1, $2, $3, $4)", ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد']);
-            console.log('✅ تم إنشاء المستخدمين الافتراضيين');
+            await query("INSERT INTO users (username, password, role, permissions) VALUES ($1, $2, $3, $4)", 
+                ['admin', bcrypt.hashSync('admin', 10), 'admin', '[]']);
+            await query("INSERT INTO users (username, password, role, permissions) VALUES ($1, $2, $3, $4)", 
+                ['user', bcrypt.hashSync('user', 10), 'user', JSON.stringify(['dashboard', 'orders', 'distribution', 'trucks', 'products', 'factories', 'reports', 'scale_reports', 'failed_trucks', 'failed_trucks_report', 'quality', 'settings', 'restrictions'])]);
+            await query("INSERT INTO users (username, password, role, factory, permissions) VALUES ($1, $2, $3, $4, $5)", 
+                ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد', '[]']);
+            console.log('✅ تم إنشاء المستخدمين الافتراضيين مع صلاحيات');
         }
         console.log('✅ جميع الجداول جاهزة');
     } catch (err) {
@@ -256,7 +266,7 @@ async function getFullBackup() {
     daysResult.rows.forEach(row => {
         days[row.date] = { orders: row.orders, distribution: row.distribution };
     });
-    const usersResult = await query('SELECT id, username, role, factory, created_at FROM users');
+    const usersResult = await query('SELECT id, username, role, factory, permissions, created_at FROM users');
     const restrictionsResult = await query('SELECT * FROM restrictions ORDER BY id');
     return {
         version: '1.0',
@@ -287,10 +297,10 @@ async function restoreFullBackup(backupData) {
             for (const user of backupData.users) {
                 if (user.username === 'admin') continue;
                 await query(
-                    `INSERT INTO users (id, username, role, factory, created_at)
-                     VALUES ($1, $2, $3, $4, $5)
-                     ON CONFLICT (username) DO UPDATE SET role = $3, factory = $4`,
-                    [user.id, user.username, user.role, user.factory, user.created_at]
+                    `INSERT INTO users (id, username, role, factory, permissions, created_at)
+                     VALUES ($1, $2, $3, $4, $5, $6)
+                     ON CONFLICT (username) DO UPDATE SET role = $3, factory = $4, permissions = $5`,
+                    [user.id, user.username, user.role, user.factory, user.permissions || '[]', user.created_at]
                 );
             }
         }
@@ -345,7 +355,8 @@ app.post('/api/login', async (req, res) => {
         req.session.userId = user.id;
         req.session.username = user.username;
         req.session.role = user.role;
-        req.session.factory = user.factory; // ★★★ تخزين المصنع في الجلسة
+        req.session.factory = user.factory;
+        req.session.permissions = user.permissions; // تخزين الصلاحيات في الجلسة
         req.session.save(async (err) => {
             if (err) return res.status(500).json({ error: 'خطأ في إنشاء الجلسة' });
             await logAction(user.username, 'تسجيل دخول', 'تم تسجيل الدخول بنجاح', req);
@@ -362,13 +373,15 @@ app.post('/api/logout', async (req, res) => {
 
 app.get('/api/me', async (req, res) => {
     if (!req.session.userId) return res.status(401).json({ error: 'غير مصرح' });
-    const result = await query('SELECT id, username, role, factory FROM users WHERE id = $1', [req.session.userId]);
+    const result = await query('SELECT id, username, role, factory, permissions FROM users WHERE id = $1', [req.session.userId]);
     if (!result.rows.length) return res.status(401).json({ error: 'غير مصرح' });
-    // تحديث الجلسة في حالة تغير المصنع من قاعدة البيانات (نادر)
-    if (result.rows[0].factory && !req.session.factory) {
-        req.session.factory = result.rows[0].factory;
+    let user = result.rows[0];
+    // التأكد من أن permissions مصفوفة
+    if (typeof user.permissions === 'string') {
+        try { user.permissions = JSON.parse(user.permissions); } catch(e) { user.permissions = []; }
     }
-    res.json({ user: result.rows[0] });
+    if (!user.permissions) user.permissions = [];
+    res.json({ user });
 });
 
 // ==================== السجلات ====================
@@ -437,10 +450,9 @@ app.get('/api/day/:date', async (req, res) => {
     let orders = data.orders || [];
     let distribution = data.distribution || [];
     
-    // ★★★ فلترة الطلبات إذا كان المستخدم من نوع client ★★★
     if (req.session.role === 'client' && req.session.factory) {
         orders = orders.filter(order => order.factory === req.session.factory);
-        distribution = []; // العميل لا يرى التوزيع
+        distribution = [];
     }
     
     res.json({ orders, distribution });
@@ -452,7 +464,6 @@ app.put('/api/day/:date', async (req, res) => {
     if (!date || isNaN(new Date(date).getTime())) return res.status(400).json({ error: 'تاريخ غير صالح' });
     if (!Array.isArray(orders) || !Array.isArray(distribution)) return res.status(400).json({ error: 'بيانات غير صالحة' });
     
-    // ★★★ التحقق من الصلاحيات: إذا كان المستخدم عميل مصنع ★★★
     if (req.session.role === 'client' && req.session.factory) {
         const allOrdersBelongToClient = orders.every(order => order.factory === req.session.factory);
         if (!allOrdersBelongToClient) {
@@ -461,7 +472,7 @@ app.put('/api/day/:date', async (req, res) => {
         if (distribution && distribution.length > 0) {
             return res.status(403).json({ error: 'غير مصرح لك بحفظ بيانات التوزيع' });
         }
-        distribution = []; // إفراغ التوزيع
+        distribution = [];
     }
     
     const ordersJson = JSON.stringify(orders);
@@ -478,35 +489,47 @@ app.get('/api/range/:startDate/:endDate', async (req, res) => {
     res.json(data);
 });
 
-// ==================== إدارة المستخدمين ====================
+// ==================== إدارة المستخدمين مع دعم permissions ====================
 app.get('/api/users', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    const result = await query('SELECT id, username, role, factory, created_at FROM users ORDER BY id');
-    res.json(result.rows);
+    const result = await query('SELECT id, username, role, factory, permissions, created_at FROM users ORDER BY id');
+    // تحويل permissions من JSONB إلى مصفوفة في الرد
+    const users = result.rows.map(u => {
+        if (typeof u.permissions === 'string') {
+            try { u.permissions = JSON.parse(u.permissions); } catch(e) { u.permissions = []; }
+        }
+        if (!u.permissions) u.permissions = [];
+        return u;
+    });
+    res.json(users);
 });
 
 app.post('/api/users', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
-    const { username, password, role, factory } = req.body;
+    const { username, password, role, factory, permissions } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'مطلوب' });
     const exists = await query(`SELECT id FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
     if (exists.rows.length) return res.status(400).json({ error: 'اسم المستخدم موجود' });
     const hashed = bcrypt.hashSync(password, 10);
     const finalRole = role || 'user';
     const finalFactory = (finalRole === 'client' && factory) ? factory : null;
-    await query('INSERT INTO users (username, password, role, factory) VALUES ($1, $2, $3, $4)', [username, hashed, finalRole, finalFactory]);
+    const finalPermissions = permissions || [];
+    await query('INSERT INTO users (username, password, role, factory, permissions) VALUES ($1, $2, $3, $4, $5)',
+        [username, hashed, finalRole, finalFactory, JSON.stringify(finalPermissions)]);
     res.status(201).json({ success: true });
 });
 
 app.put('/api/users/:id', async (req, res) => {
     if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const userId = parseInt(req.params.id);
-    const { role, password, factory } = req.body;
-    const updates = [], values = [];
+    const { role, password, factory, permissions } = req.body;
+    const updates = [];
+    const values = [];
     if (role) { updates.push(`role = $${updates.length+1}`); values.push(role); }
     if (password) { updates.push(`password = $${updates.length+1}`); values.push(bcrypt.hashSync(password, 10)); }
     if (role === 'client' && factory !== undefined) { updates.push(`factory = $${updates.length+1}`); values.push(factory); }
     else if (role !== 'client') { updates.push(`factory = NULL`); }
+    if (permissions !== undefined) { updates.push(`permissions = $${updates.length+1}`); values.push(JSON.stringify(permissions)); }
     if (updates.length === 0) return res.json({ success: true });
     values.push(userId);
     await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
@@ -799,5 +822,5 @@ app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
     console.log(`🔗 http://localhost:${PORT}`);
     console.log(`👤 بيانات الدخول الافتراضية: admin/admin , user/user , client/client`);
-    console.log(`📝 ملاحظة: تسجيل الدخول غير حساس لحالة الأحرف`);
+    console.log(`📝 ملاحظة: المستخدم 'user' لديه جميع الصلاحيات مبدئياً يمكن تعديلها من صفحة المستخدمين`);
 });
