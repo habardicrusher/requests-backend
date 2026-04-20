@@ -54,7 +54,7 @@ app.use(session({
     cookie: {
         maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: false,  // تأكد أنها false في التطوير المحلي
         sameSite: 'lax'
     }
 }));
@@ -90,24 +90,23 @@ async function logAction(username, action, details, req = null) {
     } catch (err) { console.error('فشل تسجيل السجل:', err); }
 }
 
-// ==================== Middleware للتحقق من الصلاحيات (تم إصلاحه) ====================
+// ==================== Middleware للتحقق من الصلاحيات (نسخة مبسطة ومضمونة) ====================
 function authorize(permission) {
     return (req, res, next) => {
-        // إذا كان المستخدم مديراً (admin) نسمح له بكل شيء
+        // إذا كان المستخدم مديراً، نسمح له فوراً
         if (req.session.role === 'admin') {
             return next();
         }
-        // إذا لم يكن مديراً، نتحقق من الصلاحية المطلوبة في قائمة صلاحياته
+        // إذا لم يكن مديراً، نتحقق من الصلاحية
         const userPerms = parsePermissions(req.session.permissions);
         if (userPerms.includes(permission)) {
             return next();
         }
-        // غير مصرح
         res.status(403).json({ error: `غير مصرح: تحتاج صلاحية ${permission}` });
     };
 }
 
-// ==================== إنشاء الجداول ====================
+// ==================== إنشاء الجداول وإصلاح المستخدم admin ====================
 async function initTables() {
     try {
         await query(`CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value JSONB NOT NULL )`);
@@ -121,30 +120,37 @@ async function initTables() {
         await query(`CREATE TABLE IF NOT EXISTS restrictions ( id SERIAL PRIMARY KEY, truck_number TEXT NOT NULL, driver_name TEXT NOT NULL, restricted_factories JSONB NOT NULL, reason TEXT, active BOOLEAN DEFAULT true, created_by TEXT, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW() )`);
         await query(`CREATE TABLE IF NOT EXISTS backup_metadata ( id SERIAL PRIMARY KEY, backup_date TIMESTAMP DEFAULT NOW(), backup_type TEXT, description TEXT )`);
 
-        // المستخدمون الافتراضيون مع صلاحيات
+        // إصلاح المستخدم admin: تأكد من وجوده وصلاحياته ودوره
         const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
+        const allPerms = getAvailablePermissions();
         if (adminCheck.rows.length === 0) {
-            const allPerms = getAvailablePermissions();
             await query(
                 "INSERT INTO users (username, password, role, permissions) VALUES ($1, $2, $3, $4)",
                 ['admin', bcrypt.hashSync('admin', 10), 'admin', stringifyPermissions(allPerms)]
             );
+            console.log('✅ تم إنشاء المستخدم admin');
+        } else {
+            // تحديث دور admin وصلاحياته للتأكد
+            await query(`UPDATE users SET role = 'admin', permissions = $1 WHERE LOWER(username) = 'admin'`, [stringifyPermissions(allPerms)]);
+            console.log('✅ تم تحديث صلاحيات admin');
+        }
+
+        // المستخدمين الافتراضيين الآخرين إذا لم يكونوا موجودين
+        const userCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'user'`);
+        if (userCheck.rows.length === 0) {
             await query(
                 "INSERT INTO users (username, password, role, permissions) VALUES ($1, $2, $3, $4)",
                 ['user', bcrypt.hashSync('user', 10), 'user', stringifyPermissions(['view_orders', 'create_order', 'view_distribution', 'view_trucks', 'view_products', 'view_factories', 'view_reports'])]
             );
+        }
+        const clientCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'client'`);
+        if (clientCheck.rows.length === 0) {
             await query(
                 "INSERT INTO users (username, password, role, factory, permissions) VALUES ($1, $2, $3, $4, $5)",
                 ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد', stringifyPermissions(['view_orders', 'view_reports'])]
             );
-            console.log('✅ تم إنشاء المستخدمين الافتراضيين مع صلاحيات تفصيلية');
-        } else {
-            // التأكد من أن المستخدم admin لديه الصلاحية manage_users
-            await query(`UPDATE users SET role = 'admin' WHERE LOWER(username) = 'admin'`);
-            const allPerms = getAvailablePermissions();
-            await query(`UPDATE users SET permissions = $1 WHERE LOWER(username) = 'admin'`, [stringifyPermissions(allPerms)]);
         }
-        console.log('✅ جميع الجداول جاهزة');
+        console.log('✅ جميع الجداول جاهزة والمستخدمون محدثون');
     } catch (err) {
         console.error('❌ فشل إنشاء الجداول:', err.message);
     }
@@ -286,9 +292,12 @@ app.post('/api/login', async (req, res) => {
         req.session.role = user.role;
         req.session.factory = user.factory;
         req.session.permissions = parsePermissions(user.permissions);
-        req.session.save(async (err) => {
-            if (err) return res.status(500).json({ error: 'خطأ في إنشاء الجلسة' });
-            await logAction(user.username, 'تسجيل دخول', 'تم تسجيل الدخول بنجاح', req);
+        req.session.save((err) => {
+            if (err) {
+                console.error('خطأ في حفظ الجلسة:', err);
+                return res.status(500).json({ error: 'خطأ في إنشاء الجلسة' });
+            }
+            logAction(user.username, 'تسجيل دخول', 'تم تسجيل الدخول بنجاح', req);
             res.json({ success: true, role: user.role });
         });
     } catch (err) { res.status(500).json({ error: 'خطأ داخلي' }); }
@@ -311,6 +320,17 @@ app.get('/api/me', async (req, res) => {
         factory: result.rows[0].factory,
         permissions: parsePermissions(result.rows[0].permissions)
     } });
+});
+
+// نقطة نهاية لتصحيح أخطاء الجلسة (للتأكد من وجود role)
+app.get('/api/debug-session', (req, res) => {
+    res.json({
+        sessionId: req.sessionID,
+        userId: req.session.userId,
+        username: req.session.username,
+        role: req.session.role,
+        permissions: req.session.permissions
+    });
 });
 
 // ==================== السجلات ====================
@@ -672,5 +692,4 @@ app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
     console.log(`🔗 http://localhost:${PORT}`);
     console.log(`👤 بيانات الدخول الافتراضية: admin/admin , user/user , client/client`);
-    console.log(`📝 ملاحظة: تسجيل الدخول غير حساس لحالة الأحرف`);
 });
