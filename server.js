@@ -72,6 +72,11 @@ async function logAction(username, action, details, req = null) {
     } catch (err) { console.error('فشل تسجيل السجل:', err); }
 }
 
+// دالة للتحقق من صلاحية إدارة المستخدمين
+function canManageUsers(req) {
+    return req.session.role === 'admin' || (req.session.permissions && req.session.permissions.manageUsers === true);
+}
+
 // ==================== إنشاء الجداول ====================
 async function initTables() {
     try {
@@ -125,6 +130,7 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT NOW()
             )
         `);
+        // التأكد من وجود عمود permissions (للترقية)
         await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'::jsonb`).catch(e => console.log('Column permissions already exists or cannot be added:', e.message));
 
         await query(`
@@ -172,7 +178,7 @@ async function initTables() {
             )
         `);
 
-        // المستخدمون الافتراضيون
+        // المستخدمون الافتراضيون مع صلاحيات كاملة للمدير
         const adminCheck = await query(`SELECT * FROM users WHERE LOWER(username) = 'admin'`);
         if (adminCheck.rows.length === 0) {
             const defaultAdminPermissions = {
@@ -200,6 +206,14 @@ async function initTables() {
                 ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد', JSON.stringify({})]
             );
             console.log('✅ تم إنشاء المستخدمين الافتراضيين مع الصلاحيات');
+        } else {
+            // التأكد من أن المدير لديه صلاحية manageUsers (في حالة الترقية)
+            const adminRow = adminCheck.rows[0];
+            if (!adminRow.permissions || !adminRow.permissions.manageUsers) {
+                const newPerms = { ...(adminRow.permissions || {}), manageUsers: true };
+                await query(`UPDATE users SET permissions = $1 WHERE id = $2`, [JSON.stringify(newPerms), adminRow.id]);
+                console.log('✅ تم تحديث صلاحيات المدير (manageUsers)');
+            }
         }
         console.log('✅ جميع الجداول جاهزة');
     } catch (err) {
@@ -461,12 +475,10 @@ app.get('/api/day/:date', async (req, res) => {
     const data = await getDayData(date);
     let orders = data.orders || [];
     let distribution = data.distribution || [];
-    
     if (req.session.role === 'client' && req.session.factory) {
         orders = orders.filter(order => order.factory === req.session.factory);
         distribution = [];
     }
-    
     res.json({ orders, distribution });
 });
 
@@ -475,18 +487,12 @@ app.put('/api/day/:date', async (req, res) => {
     let { orders, distribution } = req.body;
     if (!date || isNaN(new Date(date).getTime())) return res.status(400).json({ error: 'تاريخ غير صالح' });
     if (!Array.isArray(orders) || !Array.isArray(distribution)) return res.status(400).json({ error: 'بيانات غير صالحة' });
-    
     if (req.session.role === 'client' && req.session.factory) {
         const allOrdersBelongToClient = orders.every(order => order.factory === req.session.factory);
-        if (!allOrdersBelongToClient) {
-            return res.status(403).json({ error: 'غير مصرح لك بتعديل طلبات مصانع أخرى' });
-        }
-        if (distribution && distribution.length > 0) {
-            return res.status(403).json({ error: 'غير مصرح لك بحفظ بيانات التوزيع' });
-        }
+        if (!allOrdersBelongToClient) return res.status(403).json({ error: 'غير مصرح لك بتعديل طلبات مصانع أخرى' });
+        if (distribution && distribution.length > 0) return res.status(403).json({ error: 'غير مصرح لك بحفظ بيانات التوزيع' });
         distribution = [];
     }
-    
     const ordersJson = JSON.stringify(orders);
     const distributionJson = JSON.stringify(distribution);
     await query(`INSERT INTO day_data (date, orders, distribution) VALUES ($1, $2::jsonb, $3::jsonb) ON CONFLICT (date) DO UPDATE SET orders = $2::jsonb, distribution = $3::jsonb`, [date, ordersJson, distributionJson]);
@@ -501,15 +507,15 @@ app.get('/api/range/:startDate/:endDate', async (req, res) => {
     res.json(data);
 });
 
-// ==================== إدارة المستخدمين مع الصلاحيات ====================
+// ==================== إدارة المستخدمين (مع صلاحية manageUsers) ====================
 app.get('/api/users', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (!canManageUsers(req)) return res.status(403).json({ error: 'غير مصرح' });
     const result = await query('SELECT id, username, role, factory, permissions, created_at FROM users ORDER BY id');
     res.json(result.rows);
 });
 
 app.post('/api/users', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (!canManageUsers(req)) return res.status(403).json({ error: 'غير مصرح' });
     const { username, password, role, factory, permissions } = req.body;
     if (!username || !password) return res.status(400).json({ error: 'مطلوب' });
     const exists = await query(`SELECT id FROM users WHERE LOWER(username) = LOWER($1)`, [username]);
@@ -526,7 +532,7 @@ app.post('/api/users', async (req, res) => {
 });
 
 app.put('/api/users/:id', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (!canManageUsers(req)) return res.status(403).json({ error: 'غير مصرح' });
     const userId = parseInt(req.params.id);
     const { role, password, factory, permissions } = req.body;
     const updates = [];
@@ -542,7 +548,6 @@ app.put('/api/users/:id', async (req, res) => {
     if (updates.length === 0) return res.json({ success: true });
     values.push(userId);
     await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${values.length}`, values);
-    // تحديث الجلسة إذا كان المستخدم يعدل نفسه
     if (req.session.userId === userId) {
         const updatedUser = await query('SELECT role, factory, permissions FROM users WHERE id = $1', [userId]);
         if (updatedUser.rows.length) {
@@ -555,7 +560,7 @@ app.put('/api/users/:id', async (req, res) => {
 });
 
 app.delete('/api/users/:id', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    if (!canManageUsers(req)) return res.status(403).json({ error: 'غير مصرح' });
     const userId = parseInt(req.params.id);
     const user = await query('SELECT username FROM users WHERE id = $1', [userId]);
     if (!user.rows.length) return res.status(404).json({ error: 'غير موجود' });
@@ -581,7 +586,6 @@ app.get('/api/scale-reports/:id', async (req, res) => {
         const row = result.rows[0];
         let reportData = row.data;
         if (typeof reportData === 'string') { try { reportData = JSON.parse(reportData); } catch(e) { reportData = {}; } }
-        if (!reportData || typeof reportData !== 'object') reportData = {};
         res.json({ id, reportName: row.report_name, reportDate: row.report_date, data: reportData, createdAt: row.created_at });
     } catch (err) { res.status(500).json({ error: 'خطأ في جلب التقرير' }); }
 });
@@ -762,31 +766,15 @@ app.get('/api/truck-violations/:date', async (req, res) => {
     }
 });
 
-// ★★★ الإصلاح الرئيسي: endpoint حفظ الأسباب ★★★
 app.post('/api/truck-violations/save', async (req, res) => {
-    // التحقق من صلاحية المدير
-    if (req.session.role !== 'admin') {
-        return res.status(403).json({ error: 'غير مصرح' });
-    }
+    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
     const { date, violations } = req.body;
-    if (!date || !violations) {
-        return res.status(400).json({ error: 'بيانات ناقصة: يجب إرسال التاريخ والمخالفات' });
-    }
-    if (!Array.isArray(violations)) {
-        return res.status(400).json({ error: 'violations يجب أن تكون مصفوفة' });
-    }
-
+    if (!date || !violations || !Array.isArray(violations)) return res.status(400).json({ error: 'بيانات ناقصة' });
     try {
-        // حذف السجلات القديمة لهذا التاريخ
         await query('DELETE FROM truck_violations WHERE date = $1', [date]);
-
         let insertedCount = 0;
         for (const v of violations) {
-            // التحقق من الحقول الأساسية
-            if (!v.truckNumber || v.trips === undefined) {
-                console.warn('تخطي عنصر ناقص:', v);
-                continue;
-            }
+            if (!v.truckNumber || v.trips === undefined) continue;
             await query(
                 `INSERT INTO truck_violations (date, truck_number, driver, trips, reason, details)
                  VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -794,10 +782,8 @@ app.post('/api/truck-violations/save', async (req, res) => {
             );
             insertedCount++;
         }
-
         await logAction(req.session.username, 'تحديث أسباب المخالفات', `تحديث أسباب مخالفات يوم ${date} (${insertedCount} سيارة)`, req);
         res.json({ success: true, inserted: insertedCount });
-
     } catch (err) {
         console.error('خطأ في حفظ أسباب المخالفات:', err);
         res.status(500).json({ error: 'خطأ في حفظ الأسباب: ' + err.message });
@@ -879,7 +865,6 @@ app.delete('/api/clear-all', async (req, res) => {
 process.on('uncaughtException', (err) => {
     console.error('❌ خطأ غير متوقع (uncaughtException):', err);
 });
-
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ وعد مرفوض غير معالج (unhandledRejection):', reason);
 });
