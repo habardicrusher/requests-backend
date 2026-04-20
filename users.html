@@ -275,6 +275,19 @@
     const API_BASE = '/api';
     let users = [], currentUserRole = '', factoriesList = [];
 
+    // دالة مساعدة لتحويل permissions إلى مصفوفة بأمان
+    function safePermissions(perms) {
+        if (!perms) return [];
+        if (Array.isArray(perms)) return perms;
+        if (typeof perms === 'string') {
+            try {
+                const parsed = JSON.parse(perms);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch(e) { return []; }
+        }
+        return [];
+    }
+
     function togglePassword(inputId, btn) {
         const input = document.getElementById(inputId);
         if (input.type === 'password') {
@@ -336,6 +349,8 @@
             document.getElementById('authorizedContent').classList.remove('hidden');
             
             users = await apiCall('/users');
+            // تأمين permissions لكل مستخدم
+            users = users.map(u => ({ ...u, permissions: safePermissions(u.permissions) }));
             renderUsersTable();
             await loadFactories();
             
@@ -417,6 +432,8 @@
     }
 
     function openEditModal(user) {
+        // تأمين permissions
+        const userPerms = safePermissions(user.permissions);
         document.getElementById('editUserId').value = user.id;
         document.getElementById('editRole').value = user.role;
         document.getElementById('editPassword').value = '';
@@ -432,9 +449,8 @@
         if (user.role === 'user') {
             permissionsGroup.style.display = 'block';
             // تفعيل الـ checkboxes حسب الصلاحيات الحالية
-            const perms = user.permissions || [];
             document.querySelectorAll('#editPermissionsGroup input').forEach(cb => {
-                cb.checked = perms.includes(cb.value);
+                cb.checked = userPerms.includes(cb.value);
             });
         } else {
             permissionsGroup.style.display = 'none';
@@ -489,7 +505,7 @@
             }
             let permsText = '';
             if (u.role === 'user') {
-                const perms = u.permissions || [];
+                const perms = safePermissions(u.permissions);
                 const permMap = {
                     'reports': 'تقارير', 'scale_reports': 'ميزان', 'failed_trucks': 'غير مستوفية',
                     'quality': 'جودة', 'settings': 'إعدادات', 'restrictions': 'حظر'
