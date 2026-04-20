@@ -90,12 +90,19 @@ async function logAction(username, action, details, req = null) {
     } catch (err) { console.error('فشل تسجيل السجل:', err); }
 }
 
-// ==================== Middleware للتحقق من الصلاحيات ====================
+// ==================== Middleware للتحقق من الصلاحيات (تم إصلاحه) ====================
 function authorize(permission) {
     return (req, res, next) => {
-        if (req.session.role === 'admin') return next();
+        // إذا كان المستخدم مديراً (admin) نسمح له بكل شيء
+        if (req.session.role === 'admin') {
+            return next();
+        }
+        // إذا لم يكن مديراً، نتحقق من الصلاحية المطلوبة في قائمة صلاحياته
         const userPerms = parsePermissions(req.session.permissions);
-        if (userPerms.includes(permission)) return next();
+        if (userPerms.includes(permission)) {
+            return next();
+        }
+        // غير مصرح
         res.status(403).json({ error: `غير مصرح: تحتاج صلاحية ${permission}` });
     };
 }
@@ -131,6 +138,11 @@ async function initTables() {
                 ['client', bcrypt.hashSync('client', 10), 'client', 'مصنع الفهد', stringifyPermissions(['view_orders', 'view_reports'])]
             );
             console.log('✅ تم إنشاء المستخدمين الافتراضيين مع صلاحيات تفصيلية');
+        } else {
+            // التأكد من أن المستخدم admin لديه الصلاحية manage_users
+            await query(`UPDATE users SET role = 'admin' WHERE LOWER(username) = 'admin'`);
+            const allPerms = getAvailablePermissions();
+            await query(`UPDATE users SET permissions = $1 WHERE LOWER(username) = 'admin'`, [stringifyPermissions(allPerms)]);
         }
         console.log('✅ جميع الجداول جاهزة');
     } catch (err) {
