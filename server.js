@@ -756,21 +756,52 @@ app.get('/api/truck-violations/:date', async (req, res) => {
     try {
         const result = await query('SELECT truck_number, reason, details FROM truck_violations WHERE date = $1', [date]);
         res.json(result.rows.map(r => ({ truck_number: r.truck_number, reason: r.reason, details: r.details })));
-    } catch (err) { res.status(500).json({ error: 'خطأ في جلب الأسباب' }); }
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'خطأ في جلب الأسباب' });
+    }
 });
 
+// ★★★ الإصلاح الرئيسي: endpoint حفظ الأسباب ★★★
 app.post('/api/truck-violations/save', async (req, res) => {
-    if (req.session.role !== 'admin') return res.status(403).json({ error: 'غير مصرح' });
+    // التحقق من صلاحية المدير
+    if (req.session.role !== 'admin') {
+        return res.status(403).json({ error: 'غير مصرح' });
+    }
     const { date, violations } = req.body;
-    if (!date || !violations) return res.status(400).json({ error: 'بيانات ناقصة' });
+    if (!date || !violations) {
+        return res.status(400).json({ error: 'بيانات ناقصة: يجب إرسال التاريخ والمخالفات' });
+    }
+    if (!Array.isArray(violations)) {
+        return res.status(400).json({ error: 'violations يجب أن تكون مصفوفة' });
+    }
+
     try {
+        // حذف السجلات القديمة لهذا التاريخ
         await query('DELETE FROM truck_violations WHERE date = $1', [date]);
+
+        let insertedCount = 0;
         for (const v of violations) {
-            await query('INSERT INTO truck_violations (date, truck_number, driver, trips, reason, details) VALUES ($1, $2, $3, $4, $5, $6)', [date, v.truckNumber, v.driver, v.trips, v.reason, v.detail || '']);
+            // التحقق من الحقول الأساسية
+            if (!v.truckNumber || v.trips === undefined) {
+                console.warn('تخطي عنصر ناقص:', v);
+                continue;
+            }
+            await query(
+                `INSERT INTO truck_violations (date, truck_number, driver, trips, reason, details)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [date, v.truckNumber, v.driver || '', v.trips, v.reason || '', v.detail || '']
+            );
+            insertedCount++;
         }
-        await logAction(req.session.username, 'تحديث أسباب المخالفات', `تحديث أسباب مخالفات يوم ${date}`, req);
-        res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: 'خطأ في حفظ الأسباب' }); }
+
+        await logAction(req.session.username, 'تحديث أسباب المخالفات', `تحديث أسباب مخالفات يوم ${date} (${insertedCount} سيارة)`, req);
+        res.json({ success: true, inserted: insertedCount });
+
+    } catch (err) {
+        console.error('خطأ في حفظ أسباب المخالفات:', err);
+        res.status(500).json({ error: 'خطأ في حفظ الأسباب: ' + err.message });
+    }
 });
 
 // ==================== القيود (Restrictions) ====================
@@ -842,6 +873,15 @@ app.delete('/api/clear-all', async (req, res) => {
         await logAction(req.session.username, 'مسح جميع البيانات', 'تم مسح جميع بيانات النظام', req);
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'خطأ في مسح البيانات: ' + err.message }); }
+});
+
+// ==================== معالجة الأخطاء العالمية ====================
+process.on('uncaughtException', (err) => {
+    console.error('❌ خطأ غير متوقع (uncaughtException):', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ وعد مرفوض غير معالج (unhandledRejection):', reason);
 });
 
 // ==================== بدء الخادم ====================
