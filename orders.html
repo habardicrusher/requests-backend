@@ -6,7 +6,6 @@
     <title>الطلبات - نظام إدارة طلبات كسارة الحبردي</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* نفس الأنماط السابقة - لم تتغير */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -76,24 +75,26 @@
         <div class="date-section">
             <div><label>📅 تاريخ العمل: </label><input type="date" id="orderDate" onchange="loadDayData()"></div>
             <div id="adminButtons">
-                <button class="btn btn-info" onclick="exportOrdersToExcel()">📥 تصدير Excel</button>
-                <button class="btn btn-primary" onclick="manualDistribute()">🔄 توزيع يدوي</button>
+                <button id="exportExcelBtn" class="btn btn-info" onclick="exportOrdersToExcel()">📥 تصدير Excel</button>
+                <button id="manualDistributeBtn" class="btn btn-primary" onclick="manualDistribute()">🔄 توزيع يدوي</button>
             </div>
         </div>
 
-        <h2>➕ إضافة طلب جديد</h2>
-        <div class="order-form">
-            <div class="form-group" id="factoryFieldContainer">
-                <label>🏭 المصنع</label>
-                <div id="factorySelectContainer"></div>
+        <div id="addOrderSection" style="display:block;">
+            <h2>➕ إضافة طلب جديد</h2>
+            <div class="order-form">
+                <div class="form-group" id="factoryFieldContainer">
+                    <label>🏭 المصنع</label>
+                    <div id="factorySelectContainer"></div>
+                </div>
+                <div class="form-group"><label>📦 نوع البحص</label><select id="materialType"></select></div>
+                <div class="form-group"><label>🔢 العدد</label><input type="number" id="orderCount" min="1" value="1"></div>
+                <div class="form-group"><label>⏰ التوقيت (اختياري)</label><input type="text" id="orderTime" placeholder="مثال: 8 PM"></div>
             </div>
-            <div class="form-group"><label>📦 نوع البحص</label><select id="materialType"></select></div>
-            <div class="form-group"><label>🔢 العدد</label><input type="number" id="orderCount" min="1" value="1"></div>
-            <div class="form-group"><label>⏰ التوقيت (اختياري)</label><input type="text" id="orderTime" placeholder="مثال: 8 PM"></div>
+            <button id="addOrderBtn" class="btn btn-success" onclick="addOrder()">✅ إضافة الطلب</button>
         </div>
-        <button class="btn btn-success" onclick="addOrder()">✅ إضافة الطلب</button>
 
-        <div class="quick-add-section">
+        <div id="quickAddSection" class="quick-add-section">
             <h4>⚡ إضافة سريعة <span id="quickAddNote">(اختر المصنع أولاً)</span></h4>
             <div class="quick-add-grid" id="quickAddButtons"></div>
         </div>
@@ -111,6 +112,7 @@
         let currentUser = null;
         let currentUserFactory = null;
         let currentUserRole = null;
+        let currentPermissions = []; // ★★★ جديد: تخزين الصلاحيات التفصيلية
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
@@ -123,23 +125,49 @@
 
         setInterval(async () => { try { await fetch('/api/me', { credentials: 'include' }); } catch(e) {} }, 4 * 60 * 1000);
 
+        // ★★★ دالة مساعدة للتحقق من الصلاحية
+        function hasPermission(permission) {
+            if (currentUserRole === 'admin') return true;
+            return currentPermissions.includes(permission);
+        }
+
         async function loadCurrentUser() {
             try {
                 const me = await apiCall('/me');
                 currentUser = me.user;
                 currentUserRole = me.user.role;
                 currentUserFactory = me.user.factory;
+                currentPermissions = me.user.permissions || []; // ★★★ حفظ الصلاحيات
                 
                 if (currentUserRole === 'client') {
                     document.getElementById('clientNotice').style.display = 'block';
                     document.getElementById('clientFactoryName').textContent = currentUserFactory || 'غير محدد';
                     document.getElementById('ordersTitle').textContent = `طلباتي - ${currentUserFactory}`;
-                    document.getElementById('adminButtons').style.display = 'none';
+                    document.getElementById('adminButtons').style.display = 'flex';
                     document.getElementById('quickAddNote').textContent = `(مصنع: ${currentUserFactory})`;
                 } else {
                     document.getElementById('adminButtons').style.display = 'flex';
                 }
-            } catch(e) {}
+
+                // ★★★ إخفاء الأزرار والوظائف حسب الصلاحيات
+                // 1. إخفاء زر التوزيع اليدوي إذا لم تكن صلاحية edit_distribution
+                if (!hasPermission('edit_distribution')) {
+                    const manualBtn = document.getElementById('manualDistributeBtn');
+                    if (manualBtn) manualBtn.style.display = 'none';
+                }
+                // 2. إخفاء زر تصدير Excel إذا لم تكن صلاحية view_reports (أو يمكنك استخدام صلاحية منفصلة)
+                if (!hasPermission('view_reports')) {
+                    const exportBtn = document.getElementById('exportExcelBtn');
+                    if (exportBtn) exportBtn.style.display = 'none';
+                }
+                // 3. إخفاء قسم إضافة الطلبات بالكامل إذا لم تكن صلاحية create_order
+                if (!hasPermission('create_order')) {
+                    const addSection = document.getElementById('addOrderSection');
+                    if (addSection) addSection.style.display = 'none';
+                    const quickSection = document.getElementById('quickAddSection');
+                    if (quickSection) quickSection.style.display = 'none';
+                }
+            } catch(e) { console.error(e); }
         }
 
         async function loadSettings() {
@@ -187,23 +215,22 @@
         }
 
         function renderQuickAddButtons() {
+            if (!hasPermission('create_order')) return; // لا تعرض الأزرار إذا لم تكن صلاحية الإضافة
             const container = document.getElementById('quickAddButtons');
             const valid = materials.filter(m => m && m.trim());
             if (!valid.length) { container.innerHTML = '<p>لا توجد أنواع بحص</p>'; return; }
             container.innerHTML = valid.map(m => `<button class="quick-btn" onclick="quickAdd('${m}',1)">${m} ×1</button><button class="quick-btn" onclick="quickAdd('${m}',5)">${m} ×5</button><button class="quick-btn" onclick="quickAdd('${m}',10)">${m} ×10</button>`).join('');
         }
 
-        // ★★★ الدالة الرئيسية: تحميل بيانات اليوم (الخادم يفلتر الآن) ★★★
         async function loadDayData() {
             currentDate = document.getElementById('orderDate').value;
             if (!currentDate) return;
             showLoading(true);
             try {
                 const data = await apiCall(`/day/${currentDate}`);
-                // الخادم يعيد الطلبات المفلترة حسب صلاحية المستخدم
                 allOrders = data.orders || [];
                 currentDistribution = data.distribution || [];
-                orders = [...allOrders]; // مباشرة دون فلترة إضافية
+                orders = [...allOrders];
                 renderOrders();
             } catch(e) { 
                 orders = []; 
@@ -214,7 +241,6 @@
             showLoading(false);
         }
 
-        // ★★★ حفظ البيانات - الخادم يتحقق من الصلاحيات ★★★
         async function saveData() {
             try {
                 const cleaned = orders.map(o => ({
@@ -224,7 +250,6 @@
                     time: (o.time && o.time !== 'undefined' && o.time !== 'null') ? o.time : '',
                     timestamp: o.timestamp
                 }));
-                // العميل لا يرسل أي توزيع
                 const distToSend = (currentUserRole === 'client') ? [] : currentDistribution;
                 await apiCall(`/day/${currentDate}`, 'PUT', { orders: cleaned, distribution: distToSend });
                 return true;
@@ -235,6 +260,10 @@
         }
 
         async function manualDistribute() {
+            if (!hasPermission('edit_distribution')) {
+                showToast('❌ ليس لديك صلاحية للتوزيع', 'error');
+                return;
+            }
             if (currentUserRole === 'client') {
                 showToast('❌ ليس لديك صلاحية للتوزيع', 'error');
                 return;
@@ -291,6 +320,10 @@
         }
 
         async function addOrder() {
+            if (!hasPermission('create_order')) {
+                showToast('❌ ليس لديك صلاحية إضافة طلبات', 'error');
+                return;
+            }
             const factory = getSelectedFactory();
             const material = document.getElementById('materialType').value;
             const count = parseInt(document.getElementById('orderCount').value);
@@ -327,6 +360,10 @@
         }
 
         async function quickAdd(material, count) {
+            if (!hasPermission('create_order')) {
+                showToast('❌ ليس لديك صلاحية إضافة طلبات', 'error');
+                return;
+            }
             const factory = getSelectedFactory();
             let time = document.getElementById('orderTime').value.trim();
             if (time === 'undefined' || time === 'null') time = '';
@@ -354,6 +391,10 @@
         }
 
         async function deleteOrder(id) {
+            if (!hasPermission('delete_order')) {
+                showToast('❌ ليس لديك صلاحية حذف الطلبات', 'error');
+                return;
+            }
             if (currentUserRole === 'client') {
                 const orderToDelete = orders.find(o => o.id === id);
                 if (orderToDelete && orderToDelete.factory !== currentUserFactory) {
@@ -368,6 +409,10 @@
         }
 
         function openEditOrderModal(id) {
+            if (!hasPermission('edit_order')) {
+                showToast('❌ ليس لديك صلاحية تعديل الطلبات', 'error');
+                return;
+            }
             let o = orders.find(o => o.id === id);
             if (!o) return;
             if (currentUserRole === 'client' && o.factory !== currentUserFactory) {
@@ -409,7 +454,7 @@
 
         function renderOrders() {
             const container = document.getElementById('todayOrders');
-            const displayOrders = orders; // orders مفلترة بالفعل من الخادم
+            const displayOrders = orders;
             document.getElementById('ordersCount').textContent = displayOrders.length;
             if (!displayOrders.length) {
                 if (currentUserRole === 'client') {
@@ -427,6 +472,8 @@
                     timeDisplay = `<span>⏰ ${o.time}</span>`;
                 }
                 const factoryDisplay = (currentUserRole === 'client') ? '' : `<span>🏭 ${o.factory}</span>`;
+                const showEdit = hasPermission('edit_order');
+                const showDelete = hasPermission('delete_order');
                 return `
                     <div class="order-item">
                         <div class="order-info">
@@ -437,8 +484,8 @@
                             <span>🕐 ${o.timestamp || '—'}</span>
                         </div>
                         <div class="order-actions">
-                            <button class="btn btn-sm btn-warning" onclick="openEditOrderModal('${o.id}')">✏️</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑️</button>
+                            ${showEdit ? `<button class="btn btn-sm btn-warning" onclick="openEditOrderModal('${o.id}')">✏️</button>` : ''}
+                            ${showDelete ? `<button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">🗑️</button>` : ''}
                         </div>
                     </div>
                 `;
@@ -446,6 +493,10 @@
         }
 
         function exportOrdersToExcel() {
+            if (!hasPermission('view_reports')) {
+                showToast('❌ ليس لديك صلاحية تصدير التقارير', 'error');
+                return;
+            }
             const exportOrders = orders;
             if (!exportOrders.length) { showToast('لا توجد طلبات للتصدير', 'error'); return; }
             const data = exportOrders.map((o, i) => ({
