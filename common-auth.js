@@ -24,23 +24,45 @@ async function loadAuth() {
     }
 }
 
+// دالة عامة للتحقق من صلاحية معينة
+function hasPermission(permission) {
+    if (currentRole === 'admin') return true;
+    return currentPermissions.includes(permission);
+}
+
+// التحقق من الصلاحية وإعادة التوجيه إذا لم تكن موجودة
+async function checkPermission(permission, redirectUrl = '/') {
+    if (!hasPermission(permission)) {
+        if (redirectUrl) window.location.href = redirectUrl;
+        return false;
+    }
+    return true;
+}
+
 // إخفاء عنصر بواسطة ID إذا لم تكن الصلاحية موجودة
 function hideIfNoPermission(permission, elementId) {
     if (!permission) return;
     const el = document.getElementById(elementId);
     if (!el) return;
-    if (currentRole === 'admin') return;
-    if (!currentPermissions.includes(permission)) {
+    if (!hasPermission(permission)) {
         el.style.display = 'none';
     }
 }
 
 // إخفاء أزرار أو عناصر متعددة حسب كلاس
 function hideButtonsIfNoPermission(permission, className) {
-    if (currentRole === 'admin') return;
-    if (!currentPermissions.includes(permission)) {
+    if (!hasPermission(permission)) {
         document.querySelectorAll(`.${className}`).forEach(el => el.style.display = 'none');
     }
+}
+
+// إخفاء مجموعة عناصر بناءً على مصفوفة من { permission, selector }
+function hideElementsByPermission(rules) {
+    rules.forEach(rule => {
+        if (!hasPermission(rule.permission)) {
+            document.querySelectorAll(rule.selector).forEach(el => el.style.display = 'none');
+        }
+    });
 }
 
 // إخفاء الروابط في شريط التنقل بناءً على الصلاحيات
@@ -49,7 +71,7 @@ function applyNavPermissions() {
     if (!navLinks) return;
     const links = navLinks.querySelectorAll('a');
     const linkPermissionMap = {
-        'index.html': null, // الصفحة الرئيسية مسموحة للجميع
+        'index.html': null,
         'orders.html': 'view_orders',
         'distribution.html': 'view_distribution',
         'trucks.html': 'view_trucks',
@@ -70,8 +92,7 @@ function applyNavPermissions() {
         if (!href) return;
         const required = linkPermissionMap[href];
         if (!required) return;
-        if (currentRole === 'admin') return;
-        if (!currentPermissions.includes(required)) {
+        if (!hasPermission(required)) {
             link.style.display = 'none';
         }
     });
@@ -83,4 +104,15 @@ async function initPage() {
     if (!auth) return;
     applyNavPermissions();
     return auth;
+}
+
+// (اختياري) عرض رسالة "غير مصرح" في حالة عدم وجود صلاحية لصفحة كاملة
+async function protectPage(permission, redirectUrl = '/') {
+    const auth = await loadAuth();
+    if (!auth) return false;
+    if (!hasPermission(permission)) {
+        if (redirectUrl) window.location.href = redirectUrl;
+        return false;
+    }
+    return true;
 }
