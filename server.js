@@ -90,16 +90,28 @@ async function logAction(username, action, details, req = null) {
     } catch (err) { console.error('فشل تسجيل السجل:', err); }
 }
 
-// ==================== Middleware للتحقق من الصلاحيات (نسخة مبسطة ومضمونة) ====================
+// ==================== دالة التحقق من الصلاحية من قاعدة البيانات مباشرة ====================
+async function checkUserPermission(req, requiredPermission) {
+    if (!req.session.userId) return false;
+    try {
+        const result = await query('SELECT role, permissions FROM users WHERE id = $1', [req.session.userId]);
+        if (result.rows.length === 0) return false;
+        const user = result.rows[0];
+        // إذا كان المدير، يسمح بكل شيء
+        if (user.role === 'admin') return true;
+        const perms = parsePermissions(user.permissions);
+        return perms.includes(requiredPermission);
+    } catch (err) {
+        console.error('خطأ في التحقق من الصلاحية:', err);
+        return false;
+    }
+}
+
+// ==================== Middleware للتحقق من الصلاحيات (آمن ويعتمد على قاعدة البيانات) ====================
 function authorize(permission) {
-    return (req, res, next) => {
-        // إذا كان المستخدم مديراً، نسمح له فوراً
-        if (req.session.role === 'admin') {
-            return next();
-        }
-        // إذا لم يكن مديراً، نتحقق من الصلاحية
-        const userPerms = parsePermissions(req.session.permissions);
-        if (userPerms.includes(permission)) {
+    return async (req, res, next) => {
+        const hasPerm = await checkUserPermission(req, permission);
+        if (hasPerm) {
             return next();
         }
         res.status(403).json({ error: `غير مصرح: تحتاج صلاحية ${permission}` });
@@ -686,24 +698,7 @@ app.delete('/api/clear-all', authorize('manage_backup'), async (req, res) => {
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'خطأ في مسح البيانات: ' + err.message }); }
 });
-function authorize(permission) {
-    return (req, res, next) => {
-        console.log('=== AUTHORIZE DEBUG ===');
-        console.log('Session role:', req.session.role);
-        console.log('Required permission:', permission);
-        if (req.session.role === 'admin') {
-            console.log('✅ Admin granted');
-            return next();
-        }
-        const userPerms = parsePermissions(req.session.permissions);
-        if (userPerms.includes(permission)) {
-            console.log('✅ Permission granted');
-            return next();
-        }
-        console.log('❌ Access denied');
-        res.status(403).json({ error: `غير مصرح: تحتاج صلاحية ${permission}` });
-    };
-}
+
 // ==================== بدء الخادم ====================
 app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
