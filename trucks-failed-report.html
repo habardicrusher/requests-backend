@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تقرير السيارات المخالفة المتقدم - كسارة الحبردي</title>
+    <title>تقرير السيارات الغير مستوفية - كسارة الحبردي</title>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
     <style>
@@ -56,55 +56,72 @@
         .toast { padding: 12px 20px; border-radius: 8px; margin-bottom: 10px; animation: slideIn 0.3s ease; }
         .toast-success { background: #11998e; }
         .toast-error { background: #eb3349; }
+        .toast-warning { background: #f093fb; }
         @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .unauthorized { text-align: center; padding: 50px; background: rgba(235,51,73,0.2); border-radius: 20px; margin: 50px auto; max-width: 600px; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
 <div class="loading" id="loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
 <div class="toast-container" id="toastContainer"></div>
 <div class="container">
-    <div class="header">
-        <h1>📊 تقرير السيارات المخالفة المتقدم</h1>
-        <p>تحليل السيارات التي عملت ولكن لم تحقق الهدف (أقل من رودين في اليوم)</p>
-    </div>
-    <div class="nav-links" id="navLinks"></div>
-    
-    <div class="date-section">
-        <div class="date-row">
-            <div class="date-fields">
-                <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
-                <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
-                <div>
-                    <button class="btn btn-primary" onclick="loadReport()">🔍 عرض التقرير</button>
-                    <button class="btn btn-success" onclick="exportToExcel()">📥 تصدير Excel</button>
-                </div>
+    <!-- المحتوى المصرح به -->
+    <div id="authorizedContent" class="hidden">
+        <div class="header">
+            <h1>📊 تقرير السيارات المخالفة المتقدم</h1>
+            <p>تحليل السيارات التي عملت ولكن لم تحقق الهدف (أقل من رودين في اليوم)</p>
+            <div style="position: absolute; top: 20px; left: 20px;">
+                <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
             </div>
         </div>
-        <div class="quick-filters">
-            <button class="quick-filter-btn active" onclick="setQuickFilter('today')">📅 اليوم</button>
-            <button class="quick-filter-btn" onclick="setQuickFilter('week')">📅 أسبوعي</button>
-            <button class="quick-filter-btn" onclick="setQuickFilter('month')">📅 شهري</button>
-            <button class="quick-filter-btn" onclick="setQuickFilter('custom')">📅 مخصص</button>
+        <div class="nav-links" id="navLinks"></div>
+        
+        <div class="date-section">
+            <div class="date-row">
+                <div class="date-fields">
+                    <div><label>من تاريخ:</label><input type="date" id="startDate"></div>
+                    <div><label>إلى تاريخ:</label><input type="date" id="endDate"></div>
+                    <div>
+                        <button class="btn btn-primary" onclick="loadReport()">🔍 عرض التقرير</button>
+                        <button class="btn btn-success" id="exportBtn" onclick="exportToExcel()">📥 تصدير Excel</button>
+                    </div>
+                </div>
+            </div>
+            <div class="quick-filters">
+                <button class="quick-filter-btn active" onclick="setQuickFilter('today')">📅 اليوم</button>
+                <button class="quick-filter-btn" onclick="setQuickFilter('week')">📅 أسبوعي</button>
+                <button class="quick-filter-btn" onclick="setQuickFilter('month')">📅 شهري</button>
+                <button class="quick-filter-btn" onclick="setQuickFilter('custom')">📅 مخصص</button>
+            </div>
         </div>
+
+        <div id="executiveSummary" class="executive-box" style="display: none;"></div>
+        <div class="stats-grid" id="statsGrid"></div>
+
+        <h2>🚛 أكثر السيارات تكراراً للمخالفات</h2>
+        <div style="overflow-x: auto;"><table id="topTrucksTable"><thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>عدد مرات المخالفة (أيام)</th><th>متوسط الرحلات</th></tr></thead><tbody></tbody></table></div>
+
+        <h2>📋 أكثر الأسباب شيوعاً</h2>
+        <div style="overflow-x: auto;"><table id="topReasonsTable"><thead><tr><th>#</th><th>السبب</th><th>عدد المرات</th></tr></thead><tbody></tbody></table></div>
+
+        <h2>📋 تفاصيل المخالفات (كل يوم)</h2>
+        <div style="overflow-x: auto;"><table id="detailsTable"><thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>السبب</th><th>التفاصيل</th></tr></thead><tbody></tbody></table></div>
     </div>
 
-    <div id="executiveSummary" class="executive-box" style="display: none;"></div>
-    <div class="stats-grid" id="statsGrid"></div>
-
-    <h2>🚛 أكثر السيارات تكراراً للمخالفات</h2>
-    <div style="overflow-x: auto;"><table id="topTrucksTable"><thead><tr><th>#</th><th>رقم السيارة</th><th>السائق</th><th>عدد مرات المخالفة (أيام)</th><th>متوسط الرحلات</th></tr></thead><tbody></tbody></table></div>
-
-    <h2>📋 أكثر الأسباب شيوعاً</h2>
-    <div style="overflow-x: auto;"><table id="topReasonsTable"><thead><tr><th>#</th><th>السبب</th><th>عدد المرات</th></tr></thead><tbody></tbody></table></div>
-
-    <h2>📋 تفاصيل المخالفات (كل يوم)</h2>
-    <div style="overflow-x: auto;"><table id="detailsTable"><thead><tr><th>التاريخ</th><th>رقم السيارة</th><th>السائق</th><th>عدد الرحلات</th><th>السبب</th><th>التفاصيل</th></tr></thead><tbody></tbody></table></div>
+    <!-- رسالة عدم التصريح -->
+    <div id="unauthorizedMsg" class="unauthorized hidden">
+        ⛔ غير مصرح لك بالوصول إلى تقرير السيارات المخالفة. <br>
+        يلزم صلاحية <strong>عرض التقارير (viewReports)</strong>.
+    </div>
 </div>
 
 <script>
     const API_BASE = '/api';
     let currentData = [];
     let currentStats = null;
+    let currentUserRole = null;
+    let currentUserPermissions = {};
 
     setInterval(async () => {
         try {
@@ -119,7 +136,6 @@
         return res.json();
     }
 
-    // دالة مساعدة لتنسيق التاريخ إلى YYYY-MM-DD
     function formatDate(date) {
         const y = date.getFullYear();
         const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -127,7 +143,6 @@
         return `${y}-${m}-${d}`;
     }
 
-    // دالة ضبط الفلاتر السريعة
     function setQuickFilter(type) {
         const today = new Date();
         let start, end;
@@ -137,18 +152,15 @@
                 end = new Date(today);
                 break;
             case 'week':
-                // آخر 7 أيام (اليوم والأيام الستة السابقة)
                 start = new Date(today);
                 start.setDate(today.getDate() - 6);
                 end = new Date(today);
                 break;
             case 'month':
-                // من أول الشهر الحالي إلى اليوم
                 start = new Date(today.getFullYear(), today.getMonth(), 1);
                 end = new Date(today);
                 break;
             case 'custom':
-                // لا تغيير، يبقي على ما هو موجود
                 return;
             default:
                 return;
@@ -158,7 +170,6 @@
         loadReport();
     }
 
-    // حساب إحصائيات صحيحة من بيانات المخالفات (حيث المخالفة فقط عندما trips_count === 1)
     function computeCorrectStats(violations) {
         if (!violations.length) return null;
         const uniqueTrucksViolated = new Set(violations.map(v => v.truck_number));
@@ -183,25 +194,42 @@
         }
         showLoading(true);
         try {
-            const [statsFromServer, violations] = await Promise.all([
-                apiCall(`/truck-violations/stats/${startDate}/${endDate}`),
-                apiCall(`/truck-violations/report/${startDate}/${endDate}`)
-            ]);
+            // استدعاء الواجهتين مع معالجة الأخطاء بشكل منفصل
+            let statsFromServer = null;
+            let violations = [];
+            try {
+                statsFromServer = await apiCall(`/truck-violations/stats/${startDate}/${endDate}`);
+            } catch (err) {
+                console.warn('فشل تحميل الإحصائيات:', err);
+                showToast('تحذير: فشل تحميل الإحصائيات العامة. قد تكون البيانات غير مكتملة.', 'warning');
+            }
+            try {
+                violations = await apiCall(`/truck-violations/report/${startDate}/${endDate}`);
+            } catch (err) {
+                console.warn('فشل تحميل التفاصيل:', err);
+                showToast('تحذير: فشل تحميل تفاصيل المخالفات.', 'warning');
+                violations = [];
+            }
             currentData = violations;
             const correctedGeneral = computeCorrectStats(violations);
             currentStats = {
-                general: correctedGeneral || statsFromServer.general,
-                topTrucks: statsFromServer.topTrucks || [],
-                topReasons: statsFromServer.topReasons || []
+                general: correctedGeneral || (statsFromServer ? statsFromServer.general : null),
+                topTrucks: statsFromServer ? statsFromServer.topTrucks : [],
+                topReasons: statsFromServer ? statsFromServer.topReasons : []
             };
-            renderStats(currentStats.general);
-            renderExecutiveSummary(currentStats.general, startDate, endDate);
+            if (currentStats.general) {
+                renderStats(currentStats.general);
+                renderExecutiveSummary(currentStats.general, startDate, endDate);
+            } else {
+                document.getElementById('statsGrid').innerHTML = '<div class="stat-card"><div class="number">0</div><p>لا توجد بيانات</p></div>';
+                document.getElementById('executiveSummary').style.display = 'none';
+            }
             renderTopTrucks(currentStats.topTrucks);
             renderTopReasons(currentStats.topReasons);
             renderDetails(violations);
         } catch(e) {
             console.error(e);
-            showToast(e.message, 'error');
+            showToast('خطأ في تحميل البيانات: ' + e.message, 'error');
         }
         showLoading(false);
     }
@@ -237,7 +265,7 @@
 
     function renderTopTrucks(trucks) {
         const tbody = document.querySelector('#topTrucksTable tbody');
-        if (!trucks.length) { tbody.innerHTML = '<tr><td colspan="5">لا توجد بيانات</td></tr>'; return; }
+        if (!trucks || !trucks.length) { tbody.innerHTML = '<tr><td colspan="5">لا توجد بيانات</td></tr>'; return; }
         tbody.innerHTML = trucks.map((t, i) => `
             <tr>
                 <td>${i+1}</td>
@@ -251,7 +279,7 @@
 
     function renderTopReasons(reasons) {
         const tbody = document.querySelector('#topReasonsTable tbody');
-        if (!reasons.length) { tbody.innerHTML = '<tr><td colspan="3">لا توجد بيانات</td></tr>'; return; }
+        if (!reasons || !reasons.length) { tbody.innerHTML = '<tr><td colspan="3">لا توجد بيانات</td></tr>'; return; }
         tbody.innerHTML = reasons.map((r, i) => `
             <tr>
                 <td>${i+1}</td>
@@ -277,6 +305,11 @@
     }
 
     async function exportToExcel() {
+        const canExport = (currentUserRole === 'admin') || (currentUserPermissions.exportReports === true);
+        if (!canExport) {
+            showToast('❌ غير مصرح لك بتصدير التقارير', 'error');
+            return;
+        }
         if (!currentData.length) {
             showToast('لا توجد بيانات للتصدير', 'error');
             return;
@@ -351,40 +384,83 @@
         setTimeout(() => toast.remove(), 3000);
     }
     function showLoading(show) { document.getElementById('loading').classList.toggle('active', show); }
-    
-    function loadNav() {
-        fetch('/api/me', { credentials: 'include' }).then(r => r.json()).then(data => {
-            if (data.user) {
-                document.getElementById('navLinks').innerHTML = `
-                          <a href="index.html" class="nav-link">📊 الرئيسية</a>
-                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                        <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
-                        <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
-                        <a href="trucks-failed.html" class="nav-link ">⚠️ السيارات غير المستوفية</a>
-                        <a href="trucks-failed-report.html" class="nav-link active">📊 تقرير السيارات غير المستوفية</a>
-                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                        <a href="logs.html" class="nav-link">📜 السجلات</a>
-                `;
-            } else window.location.href = '/login.html';
-        }).catch(() => window.location.href = '/login.html');
+    function logout() {
+        if(confirm('تسجيل الخروج؟')) fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/login.html');
     }
     
-    document.addEventListener('DOMContentLoaded', () => {
-        loadNav();
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
-        // تعيين التاريخ الافتراضي: من اليوم إلى اليوم
-        document.getElementById('startDate').value = todayStr;
-        document.getElementById('endDate').value = todayStr;
-        loadReport();
+    // بناء شريط التنقل ديناميكياً حسب الصلاحيات
+    function buildNavLinks() {
+        const links = [];
+        if (currentUserPermissions.viewOrders === true || currentUserRole === 'admin') 
+            links.push('<a href="index.html" class="nav-link">📊 الرئيسية</a>');
+        if (currentUserPermissions.viewOrders === true || currentUserRole === 'admin') 
+            links.push('<a href="orders.html" class="nav-link">📝 الطلبات</a>');
+        if (currentUserPermissions.viewDistribution === true || currentUserRole === 'admin') 
+            links.push('<a href="distribution.html" class="nav-link">🚚 التوزيع</a>');
+        if (currentUserPermissions.viewTrucks === true || currentUserRole === 'admin') 
+            links.push('<a href="trucks.html" class="nav-link">🚛 السيارات</a>');
+        if (currentUserPermissions.viewSettings === true || currentUserRole === 'admin') {
+            links.push('<a href="products.html" class="nav-link">📦 أنواع البحص</a>');
+            links.push('<a href="factories.html" class="nav-link">🏭 المصانع</a>');
+        }
+        if (currentUserPermissions.viewReports === true || currentUserRole === 'admin') {
+            links.push('<a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>');
+            links.push('<a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>');
+            links.push('<a href="trucks-failed.html" class="nav-link">⚠️ السيارات غير المستوفية</a>');
+            links.push('<a href="trucks-failed-report.html" class="nav-link active">📊 تقرير السيارات غير المستوفية</a>');
+            links.push('<a href="distribution-quality.html" class="nav-link">📈 جودة التوزيع</a>');
+        }
+        if (currentUserPermissions.viewSettings === true || currentUserRole === 'admin') 
+            links.push('<a href="settings.html" class="nav-link">⚙️ الإعدادات</a>');
+        if (currentUserPermissions.manageRestrictions === true || currentUserRole === 'admin') 
+            links.push('<a href="restrictions.html" class="nav-link">⛔ الحظر</a>');
+        if (currentUserPermissions.manageUsers === true || currentUserRole === 'admin') 
+            links.push('<a href="users.html" class="nav-link">👥 المستخدمين</a>');
+        if (currentUserPermissions.viewBackup === true || currentUserRole === 'admin') 
+            links.push('<a href="logs.html" class="nav-link">📜 السجلات</a>');
+        return links.join('');
+    }
+
+    async function loadUserAndPermissions() {
+        try {
+            const me = await apiCall('/me');
+            currentUserRole = me.user.role;
+            currentUserPermissions = me.user.permissions || {};
+            console.log('✅ صلاحيات المستخدم (تقرير المخالفات):', currentUserPermissions);
+            
+            const hasView = (currentUserRole === 'admin') || (currentUserPermissions.viewReports === true);
+            if (!hasView) {
+                document.getElementById('authorizedContent').classList.add('hidden');
+                document.getElementById('unauthorizedMsg').classList.remove('hidden');
+                return false;
+            }
+            document.getElementById('authorizedContent').classList.remove('hidden');
+            document.getElementById('unauthorizedMsg').classList.add('hidden');
+            
+            // التحكم في زر التصدير بناءً على صلاحية exportReports
+            const canExport = (currentUserRole === 'admin') || (currentUserPermissions.exportReports === true);
+            const exportBtn = document.getElementById('exportBtn');
+            if (exportBtn) exportBtn.style.display = canExport ? 'inline-flex' : 'none';
+            
+            document.getElementById('navLinks').innerHTML = buildNavLinks();
+            return true;
+        } catch (err) {
+            console.error('خطأ في تحميل صلاحيات المستخدم:', err);
+            return false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const authorized = await loadUserAndPermissions();
+        if (authorized) {
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            document.getElementById('startDate').value = todayStr;
+            document.getElementById('endDate').value = todayStr;
+            loadReport();
+        }
     });
 </script>
-<script src="navbar.js"></script>
+<!-- تم إزالة سطر navbar.js لأن الروابط أصبحت ديناميكية -->
 </body>
 </html>
