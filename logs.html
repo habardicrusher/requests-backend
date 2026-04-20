@@ -118,51 +118,62 @@
             font-size: 0.85em;
             direction: ltr;
         }
+        .unauthorized { text-align: center; padding: 50px; background: rgba(235,51,73,0.2); border-radius: 20px; margin: 50px auto; max-width: 600px; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
     <div class="loading" id="loading"><div class="spinner"></div><p>جاري التحميل...</p></div>
     <div class="toast-container" id="toastContainer"></div>
     <div class="container">
-        <div class="header">
-            <h1>📜 سجل النظام</h1>
-            <p>تتبع جميع الإجراءات التي تمت في النظام</p>
-            <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
-                <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
+        <!-- المحتوى المصرح به (يظهر فقط للمستخدم الذي لديه viewBackup) -->
+        <div id="authorizedContent" class="hidden">
+            <div class="header">
+                <h1>📜 سجل النظام</h1>
+                <p>تتبع جميع الإجراءات التي تمت في النظام - بما في ذلك التوزيع بواسطة المستخدمين</p>
+                <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
+                    <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
+                </div>
             </div>
-        </div>
-        <div class="nav-links" id="navLinks"></div>
+            <div class="nav-links" id="navLinks"></div>
 
-        <div class="controls">
-            <div>
-                <button class="btn btn-success" onclick="exportLogsToExcel()">📥 تصدير Excel</button>
-                <button class="btn btn-info" onclick="exportLogsToJSON()">📄 تصدير JSON</button>
-                <button class="btn btn-danger" onclick="clearLogs()" id="clearLogsBtn">🗑️ مسح السجلات</button>
+            <div class="controls">
+                <div>
+                    <button class="btn btn-success" onclick="exportLogsToExcel()">📥 تصدير Excel</button>
+                    <button class="btn btn-info" onclick="exportLogsToJSON()">📄 تصدير JSON</button>
+                    <button class="btn btn-danger" id="clearLogsBtn" onclick="clearLogs()">🗑️ مسح السجلات</button>
+                </div>
+                <div>
+                    <input type="text" id="searchInput" class="search-box" placeholder="🔍 بحث (مستخدم, إجراء, تفاصيل)" onkeyup="searchLogs()">
+                </div>
             </div>
-            <div>
-                <input type="text" id="searchInput" class="search-box" placeholder="🔍 بحث (مستخدم, إجراء, تفاصيل)" onkeyup="searchLogs()">
+
+            <div style="overflow-x: auto;">
+                <table id="logsTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>المستخدم</th>
+                            <th>الإجراء</th>
+                            <th>التفاصيل</th>
+                            <th>الموقع</th>
+                            <th>التاريخ والوقت</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody">
+                        <tr><td colspan="6" style="text-align:center;">جاري التحميل...</td></tr>
+                    </tbody>
+                </table>
             </div>
+
+            <div class="pagination" id="pagination"></div>
         </div>
 
-        <div style="overflow-x: auto;">
-            <table id="logsTable">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>المستخدم</th>
-                        <th>الإجراء</th>
-                        <th>التفاصيل</th>
-                        <th>الموقع</th>
-                        <th>التاريخ والوقت</th>
-                    </tr>
-                </thead>
-                <tbody id="logsBody">
-                    <tr><td colspan="6" style="text-align:center;">جاري التحميل...</td></tr>
-                </tbody>
-            </table>
+        <!-- رسالة عدم التصريح -->
+        <div id="unauthorizedMsg" class="unauthorized hidden">
+            ⛔ غير مصرح لك بالوصول إلى سجل النظام. <br>
+            يلزم صلاحية <strong>عرض النسخ الاحتياطية (viewBackup)</strong>.
         </div>
-
-        <div class="pagination" id="pagination"></div>
     </div>
 
     <script>
@@ -170,6 +181,8 @@
         let currentPage = 1;
         let totalPages = 1;
         let allLogs = [];
+        let currentUserRole = null;
+        let currentUserPermissions = {};
 
         async function apiCall(endpoint, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
@@ -180,12 +193,10 @@
             return res.json();
         }
 
-        // دالة تنسيق التاريخ بشكل جميل
         function formatDate(dateString) {
             if (!dateString) return '—';
             try {
                 const date = new Date(dateString);
-                // تنسيق: 2026-04-11 07:42:14
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
@@ -228,7 +239,7 @@
                     <td style="text-align:right;">${escapeHtml(log.details || '—')}</td>
                     <td>${escapeHtml(log.location || '—')}</td>
                     <td class="date-cell">${formatDate(log.created_at)}</td>
-                </tr>
+                 </tr>
             `).join('');
         }
 
@@ -258,6 +269,11 @@
         }
 
         async function exportLogsToExcel() {
+            const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageBackup === true);
+            if (!canManage) {
+                showToast('❌ غير مصرح لك بتصدير السجلات', 'error');
+                return;
+            }
             showLoading(true);
             try {
                 const data = await apiCall('/logs/all');
@@ -280,6 +296,11 @@
         }
 
         async function exportLogsToJSON() {
+            const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageBackup === true);
+            if (!canManage) {
+                showToast('❌ غير مصرح لك بتصدير السجلات', 'error');
+                return;
+            }
             showLoading(true);
             try {
                 const data = await apiCall('/logs/all');
@@ -298,6 +319,11 @@
         }
 
         async function clearLogs() {
+            const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageBackup === true);
+            if (!canManage) {
+                showToast('❌ غير مصرح لك بمسح السجلات', 'error');
+                return;
+            }
             if (!confirm('⚠️ تحذير: هذا الإجراء سيمسح جميع السجلات نهائياً. لا يمكن التراجع. هل أنت متأكد؟')) return;
             showLoading(true);
             try {
@@ -335,38 +361,79 @@
                 .catch(() => { localStorage.clear(); window.location.href = '/login.html'; });
         }
 
-        function loadNav() {
-            fetch('/api/me', { credentials: 'include' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.user) {
-                        document.getElementById('navLinks').innerHTML = `
-                        <a href="index.html" class="nav-link ">📊 الرئيسية</a>
-                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                        <a href="distribution.html" class="nav-link ">🚚 التوزيع</a>
-                        <a href="trucks.html" class="nav-link">🚛 السيارات</a>
-                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                        <a href="factories.html" class="nav-link ">🏭 المصانع</a>
-                        <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
-                        <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
-                        <a href="trucks-failed.html" class="nav-link">⚠️ السيارات الغير مستوفية</a>
-                        <a href="trucks-failed.html" class="nav-link">⚠️ تقرير الغير مستوفية</a>
-                        <a href="distribution-quality.html" class="nav-link ">📈 جودة التوزيع</a>
-                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                        <a href="logs.html" class="nav-link active">📜 السجلات</a>
-                        `;
-                    } else { window.location.href = '/login.html'; }
-                })
-                .catch(() => { window.location.href = '/login.html'; });
+        // بناء شريط التنقل ديناميكياً حسب الصلاحيات
+        function buildNavLinks() {
+            const links = [];
+            if (currentUserPermissions.viewOrders === true || currentUserRole === 'admin') 
+                links.push('<a href="index.html" class="nav-link">📊 الرئيسية</a>');
+            if (currentUserPermissions.viewOrders === true || currentUserRole === 'admin') 
+                links.push('<a href="orders.html" class="nav-link">📝 الطلبات</a>');
+            if (currentUserPermissions.viewDistribution === true || currentUserRole === 'admin') 
+                links.push('<a href="distribution.html" class="nav-link">🚚 التوزيع</a>');
+            if (currentUserPermissions.viewTrucks === true || currentUserRole === 'admin') 
+                links.push('<a href="trucks.html" class="nav-link">🚛 السيارات</a>');
+            if (currentUserPermissions.viewSettings === true || currentUserRole === 'admin') {
+                links.push('<a href="products.html" class="nav-link">📦 أنواع البحص</a>');
+                links.push('<a href="factories.html" class="nav-link">🏭 المصانع</a>');
+            }
+            if (currentUserPermissions.viewReports === true || currentUserRole === 'admin') {
+                links.push('<a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>');
+                links.push('<a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>');
+                links.push('<a href="trucks-failed.html" class="nav-link">⚠️ السيارات غير المستوفية</a>');
+                links.push('<a href="distribution-quality.html" class="nav-link">📈 جودة التوزيع</a>');
+            }
+            if (currentUserPermissions.viewSettings === true || currentUserRole === 'admin') 
+                links.push('<a href="settings.html" class="nav-link">⚙️ الإعدادات</a>');
+            if (currentUserPermissions.manageRestrictions === true || currentUserRole === 'admin') 
+                links.push('<a href="restrictions.html" class="nav-link">⛔ الحظر</a>');
+            if (currentUserPermissions.manageUsers === true || currentUserRole === 'admin') 
+                links.push('<a href="users.html" class="nav-link">👥 المستخدمين</a>');
+            if (currentUserPermissions.viewBackup === true || currentUserRole === 'admin') 
+                links.push('<a href="logs.html" class="nav-link active">📜 السجلات</a>');
+            return links.join('');
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loadNav();
-            loadLogs();
+        async function loadUserAndPermissions() {
+            try {
+                const me = await apiCall('/me');
+                currentUserRole = me.user.role;
+                currentUserPermissions = me.user.permissions || {};
+                console.log('✅ صلاحيات المستخدم (صفحة السجلات):', currentUserPermissions);
+                
+                const hasView = (currentUserRole === 'admin') || (currentUserPermissions.viewBackup === true);
+                if (!hasView) {
+                    document.getElementById('authorizedContent').classList.add('hidden');
+                    document.getElementById('unauthorizedMsg').classList.remove('hidden');
+                    return false;
+                }
+                document.getElementById('authorizedContent').classList.remove('hidden');
+                document.getElementById('unauthorizedMsg').classList.add('hidden');
+                
+                // التحكم في إظهار أزرار الإدارة (تصدير، مسح) بناءً على صلاحية manageBackup
+                const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageBackup === true);
+                const exportExcelBtn = document.querySelector('.btn-success');
+                const exportJsonBtn = document.querySelector('.btn-info');
+                const clearBtn = document.getElementById('clearLogsBtn');
+                if (exportExcelBtn) exportExcelBtn.style.display = canManage ? 'inline-flex' : 'none';
+                if (exportJsonBtn) exportJsonBtn.style.display = canManage ? 'inline-flex' : 'none';
+                if (clearBtn) clearBtn.style.display = canManage ? 'inline-flex' : 'none';
+                
+                // بناء شريط التنقل
+                document.getElementById('navLinks').innerHTML = buildNavLinks();
+                return true;
+            } catch (err) {
+                console.error('خطأ في تحميل صلاحيات المستخدم:', err);
+                return false;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const authorized = await loadUserAndPermissions();
+            if (authorized) {
+                loadLogs();
+            }
         });
     </script>
-    <script src="navbar.js"></script>
+    <!-- تم إزالة سطر navbar.js لأن الروابط أصبحت ديناميكية -->
 </body>
 </html>
