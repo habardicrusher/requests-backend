@@ -686,7 +686,24 @@ app.delete('/api/clear-all', authorize('manage_backup'), async (req, res) => {
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: 'خطأ في مسح البيانات: ' + err.message }); }
 });
-
+function authorize(permission) {
+    return (req, res, next) => {
+        console.log('=== AUTHORIZE DEBUG ===');
+        console.log('Session role:', req.session.role);
+        console.log('Required permission:', permission);
+        if (req.session.role === 'admin') {
+            console.log('✅ Admin granted');
+            return next();
+        }
+        const userPerms = parsePermissions(req.session.permissions);
+        if (userPerms.includes(permission)) {
+            console.log('✅ Permission granted');
+            return next();
+        }
+        console.log('❌ Access denied');
+        res.status(403).json({ error: `غير مصرح: تحتاج صلاحية ${permission}` });
+    };
+}
 // ==================== بدء الخادم ====================
 app.listen(PORT, () => {
     console.log(`✅ الخادم يعمل على المنفذ ${PORT}`);
