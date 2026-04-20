@@ -58,40 +58,32 @@
         <div class="header"><h1>🚛 إدارة السيارات والسائقين</h1>
             <div style="position: absolute; top: 20px; left: 20px;"><button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button></div>
         </div>
-        <div class="nav-links">
-                          <a href="index.html" class="nav-link">📊 الرئيسية</a>
-                        <a href="orders.html" class="nav-link">📝 الطلبات</a>
-                        <a href="distribution.html" class="nav-link">🚚 التوزيع</a>
-                        <a href="trucks.html" class="nav-link active">🚛 السيارات</a>
-                        <a href="products.html" class="nav-link">📦 أنواع البحص</a>
-                        <a href="factories.html" class="nav-link">🏭 المصانع</a>
-                        <a href="reports.html" class="nav-link">📊 تقارير الكسارة</a>
-                        <a href="scale_report.html" class="nav-link">⚖️ تقارير الميزان الشهرية</a>
-                        <a href="trucks-failed.html" class="nav-link ">⚠️ السيارات غير المستوفية</a>
-                        <a href="trucks-failed-report.html" class="nav-link ">📊 تقرير السيارات غير المستوفية</a>
-                        <a href="settings.html" class="nav-link">⚙️ الإعدادات</a>
-                        <a href="restrictions.html" class="nav-link">⛔ الحظر</a>
-                        <a href="users.html" class="nav-link">👥 المستخدمين</a>
-                        <a href="logs.html" class="nav-link">📜 السجلات</a>
-        </div>
+        <div class="nav-links" id="navLinks"></div>
+
         <div class="stats-grid" id="statsGrid"></div>
-        <div class="upload-section">
-            <button class="btn btn-success" onclick="openAddTruckModal()">➕ إضافة سيارة</button>
+        
+        <!-- قسم الأزرار العلوية - سيتم إخفاؤه حسب الصلاحيات -->
+        <div id="adminActions" class="upload-section">
+            <button id="addTruckBtn" class="btn btn-success" onclick="openAddTruckModal()">➕ إضافة سيارة</button>
             <label class="upload-label">
                 📂 رفع ملف Excel/CSV
                 <input type="file" id="uploadFile" accept=".xlsx, .csv, .xls" style="display:none;" onchange="importTrucksFromFile(event)">
             </label>
-            <button class="btn btn-danger btn-clear" onclick="clearAllTrucks()">🗑️ مسح جميع السيارات</button>
+            <button id="clearAllBtn" class="btn btn-danger btn-clear" onclick="clearAllTrucks()">🗑️ مسح جميع السيارات</button>
             <span id="fileNameDisplay" class="file-name"></span>
         </div>
+
         <input type="text" class="search-box" id="truckSearch" placeholder="🔍 بحث..." onkeyup="renderTrucksGrid()">
         <div class="trucks-grid" id="trucksGrid"></div>
     </div>
+
     <div class="modal" id="truckModal"><div class="modal-content"><h3 id="truckModalTitle">➕ إضافة سيارة</h3><input type="hidden" id="truckEditIndex"><div class="form-group"><label>🔢 رقم السيارة</label><input type="text" id="truckNumber"></div><div class="form-group"><label>👤 اسم السائق</label><input type="text" id="truckDriver"></div><div style="margin-top:20px;"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="saveTruck()">حفظ</button></div></div></div>
 
     <script>
         const API_BASE = '/api';
         let trucks = [], distribution = [];
+        let currentUserRole = '';
+        let currentPermissions = [];
 
         async function apiCall(endpoint, method='GET', data=null) {
             const options = { method, headers:{'Content-Type':'application/json'}, credentials:'include' };
@@ -100,6 +92,29 @@
             if (res.status === 401) { window.location.href = '/login.html'; throw new Error('غير مصرح'); }
             if(!res.ok) throw new Error(await res.text());
             return res.json();
+        }
+
+        function hasPermission(perm) {
+            if (currentUserRole === 'admin') return true;
+            return currentPermissions.includes(perm);
+        }
+
+        async function loadCurrentUser() {
+            try {
+                const res = await fetch('/api/me', { credentials: 'include' });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                currentUserRole = data.user.role;
+                currentPermissions = data.user.permissions || [];
+                // إخفاء أزرار الإدارة إذا لم تكن صلاحية edit_trucks
+                const canEdit = hasPermission('edit_trucks');
+                const adminDiv = document.getElementById('adminActions');
+                if (adminDiv) {
+                    adminDiv.style.display = canEdit ? 'flex' : 'none';
+                }
+            } catch(e) {
+                window.location.href = '/login.html';
+            }
         }
 
         async function loadSettings() {
@@ -167,6 +182,11 @@
             });
             const container = document.getElementById('trucksGrid');
             if (filtered.length === 0) { container.innerHTML='<p style="grid-column:1/-1; text-align:center;">لا توجد نتائج</p>'; return; }
+            
+            const canEdit = hasPermission('edit_trucks');
+            // ملاحظة: إذا أردت صلاحية منفصلة للحذف، يمكنك إضافة 'delete_trucks' في المستقبل. حالياً نستخدم edit_trucks لكل من التعديل والحذف.
+            const canDelete = canEdit; // أو استخدم hasPermission('delete_trucks') إذا أضفتها لاحقاً
+            
             container.innerHTML = filtered.map((t, idx) => {
                 const roads = truckRoads.get(t.number) || new Set();
                 let cls = 'available';
@@ -188,8 +208,8 @@
                             <div class="truck-driver">${t.driver}</div>
                             <div style="margin:8px 0;">${statusText}</div>
                             <div>
-                                <button class="btn btn-warning btn-sm" onclick="openEditTruckModal(${originalIdx})">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="deleteTruck(${originalIdx})">🗑️</button>
+                                ${canEdit ? `<button class="btn btn-warning btn-sm" onclick="openEditTruckModal(${originalIdx})">✏️</button>` : ''}
+                                ${canDelete ? `<button class="btn btn-danger btn-sm" onclick="deleteTruck(${originalIdx})">🗑️</button>` : ''}
                             </div>
                         </div>`;
             }).join('');
@@ -197,6 +217,10 @@
         }
 
         async function importTrucksFromFile(event) {
+            if (!hasPermission('edit_trucks')) {
+                showToast('❌ ليس لديك صلاحية لتعديل السيارات', 'error');
+                return;
+            }
             const file = event.target.files[0];
             if (!file) return;
             const fileNameSpan = document.getElementById('fileNameDisplay');
@@ -265,6 +289,10 @@
         }
 
         async function clearAllTrucks() {
+            if (!hasPermission('edit_trucks')) {
+                showToast('❌ ليس لديك صلاحية لحذف جميع السيارات', 'error');
+                return;
+            }
             if (!confirm('⚠️ تحذير: هذا الإجراء سيمسح جميع السيارات الحالية. لا يمكن التراجع. هل أنت متأكد؟')) return;
             showLoading(true);
             try {
@@ -282,6 +310,10 @@
         }
 
         function openAddTruckModal() {
+            if (!hasPermission('edit_trucks')) {
+                showToast('❌ ليس لديك صلاحية لإضافة سيارة', 'error');
+                return;
+            }
             document.getElementById('truckModalTitle').innerText = '➕ إضافة سيارة';
             document.getElementById('truckEditIndex').value = '';
             document.getElementById('truckNumber').value = '';
@@ -290,6 +322,10 @@
         }
 
         function openEditTruckModal(idx) {
+            if (!hasPermission('edit_trucks')) {
+                showToast('❌ ليس لديك صلاحية لتعديل السيارة', 'error');
+                return;
+            }
             document.getElementById('truckModalTitle').innerText = '✏️ تعديل السيارة';
             document.getElementById('truckEditIndex').value = idx;
             document.getElementById('truckNumber').value = trucks[idx].number;
@@ -298,6 +334,10 @@
         }
 
         async function saveTruck() {
+            if (!hasPermission('edit_trucks')) {
+                showToast('❌ ليس لديك صلاحية لحفظ التغييرات', 'error');
+                return;
+            }
             const number = document.getElementById('truckNumber').value.trim();
             const driver = document.getElementById('truckDriver').value.trim();
             const editIdx = document.getElementById('truckEditIndex').value;
@@ -312,6 +352,10 @@
         }
 
         async function deleteTruck(idx) {
+            if (!hasPermission('edit_trucks')) {
+                showToast('❌ ليس لديك صلاحية لحذف السيارة', 'error');
+                return;
+            }
             if(!confirm(`حذف السيارة ${trucks[idx].number}؟`)) return;
             trucks.splice(idx,1);
             await saveSettings();
@@ -330,6 +374,7 @@
         document.addEventListener('DOMContentLoaded', async ()=>{
             showLoading(true);
             try {
+                await loadCurrentUser(); // أولاً نعرف الصلاحيات
                 await loadSettings();
                 await loadTodayDistribution();
                 await renderTrucksGrid();
