@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>المستخدمين - نظام إدارة طلبات البحص</title>
+    <title>المستخدمين والصلاحيات - نظام إدارة طلبات الكسارة</title>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -96,6 +96,11 @@
             border-radius: 6px;
             white-space: nowrap;
         }
+        .role-hint {
+            font-size: 0.7rem;
+            color: #a0c4ff;
+            margin-top: 4px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -166,6 +171,14 @@
             font-size: 1.2em;
         }
         .hidden { display: none; }
+        .permission-badge {
+            background: #2d3e50;
+            border-radius: 12px;
+            padding: 2px 8px;
+            font-size: 0.7rem;
+            display: inline-block;
+            margin: 2px;
+        }
     </style>
 </head>
 <body>
@@ -173,7 +186,7 @@
 <div class="toast-container" id="toastContainer"></div>
 <div class="container">
     <div class="header">
-        <h1>👥 إدارة المستخدمين</h1>
+        <h1>👥 إدارة المستخدمين والصلاحيات</h1>
         <div id="logout-btn-container" style="position: absolute; top: 20px; left: 20px;">
             <button onclick="logout()" style="background: linear-gradient(135deg, #f5576c, #eb3349); border: none; padding: 8px 20px; border-radius: 25px; color: white; font-weight: bold; cursor: pointer;">🚪 تسجيل الخروج</button>
         </div>
@@ -183,11 +196,11 @@
     <div id="unauthorizedMsg" class="unauthorized hidden"></div>
     <div id="authorizedContent" class="hidden">
         <div class="card">
-            <h3>➕ إضافة مستخدم جديد</h3>
+            <h3>➕ إضافة مستخدم جديد مع اختيار الصلاحيات</h3>
             <div class="form-row">
                 <div class="form-group">
                     <label>اسم المستخدم</label>
-                    <input type="text" id="newUsername">
+                    <input type="text" id="newUsername" placeholder="مثال: ahmed">
                 </div>
                 <div class="form-group">
                     <label>كلمة المرور</label>
@@ -197,28 +210,30 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>الدور</label>
+                    <label>الدور (الصلاحية الأساسية)</label>
                     <select id="newRole">
-                        <option value="user">مستخدم عادي</option>
-                        <option value="admin">مدير</option>
-                        <option value="client">عميل مصنع</option>
+                        <option value="user">👤 مستخدم عادي</option>
+                        <option value="admin">👑 مدير (جميع الصلاحيات)</option>
+                        <option value="client">🏭 عميل مصنع</option>
                     </select>
+                    <div class="role-hint" id="roleHint">🔹 المستخدم العادي: يمكنه إدارة الطلبات والموظفين فقط (بدون إعدادات النظام).</div>
                 </div>
                 <div class="form-group" id="factoryGroup" style="display:none;">
-                    <label>المصنع</label>
+                    <label>المصنع التابع له</label>
                     <select id="newFactory"></select>
+                    <div class="role-hint">سيتمكن من رؤية طلبات وتقارير مصنعه فقط.</div>
                 </div>
                 <div class="form-group">
-                    <button class="btn btn-success" onclick="addUser()">➕ إضافة</button>
+                    <button class="btn btn-success" onclick="addUser()">➕ إضافة المستخدم</button>
                 </div>
             </div>
         </div>
 
         <div class="card">
-            <h3>📋 قائمة المستخدمين</h3>
+            <h3>📋 قائمة المستخدمين والصلاحيات الممنوحة</h3>
             <table id="usersTable">
                 <thead>
-                    <tr><th>#</th><th>اسم المستخدم</th><th>الدور</th><th>المصنع</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr>
+                    <tr><th>#</th><th>اسم المستخدم</th><th>الدور</th><th>المصنع</th><th>الصلاحيات التفصيلية</th><th>تاريخ الإنشاء</th><th>الإجراءات</th></tr>
                 </thead>
                 <tbody id="usersBody"></tbody>
             </table>
@@ -229,12 +244,31 @@
 <!-- مودال تعديل المستخدم -->
 <div class="modal" id="editUserModal">
     <div class="modal-content">
-        <h3>✏️ تعديل المستخدم</h3>
+        <h3>✏️ تعديل صلاحيات المستخدم</h3>
         <input type="hidden" id="editUserId">
-        <div class="form-group"><label>الدور</label><select id="editRole"><option value="user">مستخدم</option><option value="admin">مدير</option><option value="client">عميل مصنع</option></select></div>
-        <div class="form-group" id="editFactoryGroup" style="display:none;"><label>المصنع</label><select id="editFactory"></select></div>
-        <div class="form-group"><label>كلمة مرور جديدة (اختياري)</label><div class="password-wrapper"><input type="password" id="editPassword"><button type="button" class="toggle-password" onclick="togglePassword('editPassword', this)">👁️ إظهار</button></div></div>
-        <div style="margin-top:20px;"><button class="btn btn-danger" onclick="closeModal()">إلغاء</button><button class="btn btn-success" onclick="saveUserEdit()">حفظ</button></div>
+        <div class="form-group">
+            <label>الدور</label>
+            <select id="editRole">
+                <option value="user">مستخدم عادي</option>
+                <option value="admin">مدير</option>
+                <option value="client">عميل مصنع</option>
+            </select>
+        </div>
+        <div class="form-group" id="editFactoryGroup" style="display:none;">
+            <label>المصنع</label>
+            <select id="editFactory"></select>
+        </div>
+        <div class="form-group">
+            <label>كلمة مرور جديدة (اختياري)</label>
+            <div class="password-wrapper">
+                <input type="password" id="editPassword">
+                <button type="button" class="toggle-password" onclick="togglePassword('editPassword', this)">👁️ إظهار</button>
+            </div>
+        </div>
+        <div style="margin-top:20px;">
+            <button class="btn btn-danger" onclick="closeModal()">إلغاء</button>
+            <button class="btn btn-success" onclick="saveUserEdit()">حفظ التغييرات</button>
+        </div>
     </div>
 </div>
 
@@ -271,7 +305,6 @@
     async function loadFactories() {
         try {
             const settings = await apiCall('/settings');
-            // التأكد من أن factories عبارة عن مصفوفة من الكائنات ذات الخاصية name
             let rawFactories = settings.factories || [];
             factoriesList = rawFactories.map(f => {
                 if (typeof f === 'string') return { name: f };
@@ -286,6 +319,20 @@
                 }
             });
         } catch(e) { console.error('فشل تحميل المصانع', e); }
+    }
+
+    // عرض الصلاحيات بناءً على الدور (يمكن توسيعها لاحقاً)
+    function getPermissionsDescription(role, factory) {
+        switch(role) {
+            case 'admin':
+                return '✅ جميع الصلاحيات (إدارة المستخدمين، الإعدادات، كل التقارير، الطلبات، السيارات، المصانع)';
+            case 'client':
+                return `🏭 عميل مصنع "${factory || 'غير محدد'}" - يمكنه فقط: عرض طلبات مصنعه، تقارير الميزان الخاصة بمصنعه، إدارة موظفيه (إن وجد)`;
+            case 'user':
+                return '📋 مستخدم عادي - يمكنه: إدارة الطلبات، توزيع السيارات، رؤية التقارير الأساسية، تعديل المنتجات (بدون إعدادات النظام أو إدارة المستخدمين)';
+            default:
+                return 'صلاحيات محدودة';
+        }
     }
 
     async function loadUsers() {
@@ -309,8 +356,19 @@
             
             const roleSelect = document.getElementById('newRole');
             const factoryGroup = document.getElementById('factoryGroup');
+            const roleHint = document.getElementById('roleHint');
             function toggleFactoryField() {
-                factoryGroup.style.display = roleSelect.value === 'client' ? 'flex' : 'none';
+                const selectedRole = roleSelect.value;
+                if (selectedRole === 'client') {
+                    factoryGroup.style.display = 'flex';
+                    roleHint.innerText = '🔹 عميل مصنع: يرى فقط بيانات المصنع الذي ينتمي إليه. لا يمكنه الوصول إلى إعدادات النظام أو إدارة المستخدمين الآخرين.';
+                } else if (selectedRole === 'admin') {
+                    factoryGroup.style.display = 'none';
+                    roleHint.innerText = '👑 المدير: لديه صلاحية كاملة على كل صفحات النظام، بما في ذلك إضافة مستخدمين وتعديل الإعدادات.';
+                } else {
+                    factoryGroup.style.display = 'none';
+                    roleHint.innerText = '👤 المستخدم العادي: يمكنه إنشاء الطلبات وتوزيع السيارات وعرض التقارير، لكن لا يصلح إعدادات النظام أو يدير المستخدمين.';
+                }
             }
             roleSelect.addEventListener('change', toggleFactoryField);
             toggleFactoryField();
@@ -411,7 +469,7 @@
         showLoading(true);
         try {
             await apiCall(`/users/${id}`, 'PUT', data);
-            showToast('✅ تم التعديل', 'success');
+            showToast('✅ تم تعديل الصلاحيات', 'success');
             closeModal();
             await loadUsers();
         } catch(e) {
@@ -423,7 +481,7 @@
     function renderUsersTable() {
         const tbody = document.getElementById('usersBody');
         if (!users.length) {
-            tbody.innerHTML = '<tr><td colspan="6">لا يوجد مستخدمين</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7">لا يوجد مستخدمين</td></tr>';
             return;
         }
         tbody.innerHTML = users.map((u, i) => {
@@ -434,17 +492,19 @@
                     if (!isNaN(date.getTime())) formattedDate = date.toLocaleDateString('ar-SA');
                 } catch(e) {}
             }
+            const permissionsDesc = getPermissionsDescription(u.role, u.factory);
             return `
             <tr>
                 <td>${i+1}</td>
                 <td>${escapeHtml(u.username)}</td>
-                <td>${u.role === 'admin' ? 'مدير' : (u.role === 'client' ? 'عميل مصنع' : 'مستخدم')}</td>
-                <td>${escapeHtml(u.factory || '')}</td>
+                <td>${u.role === 'admin' ? '👑 مدير' : (u.role === 'client' ? '🏭 عميل مصنع' : '👤 مستخدم')}</td>
+                <td>${escapeHtml(u.factory || '-')}</td>
+                <td><div style="max-width:300px; text-align:right;">${permissionsDesc}</div></td>
                 <td>${formattedDate}</td>
                 <td>
-                    <button class="btn btn-warning" onclick='openEditModal(${JSON.stringify(u).replace(/'/g, "&#39;")})'>✏️ تعديل</button>
+                    <button class="btn btn-warning" onclick='openEditModal(${JSON.stringify(u).replace(/'/g, "&#39;")})'>✏️ تعديل الصلاحيات</button>
                     <button class="btn btn-danger" onclick="deleteUser(${u.id}, '${escapeHtml(u.username)}')">🗑️ حذف</button>
-                 </td>
+                  </td>
             </tr>`;
         }).join('');
     }
