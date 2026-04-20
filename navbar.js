@@ -1,22 +1,20 @@
-// navbar.js - شريط التنقل الديناميكي حسب الصلاحيات
+// navbar.js - الإصدار الجديد مع صلاحيات لكل صفحة
 (function() {
     setInterval(async () => {
-        try {
-            await fetch('/api/me', { credentials: 'include' });
-        } catch(e) {}
+        try { await fetch('/api/me', { credentials: 'include' }); } catch(e) {}
     }, 3 * 60 * 1000);
 
     async function renderNavbar() {
         try {
             const res = await fetch('/api/me', { credentials: 'include' });
             const data = await res.json();
-            if (!data.user) {
-                window.location.href = '/login.html';
-                return;
-            }
+            if (!data.user) { window.location.href = '/login.html'; return; }
             const user = data.user;
             const role = user.role;
-            const permissions = user.permissions || [];
+            let permissions = user.permissions || [];
+            if (typeof permissions === 'string') {
+                try { permissions = JSON.parse(permissions); } catch(e) { permissions = []; }
+            }
 
             const hasPermission = (perm) => permissions.includes(perm) || role === 'admin';
 
@@ -30,36 +28,36 @@
                 } else return;
             }
 
-            // تعريف جميع الروابط مع الصلاحية المطلوبة (للمستخدم العادي)
+            // تعريف جميع الروابط مع الصلاحية المطلوبة
             const allLinks = [
-                { href: 'index.html', text: '📊 الرئيسية', permission: null },
-                { href: 'orders.html', text: '📝 الطلبات', permission: null },
-                { href: 'distribution.html', text: '🚚 التوزيع', permission: null },
-                { href: 'trucks.html', text: '🚛 السيارات', permission: null },
-                { href: 'products.html', text: '📦 أنواع البحص', permission: null },
-                { href: 'factories.html', text: '🏭 المصانع', permission: null },
+                { href: 'index.html', text: '📊 الرئيسية', permission: 'dashboard' },
+                { href: 'orders.html', text: '📝 الطلبات', permission: 'orders' },
+                { href: 'distribution.html', text: '🚚 التوزيع', permission: 'distribution' },
+                { href: 'trucks.html', text: '🚛 السيارات', permission: 'trucks' },
+                { href: 'products.html', text: '📦 أنواع البحص', permission: 'products' },
+                { href: 'factories.html', text: '🏭 المصانع', permission: 'factories' },
                 { href: 'reports.html', text: '📊 تقارير الكسارة', permission: 'reports' },
                 { href: 'scale_report.html', text: '⚖️ تقارير الميزان الشهرية', permission: 'scale_reports' },
                 { href: 'trucks-failed.html', text: '⚠️ السيارات غير المستوفية', permission: 'failed_trucks' },
-                { href: 'trucks-failed-report.html', text: '📊 تقرير الغير مستوفية', permission: 'failed_trucks' },
+                { href: 'trucks-failed-report.html', text: '📊 تقرير الغير مستوفية', permission: 'failed_trucks_report' },
                 { href: 'distribution-quality.html', text: '📈 جودة التوزيع', permission: 'quality' },
                 { href: 'settings.html', text: '⚙️ الإعدادات', permission: 'settings' },
                 { href: 'restrictions.html', text: '⛔ الحظر', permission: 'restrictions' }
             ];
 
             const adminOnlyLinks = [
-                { href: 'users.html', text: '👥 المستخدمين', permission: null },
-                { href: 'logs.html', text: '📜 السجلات', permission: null }
+                { href: 'users.html', text: '👥 المستخدمين', permission: 'users_management' },
+                { href: 'logs.html', text: '📜 السجلات', permission: 'logs' }
             ];
 
             let linksToShow = [];
             if (role === 'admin') {
                 linksToShow = [...allLinks, ...adminOnlyLinks];
             } else if (role === 'client') {
-                linksToShow = [{ href: 'orders.html', text: '📝 الطلبات', permission: null }];
+                linksToShow = [{ href: 'orders.html', text: '📝 الطلبات', permission: 'orders' }];
             } else if (role === 'user') {
-                linksToShow = allLinks.filter(link => {
-                    if (!link.permission) return true;
+                linksToShow = [...allLinks, ...adminOnlyLinks].filter(link => {
+                    if (!link.permission) return true; // احتياطي
                     return hasPermission(link.permission);
                 });
             }
@@ -87,9 +85,7 @@
                     header.appendChild(logoutDiv);
                 }
             }
-        } catch(e) {
-            window.location.href = '/login.html';
-        }
+        } catch(e) { window.location.href = '/login.html'; }
     }
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', renderNavbar);
