@@ -327,6 +327,22 @@ app.get('/api/me', async (req, res) => {
     } });
 });
 
+// ==================== السيارات والمصانع والمنتجات (مع صلاحيات view) ====================
+app.get('/api/trucks', authorize('view_trucks'), async (req, res) => {
+    const settings = await loadSettings();
+    res.json(settings.trucks || []);
+});
+
+app.get('/api/factories', authorize('view_factories'), async (req, res) => {
+    const settings = await loadSettings();
+    res.json(settings.factories || []);
+});
+
+app.get('/api/materials', authorize('view_products'), async (req, res) => {
+    const settings = await loadSettings();
+    res.json(settings.materials || []);
+});
+
 // ==================== السجلات ====================
 app.get('/api/logs', authorize('view_logs'), async (req, res) => {
     const page = parseInt(req.query.page) || 1;
