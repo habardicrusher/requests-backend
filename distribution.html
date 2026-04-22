@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>التوزيع الجغرافي المتوازن - كسارة الحبردي</title>
     <style>
+        /* جميع الأنماط كما هي دون تغيير (نفس الأنماط السابقة) */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; color: #fff; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
@@ -320,6 +321,7 @@
             `).join('');
         }
 
+        // ==================== التوزيع التلقائي المعدل (يبدأ من الرود الثاني) ====================
         async function autoDistribute() {
             const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageDistribution === true);
             if (!canManage) { showToast('❌ غير مصرح لك بتوزيع الطلبات', 'error'); return; }
@@ -337,13 +339,22 @@
             }
             if (!undistributed.length) { showToast('جميع الطلبات المتبقية مستثناة حالياً (مصنع الدرعية).', 'info'); return; }
             
+            const totalTrucks = trucks.length;
+            // نترك أول totalTrucks طلب للتوزيع اليدوي (الرود الأول)
+            const ordersForRoad1 = undistributed.slice(0, totalTrucks);
+            const remainingOrders = undistributed.slice(totalTrucks);
+            
+            if (remainingOrders.length === 0) {
+                showToast(`📌 لا توجد طلبات للرود الثاني. الرود الأول (${ordersForRoad1.length} طلب) ينتظر التوزيع اليدوي.`, 'info');
+                return;
+            }
+            
             showLoading(true);
             let truckTrips = {}, truckTotalDistance = {}, truckLastFactory = {};
             trucks.forEach(t => { truckTrips[t.number] = 0; truckTotalDistance[t.number] = 0; truckLastFactory[t.number] = null; });
             distribution.forEach(d => { if (d.truck) { truckTrips[d.truck.number]++; truckTotalDistance[d.truck.number] += getFactoryDistance(d.factory); truckLastFactory[d.truck.number] = d.factory; } });
 
             let newDistributions = [];
-            let remainingOrders = [...undistributed];
             let tempExcluded = [];
 
             function getFilteredSortedTrucks(factory) {
@@ -374,8 +385,9 @@
                 });
             }
 
-            while (remainingOrders.length > 0) {
-                const order = remainingOrders[0];
+            let orderIndexOffset = distribution.length;
+            for (let i = 0; i < remainingOrders.length; i++) {
+                const order = remainingOrders[i];
                 const sorted = getFilteredSortedTrucks(order.factory);
                 let selectedTruck = null;
                 for (let t of sorted) {
@@ -388,12 +400,12 @@
                 truckTrips[selectedTruck.number]++;
                 truckTotalDistance[selectedTruck.number] += orderDistance;
                 truckLastFactory[selectedTruck.number] = order.factory;
-                const currentRoad = truckTrips[selectedTruck.number];
+                const currentRoad = Math.floor(i / totalTrucks) + 2; // الرود يبدأ من 2
                 
                 const restriction = getTruckRestriction(selectedTruck.number, order.factory);
                 newDistributions.push({
                     orderId: order.id,
-                    orderIndex: distribution.length + newDistributions.length + 1,
+                    orderIndex: orderIndexOffset + i + 1,
                     truck: selectedTruck,
                     factory: order.factory,
                     material: order.material,
@@ -404,7 +416,6 @@
                     restrictionReason: restriction ? restriction.reason : '',
                     skippedTruck: null
                 });
-                remainingOrders.shift();
             }
 
             if (newDistributions.length) {
@@ -417,10 +428,7 @@
                 }
                 sessionStorage.setItem(`excluded_log_${currentDate}`, JSON.stringify(excludedDriversLog));
                 updateRestrictionNoticePanel();
-                let tripsCount = {};
-                for (let d of distribution) if (d.truck) tripsCount[d.truck.number] = (tripsCount[d.truck.number] || 0) + 1;
-                let summary = trucks.slice(0,5).map(t => `${t.number}: ${tripsCount[t.number] || 0} رحلة`).join(' | ');
-                showToast(`✅ تم توزيع ${newDistributions.length} طلب مع مراعاة قيود الحظر.`, 'success');
+                showToast(`✅ تم توزيع ${newDistributions.length} طلب تلقائياً (الرود الثاني وما بعده). الرود الأول (${ordersForRoad1.length} طلب) ينتظر التوزيع اليدوي.`, 'success');
                 localStorage.setItem('pendingOrdersCount', '0');
             } else {
                 showToast('فشل التوزيع التلقائي', 'error');
@@ -464,7 +472,7 @@
 
         function closeManualModal() { document.getElementById('manualDistributeModal').classList.remove('active'); currentOrderToDistribute = null; }
 
-        // ========== الدالة المعدلة لمنع رسالة التوصية في أول يوم ==========
+        // ==================== التوزيع اليدوي المعدل (لا تظهر رسالة التوصية في الرود الأول) ====================
         async function confirmManualDistribute() {
             const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageDistribution === true);
             if (!canManage) {
@@ -489,12 +497,14 @@
             });
 
             const totalTrips = distribution.filter(d => d.truck).length;
+            const totalTrucks = trucks.length;
             let manualOverride = false;
             let overrideReason = '';
             let fairTruck = null;
 
-            // فقط في حالة وجود توزيعات سابقة (أكثر من 0) نقوم بحساب التوصية
-            if (totalTrips > 0) {
+            // إذا كان عدد الطلبات الموزعة أقل من عدد السيارات (أي ما زلنا في الرود الأول) لا نعرض رسالة التوصية
+            if (totalTrips >= totalTrucks) {
+                // نحن في الرود الثاني أو ما بعده، نقوم بحساب التوصية
                 let sorted = [...trucks].sort((a, b) => {
                     const tripsA = currentTrips[a.number] || 0;
                     const tripsB = currentTrips[b.number] || 0;
