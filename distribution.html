@@ -105,7 +105,7 @@
             <h2>📋 الطلبات غير الموزعة</h2>
             <div style="overflow-x: auto; margin-bottom: 30px;">
                 <table id="undistributedTable">
-                    <thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>وقت الإضافة</th><th>توزيع يدوي</th></tr></thead>
+                    <thead><tr><th>#</th><th>المصنع</th><th>نوع البحص</th><th>المسافة (كم)</th><th>الوقت</th><th>التوقيت</th><th>وقت الإضافة</th><th>توزيع يدوي</th><tr></thead>
                     <tbody id="undistributedBody"><tr><td colspan="8" style="text-align:center;">لا توجد طلبات غير موزعة</td></tr>
                     </tbody>
                 </table>
@@ -321,16 +321,18 @@
             `).join('');
         }
 
-        // ==================== التوزيع التلقائي المعدل (يبدأ من الرود الثاني) ====================
+        // ==================== التوزيع التلقائي المعدل (عادل تماماً) ====================
         async function autoDistribute() {
             const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageDistribution === true);
             if (!canManage) { showToast('❌ غير مصرح لك بتوزيع الطلبات', 'error'); return; }
             await loadRestrictions();
+
             const distributedOrderIds = new Set(distribution.map(d => d.orderId));
             let undistributed = orders.filter(o => !distributedOrderIds.has(o.id));
             if (!undistributed.length) { showToast('لا توجد طلبات غير موزعة', 'error'); return; }
             if (!trucks.length) { showToast('لا توجد سيارات', 'error'); return; }
-            
+
+            // استبعاد طلبات مصنع الدرعية إذا كان الطريق مغلقاً
             let excludedOrders = [];
             if (isRoadBlocked()) {
                 excludedOrders = undistributed.filter(o => o.factory === EXCLUDED_FACTORY);
@@ -338,84 +340,119 @@
                 if (excludedOrders.length > 0) showToast(`⚠️ تم استبعاد ${excludedOrders.length} طلب لمصنع الدرعية`, 'warning');
             }
             if (!undistributed.length) { showToast('جميع الطلبات المتبقية مستثناة حالياً (مصنع الدرعية).', 'info'); return; }
-            
+
             const totalTrucks = trucks.length;
             // نترك أول totalTrucks طلب للتوزيع اليدوي (الرود الأول)
             const ordersForRoad1 = undistributed.slice(0, totalTrucks);
-            const remainingOrders = undistributed.slice(totalTrucks);
-            
+            let remainingOrders = undistributed.slice(totalTrucks);
+
             if (remainingOrders.length === 0) {
                 showToast(`📌 لا توجد طلبات للرود الثاني. الرود الأول (${ordersForRoad1.length} طلب) ينتظر التوزيع اليدوي.`, 'info');
                 return;
             }
-            
+
             showLoading(true);
-            let truckTrips = {}, truckTotalDistance = {}, truckLastFactory = {};
-            trucks.forEach(t => { truckTrips[t.number] = 0; truckTotalDistance[t.number] = 0; truckLastFactory[t.number] = null; });
-            distribution.forEach(d => { if (d.truck) { truckTrips[d.truck.number]++; truckTotalDistance[d.truck.number] += getFactoryDistance(d.factory); truckLastFactory[d.truck.number] = d.factory; } });
 
-            let newDistributions = [];
-            let tempExcluded = [];
-
-            function getFilteredSortedTrucks(factory) {
-                let available = trucks.filter(t => {
-                    const restriction = getTruckRestriction(t.number, factory);
-                    if (restriction) {
-                        const alreadyLogged = tempExcluded.some(e => e.truckNumber === t.number && e.factory === factory);
-                        if (!alreadyLogged) {
-                            tempExcluded.push({
-                                truckNumber: t.number,
-                                driver: t.driver,
-                                factory: factory,
-                                reason: restriction.reason,
-                                date: currentDate
-                            });
-                        }
-                        return false;
-                    }
-                    return true;
-                });
-                if (available.length === 0) {
-                    console.warn(`جميع السيارات ممنوعة من الذهاب إلى ${factory}، سيتم تجاهل القيود مؤقتاً.`);
-                    available = [...trucks];
+            // إحصائيات الرحلات الحالية (من التوزيع اليدوي السابق)
+            let truckTrips = {};
+            let truckTotalDistance = {};
+            let truckLastFactory = {};
+            trucks.forEach(t => {
+                truckTrips[t.number] = 0;
+                truckTotalDistance[t.number] = 0;
+                truckLastFactory[t.number] = null;
+            });
+            distribution.forEach(d => {
+                if (d.truck) {
+                    truckTrips[d.truck.number]++;
+                    truckTotalDistance[d.truck.number] += getFactoryDistance(d.factory);
+                    truckLastFactory[d.truck.number] = d.factory;
                 }
-                return available.sort((a,b) => {
-                    if (truckTrips[a.number] !== truckTrips[b.number]) return truckTrips[a.number] - truckTrips[b.number];
-                    return truckTotalDistance[a.number] - truckTotalDistance[b.number];
+            });
+
+            // دالة لترتيب السيارات بناءً على عدد الرحلات (الأقل أولاً) ثم المسافة (الأعلى أولاً لتحقيق التوازن)
+            function getSortedTrucks() {
+                return [...trucks].sort((a, b) => {
+                    const tripsA = truckTrips[a.number] || 0;
+                    const tripsB = truckTrips[b.number] || 0;
+                    if (tripsA !== tripsB) return tripsA - tripsB;
+                    const distA = truckTotalDistance[a.number] || 0;
+                    const distB = truckTotalDistance[b.number] || 0;
+                    return distB - distA; // الأعلى مسافة أولاً لتعويضه
                 });
             }
 
-            let orderIndexOffset = distribution.length;
-            for (let i = 0; i < remainingOrders.length; i++) {
-                const order = remainingOrders[i];
-                const sorted = getFilteredSortedTrucks(order.factory);
-                let selectedTruck = null;
-                for (let t of sorted) {
-                    if (truckLastFactory[t.number] !== order.factory) { selectedTruck = t; break; }
+            let newDistributions = [];
+            let tempExcluded = [];
+            let currentRoad = 2; // نبدأ من الرود الثاني
+            let orderIndex = distribution.length + 1;
+
+            // نقسم remainingOrders إلى جولات (كل جولة = عدد السيارات)
+            while (remainingOrders.length > 0) {
+                const currentRoundOrders = remainingOrders.slice(0, totalTrucks);
+                remainingOrders = remainingOrders.slice(totalTrucks);
+
+                // ترتيب السيارات لهذه الجولة (يعتمد على إحصائيات ما قبل الجولة)
+                let sortedTrucks = getSortedTrucks();
+                let usedTrucksInRound = new Set();
+
+                for (let i = 0; i < currentRoundOrders.length; i++) {
+                    const order = currentRoundOrders[i];
+                    // اختيار أول سيارة غير مستخدمة في هذه الجولة وغير ممنوعة من المصنع
+                    let selectedTruck = null;
+                    for (let t of sortedTrucks) {
+                        if (usedTrucksInRound.has(t.number)) continue;
+                        const restriction = getTruckRestriction(t.number, order.factory);
+                        if (restriction) {
+                            const alreadyLogged = tempExcluded.some(e => e.truckNumber === t.number && e.factory === order.factory);
+                            if (!alreadyLogged) {
+                                tempExcluded.push({
+                                    truckNumber: t.number,
+                                    driver: t.driver,
+                                    factory: order.factory,
+                                    reason: restriction.reason,
+                                    date: currentDate
+                                });
+                            }
+                            continue; // هذه السيارة ممنوعة، نتجاوزها
+                        }
+                        selectedTruck = t;
+                        break;
+                    }
+                    // إذا لم نجد سيارة متاحة بسبب القيود، نأخذ أول سيارة غير مستخدمة (نتجاهل القيود مؤقتاً)
+                    if (!selectedTruck) {
+                        for (let t of sortedTrucks) {
+                            if (!usedTrucksInRound.has(t.number)) {
+                                selectedTruck = t;
+                                break;
+                            }
+                        }
+                    }
+                    if (!selectedTruck) break;
+
+                    usedTrucksInRound.add(selectedTruck.number);
+                    // تحديث الإحصائيات لهذه السيارة (لأنها ستأخذ طلباً الآن)
+                    const orderDistance = getFactoryDistance(order.factory);
+                    truckTrips[selectedTruck.number]++;
+                    truckTotalDistance[selectedTruck.number] += orderDistance;
+                    truckLastFactory[selectedTruck.number] = order.factory;
+
+                    const restriction = getTruckRestriction(selectedTruck.number, order.factory);
+                    newDistributions.push({
+                        orderId: order.id,
+                        orderIndex: orderIndex++,
+                        truck: selectedTruck,
+                        factory: order.factory,
+                        material: order.material,
+                        time: order.time || '',
+                        road: currentRoad,
+                        manualOverride: false,
+                        restrictionApplied: restriction !== null,
+                        restrictionReason: restriction ? restriction.reason : '',
+                        skippedTruck: null
+                    });
                 }
-                if (!selectedTruck && sorted.length) selectedTruck = sorted[0];
-                if (!selectedTruck) break;
-                
-                const orderDistance = getFactoryDistance(order.factory);
-                truckTrips[selectedTruck.number]++;
-                truckTotalDistance[selectedTruck.number] += orderDistance;
-                truckLastFactory[selectedTruck.number] = order.factory;
-                const currentRoad = Math.floor(i / totalTrucks) + 2; // الرود يبدأ من 2
-                
-                const restriction = getTruckRestriction(selectedTruck.number, order.factory);
-                newDistributions.push({
-                    orderId: order.id,
-                    orderIndex: orderIndexOffset + i + 1,
-                    truck: selectedTruck,
-                    factory: order.factory,
-                    material: order.material,
-                    time: order.time || '',
-                    road: currentRoad,
-                    manualOverride: false,
-                    restrictionApplied: restriction !== null,
-                    restrictionReason: restriction ? restriction.reason : '',
-                    skippedTruck: null
-                });
+                currentRoad++;
             }
 
             if (newDistributions.length) {
@@ -472,7 +509,7 @@
 
         function closeManualModal() { document.getElementById('manualDistributeModal').classList.remove('active'); currentOrderToDistribute = null; }
 
-        // ==================== التوزيع اليدوي المعدل (لا تظهر رسالة التوصية في الرود الأول) ====================
+        // ==================== التوزيع اليدوي المعدل (تحذير عادل حسب عدد الرحلات) ====================
         async function confirmManualDistribute() {
             const canManage = (currentUserRole === 'admin') || (currentUserPermissions.manageDistribution === true);
             if (!canManage) {
@@ -486,43 +523,45 @@
             if (!selectedTruck) { showToast('سيارة غير موجودة', 'error'); return; }
             if (!currentOrderToDistribute) { showToast('لا يوجد طلب محدد', 'error'); return; }
 
-            let currentTrips = {}, currentDistances = {}, currentLastFactory = {};
-            trucks.forEach(t => { currentTrips[t.number] = 0; currentDistances[t.number] = 0; currentLastFactory[t.number] = null; });
+            // حساب عدد الرحلات لكل سيارة حتى الآن (بما في ذلك التوزيعات السابقة)
+            let currentTrips = {};
+            trucks.forEach(t => { currentTrips[t.number] = 0; });
             distribution.forEach(d => {
                 if (d.truck) {
                     currentTrips[d.truck.number]++;
-                    currentDistances[d.truck.number] += getFactoryDistance(d.factory);
-                    currentLastFactory[d.truck.number] = d.factory;
                 }
             });
 
-            const totalTrips = distribution.filter(d => d.truck).length;
-            const totalTrucks = trucks.length;
+            // تحديد أقل عدد رحلات بين جميع السيارات
+            const minTrips = Math.min(...trucks.map(t => currentTrips[t.number]));
+            const selectedTrips = currentTrips[selectedTruck.number];
+
             let manualOverride = false;
             let overrideReason = '';
             let fairTruck = null;
 
-            // إذا كان عدد الطلبات الموزعة أقل من عدد السيارات (أي ما زلنا في الرود الأول) لا نعرض رسالة التوصية
-            if (totalTrips >= totalTrucks) {
-                // نحن في الرود الثاني أو ما بعده، نقوم بحساب التوصية
-                let sorted = [...trucks].sort((a, b) => {
-                    const tripsA = currentTrips[a.number] || 0;
-                    const tripsB = currentTrips[b.number] || 0;
-                    if (tripsA !== tripsB) return tripsA - tripsB;
-                    const distA = currentDistances[a.number] || 0;
-                    const distB = currentDistances[b.number] || 0;
-                    return distB - distA;
+            // إذا كان عدد رحلات السيارة المختارة أكبر من الحد الأدنى، فهذا يعني أن هناك سيارات أقل رحلات
+            if (selectedTrips > minTrips) {
+                // ابحث عن سيارة موصى بها (أي سيارات ذات أقل عدد رحلات، ويفضل التي لم تذهب لنفس المصنع مؤخراً)
+                let candidates = trucks.filter(t => currentTrips[t.number] === minTrips);
+                // إذا كان هناك عدة سيارات، حاول تجنب تكرار نفس المصنع
+                let lastFactoryForTruck = {};
+                distribution.forEach(d => {
+                    if (d.truck) lastFactoryForTruck[d.truck.number] = d.factory;
                 });
-                for (let t of sorted) {
-                    if (currentLastFactory[t.number] !== currentOrderToDistribute.factory) { fairTruck = t; break; }
+                for (let t of candidates) {
+                    if (lastFactoryForTruck[t.number] !== currentOrderToDistribute.factory) {
+                        fairTruck = t;
+                        break;
+                    }
                 }
-                if (!fairTruck) fairTruck = sorted[0];
-                const isFair = (fairTruck.number === selectedTruck.number);
-                if (!isFair) {
-                    const confirmMsg = `⚠️ تحذير: التوزيع العادل يوصي بالسائق ${fairTruck.number} - ${fairTruck.driver} (عدد رحلاته: ${currentTrips[fairTruck.number]}، مسافة: ${currentDistances[fairTruck.number].toFixed(1)} كم).\nأنت تختار السائق ${selectedTruck.number} - ${selectedTruck.driver}.\n\nإذا واصلت، سيتم تسجيل هذا كتوزيع يدوي مخالف للعدالة وقد يظهر في تقرير الجودة.\n\nهل تريد المتابعة؟`;
+                if (!fairTruck && candidates.length) fairTruck = candidates[0];
+                
+                if (fairTruck) {
+                    const confirmMsg = `⚠️ تحذير: التوزيع العادل يوصي بالسائق ${fairTruck.number} - ${fairTruck.driver} (عدد رحلاته: ${minTrips}، بينما السائق المختار لديه ${selectedTrips} رحلة).\nتوزيع طلب على سائق لديه رحلات أكثر يخالف مبدأ العدالة.\n\nهل تريد المتابعة؟`;
                     if (!confirm(confirmMsg)) return;
                     manualOverride = true;
-                    overrideReason = `تم اختيار السائق ${selectedTruck.number} (${selectedTruck.driver}) بدلاً من الموصى به ${fairTruck.number} (${fairTruck.driver})`;
+                    overrideReason = `تم اختيار السائق ${selectedTruck.number} (${selectedTruck.driver}) برحلات ${selectedTrips} بدلاً من الموصى به ${fairTruck.number} (${fairTruck.driver}) برحلات ${minTrips}`;
                 }
             }
 
